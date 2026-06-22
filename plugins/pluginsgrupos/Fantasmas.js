@@ -1,4 +1,3 @@
-// plugins/fantasmas.js
 import fs from 'fs';
 import path from 'path';
 
@@ -117,7 +116,7 @@ async function resolveIdentity(conn, chatId, source) {
   if (lidNumber && lidNumber !== baseNumber && lidNumber !== zeroNumber) keys.push(lidNumber);
   if (!keys.length && rawNumber) keys.push(rawNumber);
 
-  const mentionJid = raw || lidJid || realJid;
+  const mentionJid = realJid || lidJid || (rawNumber ? `${rawNumber}@s.whatsapp.net` : null) || raw || null;
   const mentionTag = JID_NUM(mentionJid);
 
   return {
@@ -128,10 +127,11 @@ async function resolveIdentity(conn, chatId, source) {
     zeroNumber,
     lidNumber,
     rawNumber,
-    keys: [...new Set(keys)],
+    keys,
     mentionJid,
     mentionTag,
-    showNumber: mentionTag || baseNumber || lidNumber || rawNumber || "usuario"
+    showNumber: mentionTag || baseNumber || lidNumber || rawNumber || "usuario",
+    isLidOnly: !realJid && !!lidJid
   };
 }
 
@@ -259,6 +259,8 @@ const handler = async (msg, { conn, args }) => {
   for (const p of participants) {
     const identity = await resolveIdentity(conn, chatId, p);
 
+    if (!identity.mentionJid && !identity.showNumber) continue;
+
     const isParticipantAdmin = p?.admin === "admin" || p?.admin === "superadmin";
     const isParticipantOwner = safeIsOwner(identity);
     const isBot = identity.keys.some(k => k === botNumber);
@@ -270,8 +272,9 @@ const handler = async (msg, { conn, args }) => {
     if (count < limite) {
       fantasmas.push({
         mentionJid: identity.mentionJid,
-        mentionTag: identity.mentionTag,
-        count
+        mentionTag: identity.showNumber,
+        count,
+        isLidOnly: identity.isLidOnly
       });
 
       if (identity.mentionJid) mentions.push(identity.mentionJid);
@@ -315,3 +318,4 @@ ${listado}
 
 handler.command = ["fantasmas"];
 export default handler;
+      
