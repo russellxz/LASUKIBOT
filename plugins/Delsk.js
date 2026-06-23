@@ -5,6 +5,7 @@
 //   .dels hola fino 1          → elimina el #1 de "hola fino"
 
 import fs from 'fs';
+import { isAdminInGroup, isOwnerCheck } from '../libs/adminCheck.js';
 import path from 'path';
 
 const PACKS_DB = path.resolve("./guars_packs.json");
@@ -69,19 +70,8 @@ const handler = async (msg, { conn, args }) => {
   const targetUser = target.addedBy || pack.createdBy;
 
   // ====== Protección de permisos ======
-  let isAdmin = false;
-  if (isGroup) {
-    try {
-      const metadata = await conn.groupMetadata(chatId);
-      const me = (conn.user.id || "").split(":")[0] + "@s.whatsapp.net";
-      const participants = metadata.participants || [];
-      const user = participants.find(p => p.id === sender + "@s.whatsapp.net");
-      const bot = participants.find(p => p.id === me);
-      isAdmin = user?.admin && bot?.admin;
-    } catch {}
-  }
-
-  const esOwner = global.isOwner(sender);
+  const isAdmin = isGroup ? await isAdminInGroup(conn, chatId, msg.realJid || msg.key.participant || msg.key.remoteJid) : false;
+  const esOwner = isOwnerCheck(msg.realJid || msg.key.participant || msg.key.remoteJid) || global.isOwner(sender);
   const esDueñoDelSticker = targetUser === sender;
   const stickerEsDeOwner = global.owner.some(([o]) => o === targetUser);
 

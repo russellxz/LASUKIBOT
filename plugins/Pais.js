@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { isAdminInGroup, isOwnerCheck } from '../libs/adminCheck.js';
 
 const handler = async (msg, { conn, args }) => {
   const chatId = msg.key.remoteJid;
@@ -6,7 +7,7 @@ const handler = async (msg, { conn, args }) => {
   const senderId = msg.key.participant || msg.key.remoteJid;
   const senderNum = senderId.replace(/[^0-9]/g, '');
   const isOwner = global.owner.some(([id]) => id === senderNum);
-  const isAdmin = metadata.participants.find(p => p.id === senderId)?.admin;
+  const isAdmin = await isAdminInGroup(conn, chatId, msg.realJid || senderId);
 
   if (!isAdmin && !isOwner) {
     return conn.sendMessage(chatId, {
