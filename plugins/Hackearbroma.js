@@ -94,7 +94,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   // ====== MENSAJE FINAL FALSO ======
   const texto =
     `🚨 *INFORMACIÓN DEL USUARIO HACKEADO* 🚨\n` +
-    `_(Broma 100% falsa 🤣 no te asustes)_\n\n` +
+    `_(veamos la informacion del usuario☠️)_\n\n` +
     `👤 *Víctima:* +${numero}\n` +
     `📞 *Número real detectado:* +${numero}\n` +
     `🌐 *Dirección IP:* ${ip}\n` +
