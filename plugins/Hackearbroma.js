@@ -84,7 +84,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   await new Promise(r => setTimeout(r, 1500));
 
   // ====== INTENTAR OBTENER FOTO DE PERFIL REAL ======
-  let ppUrl = "https://cdn.russellxz.click/3f6baa71.jpeg"; // por defecto
+  let ppUrl = "https://cdn.russellxz.click/4a6dea0d.jpg"; // por defecto
   try {
     ppUrl = await conn.profilePictureUrl(objetivo, "image");
   } catch (e) {
