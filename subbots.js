@@ -24,7 +24,7 @@ const PLUGINS_DIR = path.resolve("./subplugins");
 
 export const DEFAULT_SUB_PREFIXES = [".", "#", "/"];
 const MENU_IMAGE = "https://cdn.russellxz.click/707c3d7c.jpg";
-const CODE_VIDEO = "https://cdn.russellxz.click/664808e9.mp4";
+const CODE_VIDEO = "https://cdn.russellxz.click/76b170f5.mp4";
 
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 
