@@ -108,6 +108,13 @@ global.isOwner = function (jid) {
   return global.owner.some(([id]) => id === num);
 };
 
+// 🤖 SISTEMA DE SUBBOTS (independiente del bot principal)
+// Corre por separado: si el bot principal se cae o entra en soporte,
+// los subbots ya conectados siguen funcionando y se auto-reconectan.
+import("./subbots.js")
+  .then((sub) => sub.initSubbots())
+  .catch((e) => console.error("❌ Error iniciando sistema de subbots:", e));
+
 // 🎨 Banner y opciones
 console.log(chalk.cyan(figlet.textSync("Suki 3.0 Bot", { font: "Standard" })));
 console.log(chalk.green("\n✅ Iniciando conexión...\n"));
