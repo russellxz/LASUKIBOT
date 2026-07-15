@@ -313,28 +313,23 @@ const AD_MAX_ENTRIES = 150;
 
 // Guarda el mensaje para el antidelete del subbot (texto y multimedia ≤10MB)
 async function saveAntideleteSub(sock, number, m, chatId, isGroup) {
+  // 🚫 No guardar mensajes del propio subbot (no se reenvían los suyos)
+  if (m.key.fromMe) return;
+
   const type = Object.keys(m.message || {})[0];
   if (["protocolMessage", "reactionMessage", "viewOnceMessageV2"].includes(type)) return;
 
   const content = m.message[type];
-  const botNumber = DIGITS(String(sock.user?.id || "").split(":")[0]);
 
   // Guardar la identidad REAL del autor (PN si se pudo resolver) + variantes
   // (PN, PN+0, LID) para que la detección del borrado siempre haga match.
-  let senderId;
-  let variants;
-  if (m.key.fromMe) {
-    senderId = `${botNumber}@s.whatsapp.net`;
-    variants = [botNumber, addZero(botNumber)].filter(Boolean);
-  } else {
-    senderId =
-      (m.realJid && String(m.realJid).endsWith("@s.whatsapp.net") && m.realJid) ||
-      m.key.participant ||
-      m.key.remoteJid;
-    variants = Array.isArray(m.senderVariants) && m.senderVariants.length
-      ? m.senderVariants
-      : [DIGITS(String(senderId).split("@")[0].split(":")[0])].filter(Boolean);
-  }
+  const senderId =
+    (m.realJid && String(m.realJid).endsWith("@s.whatsapp.net") && m.realJid) ||
+    m.key.participant ||
+    m.key.remoteJid;
+  const variants = Array.isArray(m.senderVariants) && m.senderVariants.length
+    ? m.senderVariants
+    : [DIGITS(String(senderId).split("@")[0].split(":")[0])].filter(Boolean);
 
   const guardado = {
     chatId,
@@ -380,6 +375,9 @@ async function saveAntideleteSub(sock, number, m, chatId, isGroup) {
 // resolviendo LID → número real para el match y la mención)
 async function handleDeletedSub(sock, number, m, chatId, isGroup) {
   try {
+    // 🚫 Ignorar borrados del propio subbot (sus mensajes no se reenvían)
+    if (m.key.fromMe) return;
+
     const enabled = isGroup
       ? Number(sock.getSubConfig(chatId, "antidelete")) === 1
       : Number(sock.getSubConfig("global", "antideletepri")) === 1;
@@ -391,39 +389,56 @@ async function handleDeletedSub(sock, number, m, chatId, isGroup) {
 
     const deletedId = m.message.protocolMessage.key.id;
 
-    // Identidades del que borró: la normalización del mensaje externo
-    // (m.senderVariants) + el participant del protocolMessage resuelto
-    const deleterVariants = new Set(
-      (Array.isArray(m.senderVariants) ? m.senderVariants : []).filter(Boolean)
-    );
-
+    // Identidad del AUTOR del mensaje borrado, como el bot principal:
+    // whoDeleted = protocolMessage.key.participant || m.key.participant
     const protoPart = m.message.protocolMessage.key.participant || null;
-    let deleterPnJid = (isUser(m.realJid) && m.realJid) || (isUser(protoPart) && protoPart) || null;
+    const deleterVariants = new Set();
+    let deleterPnJid = null;
 
-    if (protoPart) {
-      const d = JIDNUM(protoPart);
+    const addIdent = (jid) => {
+      const d = JIDNUM(jid);
       if (d) {
         deleterVariants.add(d);
         if (addZero(d)) deleterVariants.add(addZero(d));
       }
+      if (isUser(jid) && !deleterPnJid) deleterPnJid = `${JIDNUM(jid)}@s.whatsapp.net`;
+    };
+
+    if (protoPart) {
+      addIdent(protoPart);
+      // Resolver la otra identidad (LID↔PN): mapa local, repo y metadata
       if (isLid(protoPart)) {
         const cached = sock.__lidMap?.get?.(protoPart);
-        let pn = isUser(cached) ? cached : null;
-        if (!pn) {
+        if (isUser(cached)) addIdent(cached);
+        if (!deleterPnJid) {
           try {
             const r = await sock.signalRepository?.lidMapping?.getPNForLID?.(protoPart);
-            if (isUser(r)) pn = r;
+            if (isUser(r)) addIdent(r);
           } catch {}
         }
-        if (pn) {
-          if (!deleterPnJid) deleterPnJid = pn;
-          const pd = JIDNUM(pn);
-          if (pd) {
-            deleterVariants.add(pd);
-            if (addZero(pd)) deleterVariants.add(addZero(pd));
-          }
+      }
+    } else {
+      // Sin participant (privado): el autor es el emisor del evento
+      for (const v of Array.isArray(m.senderVariants) ? m.senderVariants : []) {
+        if (v) {
+          deleterVariants.add(v);
+          if (addZero(v)) deleterVariants.add(addZero(v));
         }
       }
+      if (isUser(m.realJid)) deleterPnJid = `${JIDNUM(m.realJid)}@s.whatsapp.net`;
+    }
+
+    // Completar identidad con la metadata del grupo (id @lid / jid PN)
+    if (isGroup && deleterVariants.size) {
+      try {
+        const meta = await getGroupMetaCached(sock, chatId);
+        for (const p of meta?.participants || []) {
+          const ids = [p?.id, p?.jid, p?.pn, p?.phoneNumber].filter((x) => typeof x === "string");
+          if (!ids.some((x) => deleterVariants.has(JIDNUM(x)))) continue;
+          for (const x of ids) addIdent(x);
+          break;
+        }
+      } catch {}
     }
 
     if (!deleterVariants.size) return;
@@ -566,7 +581,7 @@ async function handleLinkViolation(sock, number, m, chatId, senderNum, tipo, lim
 // ------------------------------------------------------------
 // Manejador de mensajes por subbot (ligero, para aguantar 500+)
 // ------------------------------------------------------------
-async function handleSubMessage(sock, number, m) {
+export async function handleSubMessage(sock, number, m) {
   if (!m || !m.message) return;
 
   const chatId = m.key.remoteJid;
@@ -614,6 +629,33 @@ async function handleSubMessage(sock, number, m) {
   if (pnJid && !lidJid) {
     const cachedLid = sock.__lidMap.get(pnJid);
     if (isLid(cachedLid)) lidJid = cachedLid;
+    if (!lidJid) {
+      try {
+        const lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);
+        if (isLid(lid)) lidJid = lid;
+      } catch {}
+    }
+  }
+
+  // 🔎 Completar identidad con la METADATA del grupo (como hace el bot
+  // principal): los participantes traen id (@lid) y jid (@s.whatsapp.net),
+  // así siempre tenemos las dos identidades aunque WhatsApp mande solo una.
+  if (isGroup && (!pnJid || !lidJid)) {
+    try {
+      const meta = await getGroupMetaCached(sock, chatId);
+      const targetNum = JIDNUM(pnJid || lidJid || rawSender);
+      if (targetNum) {
+        for (const p of meta?.participants || []) {
+          const ids = [p?.id, p?.jid, p?.pn, p?.phoneNumber].filter((x) => typeof x === "string");
+          if (!ids.some((x) => JIDNUM(x) === targetNum)) continue;
+          for (const x of ids) {
+            if (!pnJid && isUser(x)) pnJid = `${JIDNUM(x)}@s.whatsapp.net`;
+            if (!lidJid && isLid(x)) lidJid = `${JIDNUM(x)}@lid`;
+          }
+          break;
+        }
+      }
+    } catch {}
   }
 
   // Guardar el mapeo LID ↔ PN para futuros mensajes (con tope de memoria)
@@ -662,9 +704,6 @@ async function handleSubMessage(sock, number, m) {
   } catch (e) {
     console.error(`❌ [subbot ${number}] Error guardando antidelete:`, e.message);
   }
-
-  // --- Filtro de a quién responde ---
-  if (!isAllowedMessage(number, m, senderVariants, isGroup, chatId)) return;
 
   // === 🔇 USUARIOS MUTEADOS (lista por subbot en setwelcome.json) ===
   if (isGroup && !fromMe) {
@@ -732,16 +771,6 @@ async function handleSubMessage(sock, number, m) {
           } catch {}
         }
         return;
-      }
-    } catch {}
-  }
-
-  // === 👮 MODOADMINS: solo responde a admins y al mismo subbot ===
-  if (isGroup && !fromMe) {
-    try {
-      if (Number(sock.getSubConfig(chatId, "modoadmins")) === 1) {
-        const isAdmin = await isGroupAdminSub(sock, chatId, senderVariants);
-        if (!isAdmin) return;
       }
     } catch {}
   }
@@ -843,6 +872,10 @@ async function handleSubMessage(sock, number, m) {
     } catch {}
   }
 
+  // --- Filtro de a quién responde (después de la moderación, igual que el
+  // filtro privado del bot principal que va después de mute/antilink) ---
+  if (!isAllowedMessage(number, m, senderVariants, isGroup, chatId)) return;
+
   // === 🧮 CONTEO DE MENSAJES (para totalchat/fantasmas) — bufferizado ===
   if (isGroup && senderNum) {
     try {
@@ -867,6 +900,18 @@ async function handleSubMessage(sock, number, m) {
           }
         }
         writeJson(swFile, sw);
+      }
+    } catch {}
+  }
+
+  // === 👮 MODOADMINS: solo responde a admins y al mismo subbot ===
+  // (va al final, como en el index.js principal, para que la moderación
+  // de arriba siga funcionando aunque esté activo)
+  if (isGroup && !fromMe) {
+    try {
+      if (Number(sock.getSubConfig(chatId, "modoadmins")) === 1) {
+        const isAdmin = await isGroupAdminSub(sock, chatId, senderVariants);
+        if (!isAdmin) return;
       }
     } catch {}
   }
