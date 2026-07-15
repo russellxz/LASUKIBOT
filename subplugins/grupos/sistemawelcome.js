@@ -236,6 +236,8 @@ function stubActionToGroupAction(stubType, type = "") {
   const s = String(type || stubType || "").toLowerCase();
   if (n === 27 || s.includes("group_participant_add")) return "add";
   if (n === 28 || s.includes("group_participant_remove")) return "remove";
+  if (n === 29 || s.includes("group_participant_promote")) return "promote";
+  if (n === 30 || s.includes("group_participant_demote")) return "demote";
   return "";
 }
 
@@ -264,7 +266,15 @@ function buildUpdateFromStubMessage(m = {}) {
 
   if (!participants.length) return null;
 
-  return { id: chatId, action, participants, fromStub: true };
+  const author = cleanJid(
+    m.key?.participant ||
+    m.participant ||
+    m.key?.participantPn ||
+    m.key?.participantLid ||
+    ""
+  );
+
+  return { id: chatId, action, participants, author, fromStub: true };
 }
 
 function makeEventDedupKey(update = {}) {
@@ -290,10 +300,64 @@ async function handleGroupParticipantsUpdate(conn, update, recentEvents) {
     const action = String(update?.action || "").toLowerCase();
 
     if (!chatId || !chatId.endsWith("@g.us")) return;
-    if (!["add", "remove"].includes(action)) return;
+    if (!["add", "remove", "promote", "demote"].includes(action)) return;
 
     const participants = Array.isArray(update?.participants) ? update.participants : [];
     if (!participants.length) return;
+
+    // 🔰 AVISO DE CAMBIOS DE ADMIN (activo por defecto, como el bot principal)
+    if (action === "promote" || action === "demote") {
+      // Dedupe de eventos (native + stub)
+      const keyPd = makeEventDedupKey(update);
+      const nowPd = Date.now();
+      for (const [k, t] of recentEvents.entries()) {
+        if (nowPd - t > RECENT_EVENT_TTL_MS) recentEvents.delete(k);
+      }
+      if (recentEvents.has(keyPd)) return;
+      recentEvents.set(keyPd, nowPd);
+
+      const metadataPd = await conn.groupMetadata(chatId).catch(() => null);
+      if (!metadataPd) return;
+
+      const actor = cleanJid(update?.author || update?.authorPn || "");
+      const actorNum = actor ? DIGITS(actor.split(":")[0]) : "Desconocido";
+      const actorMention = actor || null;
+
+      for (const targetRaw of participants) {
+        const target = cleanJid(getJidStr(targetRaw));
+        const resolved = resolveRealFromMeta(metadataPd, targetRaw);
+        const targetMention = resolved.realJid || resolved.lidJid || target;
+        const targetNum = resolved.number || jidNumber(targetMention) || "Desconocido";
+
+        if (!targetMention) continue;
+
+        const mencionesEfectivas = [targetMention, actorMention].filter(Boolean).map(String);
+
+        if (action === "promote") {
+          await conn.sendMessage(chatId, {
+            text:
+`╭──『 👑 *NUEVO ADMIN* 』─◆
+│ 👤 Usuario: @${targetNum}
+│ ✅ Ascendido por: @${actorNum}
+╰────────────────────◆`,
+            mentions: mencionesEfectivas
+          }).catch(() => {});
+        }
+
+        if (action === "demote") {
+          await conn.sendMessage(chatId, {
+            text:
+`╭──『 📉 *ADMIN DEGRADADO* 』─◆
+│ 👤 Usuario: @${targetNum}
+│ ❌ Degradado por: @${actorNum}
+╰────────────────────◆`,
+            mentions: mencionesEfectivas
+          }).catch(() => {});
+        }
+      }
+
+      return;
+    }
 
     // Configuración PROPIA de este subbot
     const welcomeData = conn.readSubData ? conn.readSubData("welcome.json", {}) : {};

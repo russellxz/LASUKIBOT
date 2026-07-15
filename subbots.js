@@ -458,14 +458,11 @@ async function handleDeletedSub(sock, number, m, chatId, isGroup) {
       ].map(DIGITS).filter(Boolean)
     );
 
-    // Solo reenviar si quien borró es el mismo autor (match por cualquier variante)
+    // Solo reenviar si quien borró es el mismo autor (match por cualquier variante).
+    // Nota: NO se salta a los admins — en los grupos LID el bot principal
+    // tampoco los salta en la práctica, y así es como el usuario lo espera.
     const match = [...storedVariants].some((v) => deleterVariants.has(v));
     if (!match) return;
-
-    if (isGroup) {
-      const isAdmin = await isGroupAdminSub(sock, chatId, [...deleterVariants]);
-      if (isAdmin) return;
-    }
 
     // Mención con el número REAL: preferir el PN guardado, luego el resuelto
     let mentionJid = null;
