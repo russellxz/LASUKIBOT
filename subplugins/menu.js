@@ -1,5 +1,5 @@
 // subplugins/menu.js — Menú de comandos del subbot
-const MENU_IMAGE = "https://cdn.russellxz.click/707c3d7c.jpg";
+const MENU_IMAGE = "https://cdn.russellxz.click/c678c800.jpg";
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
