@@ -301,8 +301,11 @@ async function handleGroupParticipantsUpdate(conn, update, recentEvents) {
 
     const welcomeActive = isActive(grupoCfg.welcome);
     const byeActive = isActive(grupoCfg.despedidas);
+    const antiArabe = typeof conn.getSubConfig === "function"
+      ? isActive(conn.getSubConfig(chatId, "antiarabe"))
+      : false;
 
-    if (action === "add" && !welcomeActive) return;
+    if (action === "add" && !welcomeActive && !antiArabe) return;
     if (action === "remove" && !byeActive) return;
 
     // Dedupe de eventos (native + stub)
@@ -348,6 +351,34 @@ async function handleGroupParticipantsUpdate(conn, update, recentEvents) {
       const mention = phoneForMention === "usuario" ? "@usuario" : `@${phoneForMention}`;
 
       if (action === "add") {
+        // 🚷 Antiárabe (mismo listado de prefijos que el bot principal)
+        if (antiArabe && resolved.number) {
+          const arabes = [
+            "20", "212", "213", "216", "218", "222", "224", "230", "234", "235", "237", "238", "249",
+            "250", "251", "252", "253", "254", "255", "257", "258", "260", "263", "269", "960", "961",
+            "962", "963", "964", "965", "966", "967", "968", "970", "971", "972", "973", "974", "975",
+            "976", "980", "981", "992", "994", "995", "998"
+          ];
+          if (arabes.some(cc => resolved.number.startsWith(cc))) {
+            await conn.sendMessage(chatId, {
+              text: `🚫 ${mention} tiene un prefijo prohibido y será eliminado.`,
+              mentions: [mentionId]
+            }).catch(() => {});
+            try {
+              await conn.groupParticipantsUpdate(chatId, [mentionId], "remove");
+            } catch {
+              try {
+                if (participant && participant !== mentionId) {
+                  await conn.groupParticipantsUpdate(chatId, [participant], "remove");
+                }
+              } catch {}
+            }
+            continue;
+          }
+        }
+
+        if (!welcomeActive) continue;
+
         const perfilURL = await getProfileUrl(
           conn,
           resolved.realJid || mentionId,

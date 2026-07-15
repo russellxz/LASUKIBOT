@@ -30,7 +30,7 @@ const handler = async (msg, { conn }) => {
   for (const b of bots) {
     const estado = b.connected ? "🟢 Activo" : "🔴 Reconectando";
     const tiempo = b.connectedSince ? formatUptime(Date.now() - b.connectedSince) : "—";
-    texto += `${i}. wa.me/${b.number}\n   ${estado} • ⏱️ ${tiempo}\n`;
+    texto += `${i}. 👤 *${b.name}*\n   ${estado} • ⏱️ ${tiempo}\n`;
     i++;
   }
 

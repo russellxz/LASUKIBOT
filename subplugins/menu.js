@@ -35,6 +35,40 @@ const handler = async (msg, { conn }) => {
 🧹 *${p}delwelcome* — borra los textos personalizados
 
 ━━━━━━━━━━━━━━━━━━
+🛡️ *SEGURIDAD DEL GRUPO*
+━━━━━━━━━━━━━━━━━━
+🗑️ *${p}antidelete on/off* — reenvía mensajes eliminados
+🗑️ *${p}antideletepri on/off* — antidelete en privados (solo tú)
+🔗 *${p}antilink on/off* — bloquea links de grupos de WhatsApp
+🌐 *${p}linkall on/off* — bloquea todos los enlaces
+🚫 *${p}antis on/off* — anti spam de stickers
+🚷 *${p}antiarabe on/off* — bloquea prefijos prohibidos
+👮 *${p}modoadmins on/off* — solo responde a admins y a ti
+🚷 *${p}restchat <comando>* — restringe un comando
+
+━━━━━━━━━━━━━━━━━━
+👥 *ADMINISTRACIÓN DE GRUPOS*
+━━━━━━━━━━━━━━━━━━
+🦶 *${p}kick @user* — expulsa a un usuario
+⛔ *${p}ban / ${p}unban @user* — banea comandos a un usuario
+🔇 *${p}mute / ${p}unmute @user* — mutea a un usuario
+👑 *${p}daradmins / ${p}quitaradmins @user*
+📢 *${p}todos <texto>* — menciona a todos
+🏷️ *${p}tag <texto>* — notificación oculta
+🧾 *${p}infogrupo* — info del grupo
+🔗 *${p}linkgrupo* — link del grupo
+🔓 *${p}abrirgrupo* / 🔒 *${p}cerrargrupo*
+⏰ *${p}abrir / ${p}cerrar <tiempo>* — abrir/cerrar programado
+🖼️ *${p}setfoto* — cambia la foto del grupo
+✏️ *${p}setname / ${p}setinfo* — nombre y descripción
+📜 *${p}reglas / ${p}setreglas* — reglas del grupo
+🗑️ *${p}delete* — borra el mensaje citado
+🧹 *${p}delwar* — limpia advertencias
+👻 *${p}fantasmas* — miembros inactivos
+📊 *${p}totalchat* — mensajes por usuario
+⚙️ *${p}configrupo* — ver configuración del grupo
+
+━━━━━━━━━━━━━━━━━━
 📥 *DESCARGAS*
 ━━━━━━━━━━━━━━━━━━
 🎵 *${p}play <búsqueda>* — audio/video de YouTube (con botones)

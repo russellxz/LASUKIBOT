@@ -246,6 +246,231 @@ function isAllowedMessage(number, m, senderNum, isGroup, chatId) {
 }
 
 // ------------------------------------------------------------
+// Helpers de enforcement (admins, antidelete, advertencias)
+// ------------------------------------------------------------
+const addZero = (n) => {
+  const c = DIGITS(n);
+  if (!c) return "";
+  return c.endsWith("0") ? c : c + "0";
+};
+
+async function getGroupMetaCached(sock, chatId) {
+  sock.__metaCache = sock.__metaCache || new Map();
+  const hit = sock.__metaCache.get(chatId);
+  if (hit && Date.now() - hit.ts < 60000) return hit.meta;
+  const meta = await sock.groupMetadata(chatId).catch(() => null);
+  if (meta) {
+    sock.__metaCache.set(chatId, { meta, ts: Date.now() });
+    if (sock.__metaCache.size > 200) {
+      const first = sock.__metaCache.keys().next().value;
+      sock.__metaCache.delete(first);
+    }
+  }
+  return meta;
+}
+
+async function isGroupAdminSub(sock, chatId, senderNum) {
+  try {
+    if (!senderNum) return false;
+    const meta = await getGroupMetaCached(sock, chatId);
+    const parts = Array.isArray(meta?.participants) ? meta.participants : [];
+    const adminNums = new Set();
+    for (const p of parts) {
+      const flag = p?.admin === "admin" || p?.admin === "superadmin";
+      if (!flag) continue;
+      for (const idv of [p.id, p.jid, p.pn, p.phoneNumber]) {
+        const s = String(idv || "");
+        if (s.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(s.split(":")[0]));
+        if (s.endsWith("@lid")) {
+          adminNums.add(DIGITS(s.split(":")[0]));
+          try {
+            const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(s);
+            if (typeof pn === "string" && pn.endsWith("@s.whatsapp.net")) {
+              adminNums.add(DIGITS(pn.split(":")[0]));
+            }
+          } catch {}
+        }
+      }
+    }
+    const z = addZero(senderNum);
+    return adminNums.has(senderNum) || (z && adminNums.has(z));
+  } catch {
+    return false;
+  }
+}
+
+function antideleteFile(number) {
+  return path.join(subDataDir(number), "antidelete.json");
+}
+
+const AD_MEDIA_TYPES = ["imageMessage", "videoMessage", "audioMessage", "documentMessage", "stickerMessage"];
+const AD_MAX_ENTRIES = 150;
+
+// Guarda el mensaje para el antidelete del subbot (texto y multimedia ≤10MB)
+async function saveAntideleteSub(sock, number, m, chatId, isGroup) {
+  const type = Object.keys(m.message || {})[0];
+  if (["protocolMessage", "reactionMessage", "viewOnceMessageV2"].includes(type)) return;
+
+  const content = m.message[type];
+  const botNumber = DIGITS(String(sock.user?.id || "").split(":")[0]);
+  const senderId = m.key.participant || (m.key.fromMe ? `${botNumber}@s.whatsapp.net` : m.key.remoteJid);
+
+  const guardado = { chatId, sender: senderId, type, timestamp: Date.now() };
+
+  if (AD_MEDIA_TYPES.includes(type)) {
+    if (content?.fileLength && Number(content.fileLength) > 10 * 1024 * 1024) return;
+    const stream = await sock.wa.downloadContentFromMessage(content, type.replace("Message", ""));
+    let buffer = Buffer.alloc(0);
+    for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+    guardado.media = buffer.toString("base64");
+    guardado.mimetype = content?.mimetype;
+  } else if (type === "conversation" || type === "extendedTextMessage") {
+    guardado.text = m.message.conversation || m.message.extendedTextMessage?.text || "";
+    if (!guardado.text) return;
+  } else {
+    return;
+  }
+
+  const file = antideleteFile(number);
+  const db = readJson(file, { g: {}, p: {} });
+  const scope = isGroup ? "g" : "p";
+  db[scope] = db[scope] || {};
+  db[scope][m.key.id] = guardado;
+
+  // Poda: mantener solo los mensajes más recientes
+  const entries = Object.entries(db[scope]);
+  if (entries.length > AD_MAX_ENTRIES) {
+    entries.sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
+    for (const [k] of entries.slice(0, entries.length - AD_MAX_ENTRIES)) delete db[scope][k];
+  }
+
+  writeJson(file, db);
+}
+
+// Reenvía el mensaje eliminado (igual que el antidelete del bot principal)
+async function handleDeletedSub(sock, number, m, chatId, isGroup) {
+  try {
+    const deletedId = m.message.protocolMessage.key.id;
+    const whoDeleted = m.message.protocolMessage.key.participant || m.key.participant || m.key.remoteJid;
+    const senderNumber = DIGITS(String(whoDeleted).split("@")[0].split(":")[0]);
+    const mentionTag = [`${senderNumber}@s.whatsapp.net`];
+
+    const enabled = isGroup
+      ? Number(sock.getSubConfig(chatId, "antidelete")) === 1
+      : Number(sock.getSubConfig("global", "antideletepri")) === 1;
+    if (!enabled) return;
+
+    const db = readJson(antideleteFile(number), { g: {}, p: {} });
+    const data = (isGroup ? db.g : db.p) || {};
+    const deletedData = data[deletedId];
+    if (!deletedData) return;
+
+    const senderClean = DIGITS(String(deletedData.sender || "").split("@")[0].split(":")[0]);
+    if (senderClean !== senderNumber) return;
+
+    if (isGroup) {
+      const isAdmin = await isGroupAdminSub(sock, chatId, senderNumber);
+      if (isAdmin) return;
+    }
+
+    const type = deletedData.type;
+    const mimetype = deletedData.mimetype || "application/octet-stream";
+    const buffer = deletedData.media ? Buffer.from(deletedData.media, "base64") : null;
+
+    if (buffer) {
+      const sendOpts = {
+        [type.replace("Message", "")]: buffer,
+        mimetype
+      };
+
+      if (type === "stickerMessage") {
+        await sock.sendMessage(chatId, sendOpts);
+        await sock.sendMessage(chatId, {
+          text: `📌 El sticker fue eliminado por @${senderNumber}`,
+          mentions: mentionTag
+        });
+      } else if (type === "audioMessage") {
+        await sock.sendMessage(chatId, sendOpts);
+        await sock.sendMessage(chatId, {
+          text: `🎧 El audio fue eliminado por @${senderNumber}`,
+          mentions: mentionTag
+        });
+      } else {
+        sendOpts.caption = `📦 Mensaje eliminado por @${senderNumber}`;
+        sendOpts.mentions = mentionTag;
+        await sock.sendMessage(chatId, sendOpts, { quoted: m });
+      }
+    } else if (deletedData.text) {
+      await sock.sendMessage(chatId, {
+        text: `📝 *Mensaje eliminado:* ${deletedData.text}\n👤 *Usuario:* @${senderNumber}`,
+        mentions: mentionTag
+      }, { quoted: m });
+    }
+  } catch (err) {
+    console.error(`❌ [subbot ${number}] Error en antidelete:`, err);
+  }
+}
+
+// Advertencias por enlaces (antilink 3 strikes / linkall 10 strikes)
+async function handleLinkViolation(sock, number, m, chatId, senderNum, tipo, limite) {
+  const mentionJid =
+    (m.realJid && String(m.realJid).includes("@") && m.realJid) ||
+    `${senderNum}@s.whatsapp.net`;
+
+  // Borrar el mensaje (probando llaves PN/LID)
+  const deleteKeys = [m.key];
+  for (const participant of [...new Set([m.key.participant, mentionJid].filter(Boolean))]) {
+    deleteKeys.push({ remoteJid: chatId, fromMe: false, id: m.key.id, participant });
+  }
+  for (const dk of deleteKeys) {
+    try {
+      await sock.sendMessage(chatId, { delete: dk });
+      break;
+    } catch {}
+  }
+
+  const advFile = path.join(subDataDir(number), "advertencias.json");
+  const adv = readJson(advFile, {});
+  adv[chatId] = adv[chatId] || {};
+
+  const keys = [...new Set([senderNum, addZero(senderNum)].filter(Boolean))];
+  let current = 0;
+  for (const k of keys) current = Math.max(current, Number(adv[chatId][k] || 0));
+  const total = current + 1;
+  for (const k of keys) adv[chatId][k] = total;
+  writeJson(advFile, adv);
+
+  if (total >= limite) {
+    await sock.sendMessage(chatId, {
+      text: `❌ @${senderNum} fue eliminado por enviar enlaces prohibidos (${limite}/${limite}).`,
+      mentions: [mentionJid]
+    }).catch(() => {});
+
+    let removed = false;
+    for (const jid of [...new Set([m.key.participant, mentionJid].filter(Boolean))]) {
+      try {
+        await sock.groupParticipantsUpdate(chatId, [jid], "remove");
+        removed = true;
+        break;
+      } catch {}
+    }
+
+    if (removed) {
+      for (const k of keys) adv[chatId][k] = 0;
+      writeJson(advFile, adv);
+    }
+  } else {
+    const razon = tipo === "antilink"
+      ? "enviar invitaciones de WhatsApp no está permitido aquí"
+      : "no se permiten enlaces externos";
+    await sock.sendMessage(chatId, {
+      text: `⚠️ @${senderNum}, ${razon}.\nAdvertencia: ${total}/${limite}.`,
+      mentions: [mentionJid]
+    }).catch(() => {});
+  }
+}
+
+// ------------------------------------------------------------
 // Manejador de mensajes por subbot (ligero, para aguantar 500+)
 // ------------------------------------------------------------
 async function handleSubMessage(sock, number, m) {
@@ -284,9 +509,106 @@ async function handleSubMessage(sock, number, m) {
   m.realNumber = DIGITS(String(senderJid).split("@")[0].split(":")[0]);
 
   const senderNum = m.realNumber;
+  const fromMe = !!m.key.fromMe;
+  const swFile = path.join(subDataDir(number), "setwelcome.json");
+
+  // === 🗑️ ANTIDELETE: detectar mensaje eliminado (antes del filtro,
+  // así el antidelete privado funciona con cualquier usuario) ===
+  if (m.message?.protocolMessage?.type === 0) {
+    await handleDeletedSub(sock, number, m, chatId, isGroup);
+    return;
+  }
+
+  // === 🗑️ ANTIDELETE: guardar mensajes si está activo ===
+  try {
+    const adOn = isGroup
+      ? Number(sock.getSubConfig(chatId, "antidelete")) === 1
+      : Number(sock.getSubConfig("global", "antideletepri")) === 1;
+    if (adOn) await saveAntideleteSub(sock, number, m, chatId, isGroup);
+  } catch (e) {
+    console.error(`❌ [subbot ${number}] Error guardando antidelete:`, e.message);
+  }
 
   // --- Filtro de a quién responde ---
   if (!isAllowedMessage(number, m, senderNum, isGroup, chatId)) return;
+
+  // === 🔇 USUARIOS MUTEADOS (lista por subbot en setwelcome.json) ===
+  if (isGroup && !fromMe) {
+    try {
+      const sw = readJsonCached(swFile, {});
+      const mutedNums = new Set(
+        (Array.isArray(sw?.[chatId]?.muted) ? sw[chatId].muted : [])
+          .map(DIGITS)
+          .filter(Boolean)
+      );
+      const variants = [...new Set([senderNum, addZero(senderNum)].filter(Boolean))];
+
+      if (variants.some((n) => mutedNums.has(n))) {
+        sock.__muteCounter = sock.__muteCounter || {};
+        const ck = `${chatId}:${senderNum}`;
+        const count = (sock.__muteCounter[ck] = (sock.__muteCounter[ck] || 0) + 1);
+        const mentionJid = `${senderNum}@s.whatsapp.net`;
+
+        if (count === 8) {
+          await sock.sendMessage(chatId, {
+            text: `⚠️ @${senderNum}, estás *muteado*. Si sigues enviando mensajes podrías ser eliminado.`,
+            mentions: [mentionJid]
+          }).catch(() => {});
+        }
+
+        if (count === 13) {
+          await sock.sendMessage(chatId, {
+            text: `⛔ @${senderNum}, estás al *límite*. Un mensaje más y serás eliminado.`,
+            mentions: [mentionJid]
+          }).catch(() => {});
+        }
+
+        if (count >= 15) {
+          const isAdmin = await isGroupAdminSub(sock, chatId, senderNum);
+          if (!isAdmin) {
+            let removed = false;
+            for (const jid of [...new Set([m.key.participant, mentionJid].filter(Boolean))]) {
+              try {
+                await sock.groupParticipantsUpdate(chatId, [jid], "remove");
+                removed = true;
+                break;
+              } catch {}
+            }
+            if (removed) {
+              await sock.sendMessage(chatId, {
+                text: `❌ @${senderNum} fue eliminado por ignorar el mute.`,
+                mentions: [mentionJid]
+              }).catch(() => {});
+              delete sock.__muteCounter[ck];
+            }
+          }
+        }
+
+        // Borrar el mensaje del muteado
+        const deleteKeys = [m.key];
+        for (const participant of [...new Set([m.key.participant, mentionJid].filter(Boolean))]) {
+          deleteKeys.push({ remoteJid: chatId, fromMe: false, id: m.key.id, participant });
+        }
+        for (const dk of deleteKeys) {
+          try {
+            await sock.sendMessage(chatId, { delete: dk });
+            break;
+          } catch {}
+        }
+        return;
+      }
+    } catch {}
+  }
+
+  // === 👮 MODOADMINS: solo responde a admins y al mismo subbot ===
+  if (isGroup && !fromMe) {
+    try {
+      if (Number(sock.getSubConfig(chatId, "modoadmins")) === 1) {
+        const isAdmin = await isGroupAdminSub(sock, chatId, senderNum);
+        if (!isAdmin) return;
+      }
+    } catch {}
+  }
 
   // --- Texto del mensaje ---
   const messageContent =
@@ -295,6 +617,120 @@ async function handleSubMessage(sock, number, m) {
     m.message?.imageMessage?.caption ||
     m.message?.videoMessage?.caption ||
     "";
+
+  // === 🚫 ANTIS: spam de stickers (5 avisos / 3 strikes en 15s) ===
+  if (isGroup && !fromMe) {
+    try {
+      const stickerMsg = m.message?.stickerMessage || m.message?.ephemeralMessage?.message?.stickerMessage;
+      if (stickerMsg && Number(sock.getSubConfig(chatId, "antis")) === 1) {
+        sock.__antisSpam = sock.__antisSpam || {};
+        const now = Date.now();
+        const key = `${chatId}:${senderNum}`;
+        const ud = sock.__antisSpam[key] || { count: 0, last: now, strikes: 0 };
+
+        if (now - ud.last > 15000) {
+          ud.count = 1;
+          ud.strikes = 0;
+        } else {
+          ud.count++;
+        }
+        ud.last = now;
+        sock.__antisSpam[key] = ud;
+
+        const mentionJid = `${senderNum}@s.whatsapp.net`;
+
+        if (ud.count === 5) {
+          await sock.sendMessage(chatId, {
+            text: `⚠️ @${senderNum} has enviado *5 stickers*. Espera *15 segundos* o si envías *3 más*, serás eliminado.`,
+            mentions: [mentionJid]
+          }).catch(() => {});
+        }
+
+        if (ud.count > 5) {
+          try {
+            await sock.sendMessage(chatId, {
+              delete: { remoteJid: chatId, fromMe: false, id: m.key.id, participant: m.key.participant || mentionJid }
+            });
+          } catch {}
+
+          ud.strikes++;
+          if (ud.strikes >= 3) {
+            const isAdmin = await isGroupAdminSub(sock, chatId, senderNum);
+            if (!isAdmin) {
+              await sock.sendMessage(chatId, {
+                text: `❌ @${senderNum} fue eliminado por ignorar advertencias y abusar de stickers.`,
+                mentions: [mentionJid]
+              }).catch(() => {});
+              try {
+                await sock.groupParticipantsUpdate(chatId, [m.key.participant || mentionJid], "remove");
+              } catch {}
+              delete sock.__antisSpam[key];
+            }
+          }
+          return;
+        }
+      }
+    } catch {}
+  }
+
+  // === 🔗 ANTILINK / LINKALL (con advertencias por subbot) ===
+  if (isGroup && !fromMe && messageContent) {
+    try {
+      const antilinkOn = Number(sock.getSubConfig(chatId, "antilink")) === 1;
+      const linkallOn = Number(sock.getSubConfig(chatId, "linkall")) === 1;
+
+      if (antilinkOn || linkallOn) {
+        const esInvitacionWA = /(?:https?:\/\/)?chat\.whatsapp\.com\/[A-Za-z0-9]+/i.test(messageContent);
+        const esLink = /https?:\/\/[^\s]+/i.test(messageContent);
+
+        let tipo = null;
+        let limite = 0;
+        if (antilinkOn && esInvitacionWA) {
+          tipo = "antilink";
+          limite = 3;
+        } else if (linkallOn && esLink && !esInvitacionWA) {
+          tipo = "linkall";
+          limite = 10;
+        }
+
+        if (tipo) {
+          const isAdmin = await isGroupAdminSub(sock, chatId, senderNum);
+          if (!isAdmin) {
+            await handleLinkViolation(sock, number, m, chatId, senderNum, tipo, limite);
+            return;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // === 🧮 CONTEO DE MENSAJES (para totalchat/fantasmas) — bufferizado ===
+  if (isGroup && senderNum) {
+    try {
+      sock.__ccBuf = sock.__ccBuf || {};
+      sock.__ccBuf[chatId] = sock.__ccBuf[chatId] || {};
+      for (const k of [...new Set([senderNum, addZero(senderNum)].filter(Boolean))]) {
+        sock.__ccBuf[chatId][k] = (sock.__ccBuf[chatId][k] || 0) + 1;
+      }
+
+      const now = Date.now();
+      if (!sock.__ccFlushTs) sock.__ccFlushTs = now;
+      if (now - sock.__ccFlushTs > 30000) {
+        sock.__ccFlushTs = now;
+        const buf = sock.__ccBuf;
+        sock.__ccBuf = {};
+        const sw = readJson(swFile, {});
+        for (const cid of Object.keys(buf)) {
+          sw[cid] = sw[cid] || {};
+          sw[cid].chatCount = sw[cid].chatCount || {};
+          for (const k of Object.keys(buf[cid])) {
+            sw[cid].chatCount[k] = Number(sw[cid].chatCount[k] || 0) + buf[cid][k];
+          }
+        }
+        writeJson(swFile, sw);
+      }
+    } catch {}
+  }
 
   if (!messageContent) return;
 
@@ -310,6 +746,44 @@ async function handleSubMessage(sock, number, m) {
   if (!command) return;
   const rawArgs = messageContent.trim().slice(prefixUsed.length + command.length).trim();
   const args = rawArgs.length ? rawArgs.split(/\s+/) : [];
+
+  // === ⛔ USUARIOS BANEADOS: no pueden usar comandos ===
+  if (!fromMe) {
+    try {
+      const sw = readJsonCached(swFile, {});
+      const bannedNums = new Set(
+        (Array.isArray(sw?.[chatId]?.banned) ? sw[chatId].banned : [])
+          .map(DIGITS)
+          .filter(Boolean)
+      );
+      const variants = [...new Set([senderNum, addZero(senderNum)].filter(Boolean))];
+
+      if (variants.some((n) => bannedNums.has(n))) {
+        const frases = [
+          "🚫 @usuario estás baneado. ¡Abusaste demasiado del subbot!",
+          "❌ Lo siento @usuario, pero tú ya no puedes usarme.",
+          "🔒 No tienes permiso @usuario. Fuiste baneado.",
+          "👎 ¡Bloqueado! @usuario no puedes usar el subbot.",
+          "😤 Quisiste usarme pero estás baneado, @usuario."
+        ];
+        const texto = frases[Math.floor(Math.random() * frases.length)].replace("@usuario", `@${senderNum}`);
+        await sock.sendMessage(chatId, {
+          text: texto,
+          mentions: [`${senderNum}@s.whatsapp.net`]
+        }, { quoted: m }).catch(() => {});
+        return;
+      }
+
+      // === 🚷 COMANDOS RESTRINGIDOS (restchat) ===
+      const restringidos = Array.isArray(sw?.[chatId]?.restringidos) ? sw[chatId].restringidos : [];
+      if (restringidos.includes(command)) {
+        await sock.sendMessage(chatId, {
+          text: "🚫 *Este comando está restringido en este grupo.*\nSolo el *dueño del subbot* puede usarlo."
+        }, { quoted: m }).catch(() => {});
+        return;
+      }
+    } catch {}
+  }
 
   const plugins = global.subPlugins || [];
 
@@ -470,6 +944,32 @@ async function connectSubbot(num, entry) {
   sock.subDataDir = subDataDir(num);
   sock.readSubData = (file, fallback) => readJson(path.join(subDataDir(num), file), fallback);
   sock.writeSubData = (file, data) => writeJson(path.join(subDataDir(num), file), data);
+
+  // ⚙️ Configuración por chat (equivalente a activos.db del bot principal,
+  // pero en activos.json INDEPENDIENTE por subbot)
+  const activosFile = path.join(subDataDir(num), "activos.json");
+  sock.getSubConfig = (cid, key) => {
+    const a = readJsonCached(activosFile, {});
+    return a?.[cid]?.[key];
+  };
+  sock.setSubConfig = (cid, key, value) => {
+    const a = readJson(activosFile, {});
+    if (!a[cid]) a[cid] = {};
+    a[cid][key] = value;
+    writeJson(activosFile, a);
+  };
+  sock.getAllSubConfigs = (cid) => {
+    const a = readJsonCached(activosFile, {});
+    return { ...(a?.[cid] || {}) };
+  };
+  sock.deleteSubConfig = (cid, key) => {
+    const a = readJson(activosFile, {});
+    if (a[cid]) {
+      delete a[cid][key];
+      if (!Object.keys(a[cid]).length) delete a[cid];
+      writeJson(activosFile, a);
+    }
+  };
   sock.wa = { downloadContentFromMessage };
   global.wa = global.wa || { downloadContentFromMessage };
 
@@ -519,11 +1019,19 @@ async function connectSubbot(num, entry) {
       console.log(chalk.green(`✅ [subbot ${num}] Conectado.`));
 
       // Persistir tiempo de conexión (no se reinicia con el servidor)
+      // y el nombre del usuario (para el comando "bots")
       const cfg2 = getSubConfig(num);
+      let cfgChanged = false;
       if (!cfg2.connectedSince) {
         cfg2.connectedSince = Date.now();
-        saveSubConfig(num, cfg2);
+        cfgChanged = true;
       }
+      const userName = sock.user?.name || sock.user?.verifiedName || "";
+      if (userName && cfg2.name !== userName) {
+        cfg2.name = userName;
+        cfgChanged = true;
+      }
+      if (cfgChanged) saveSubConfig(num, cfg2);
 
       // Primera conexión: instrucciones a su propio número
       if (!cfg2.welcomed) {
@@ -629,6 +1137,7 @@ export function listSubbots() {
     const cfg = getSubConfig(num);
     out.push({
       number: num,
+      name: cfg.name || entry.sock?.user?.name || "Sin nombre",
       status: entry.status,
       connected: entry.status === "open",
       connectedSince: cfg.connectedSince
@@ -719,9 +1228,6 @@ export async function handleCodeCommand(msg, { conn, args, botName = "La Suki Bo
 📌 Escribe el comando con tu número y su código de país:
    *${pref}code +507 6500-7845*
 
-🇲🇽 *Números de México:* solo pon *${pref}code +52* y el resto
-del número; el bot agrega el *1* automáticamente
-(quedaría +521...).
 
 📲 El bot te enviará un *código de 8 dígitos* para
 vincular desde WhatsApp → *Dispositivos vinculados*.
@@ -731,7 +1237,8 @@ vincular desde WhatsApp → *Dispositivos vinculados*.
     );
   }
 
-  // 🇲🇽 México: WhatsApp necesita 521 + 10 dígitos. Se agrega el 1 automático.
+  // 🇲🇽 México: WhatsApp necesita 521 + 10 dígitos. Se agrega el 1 automático
+  // solo si el usuario NO lo puso ya (52 + 10 dígitos = 12; con 1 son 13).
   if (digits.startsWith("52") && !digits.startsWith("521") && digits.length === 12) {
     digits = "521" + digits.slice(2);
   }
@@ -755,75 +1262,59 @@ vincular desde WhatsApp → *Dispositivos vinculados*.
 
   await conn.sendMessage(chatId, { react: { text: "⏳", key: msg.key } }).catch(() => {});
 
-  // 🎬 Video con la explicación de cómo vincular
-  try {
-    await conn.sendMessage(
-      chatId,
-      {
-        video: { url: CODE_VIDEO },
-        caption: `
-╭━━━━━━━━━━━━━━━━━━╮
-   ❦ 𝑺𝑼𝑲𝑰 𝑺𝑼𝑩𝑩𝑶𝑻𝑺 ❦
-╰━━━━━━━━━━━━━━━━━━╯
-
-📲 *CÓMO VINCULAR TU SUBBOT (+${digits})*
-
-1️⃣ Abre *WhatsApp* en tu teléfono.
-2️⃣ Ve a *Ajustes* → *Dispositivos vinculados*.
-3️⃣ Toca *Vincular un dispositivo*.
-4️⃣ Elige *Vincular con el número de teléfono*.
-5️⃣ Escribe el *código de 8 dígitos* que te mandaré
-   en el siguiente mensaje (botón para copiarlo 📋).
-
-⏳ Tienes *5 minutos* para completar la vinculación.
-🎥 Mira el video de arriba si tienes dudas.
-`.trim()
-      },
-      { quoted: msg }
-    );
-  } catch (e) {
-    console.log("[subbots] No se pudo enviar el video de code:", e.message);
-  }
-
   try {
     await startSubbot(digits, {
       requestPairing: true,
       onPairingCode: async (code) => {
         const fmt = String(code).match(/.{1,4}/g)?.join("-") || code;
         const texto = `
-🔑 *TU CÓDIGO DE VINCULACIÓN*
+╭━━━━━━━━━━━━━━━━━━╮
+   ❦ 𝑺𝑼𝑲𝑰 𝑺𝑼𝑩𝑩𝑶𝑻𝑺 ❦
+╰━━━━━━━━━━━━━━━━━━╯
+
+🔑 *TU CÓDIGO DE VINCULACIÓN (+${digits})*
 
 ╭━━━━━━━━━━━━━╮
    👉  *${fmt}*
 ╰━━━━━━━━━━━━━╯
 
-📲 WhatsApp → *Dispositivos vinculados* →
-*Vincular con el número de teléfono* y escribe el código.
+📲 *CÓMO VINCULAR:*
+1️⃣ Abre *WhatsApp* en tu teléfono.
+2️⃣ Ve a *Ajustes* → *Dispositivos vinculados*.
+3️⃣ Toca *Vincular un dispositivo*.
+4️⃣ Elige *Vincular con el número de teléfono*.
+5️⃣ Escribe el *código de 8 dígitos* de arriba
+   (usa el botón 📋 para copiarlo).
 
-⏳ Válido por pocos minutos. Toca el botón para copiarlo.`.trim();
+⏳ Tienes *5 minutos* para completar la vinculación.
+🎥 Mira el video si tienes dudas.`.trim();
 
+        // 🎬 UN SOLO MENSAJE: video + explicación + código + botón de copiar
         try {
           await conn.sendMessage(
             chatId,
             {
-              text: texto,
+              video: { url: CODE_VIDEO },
+              caption: texto,
               footer: "❦ Suki Subbots ❦",
-              buttons: [
+              nativeFlow: [
                 {
-                  name: "cta_copy",
-                  buttonParamsJson: JSON.stringify({
-                    display_text: "📋 Copiar código",
-                    copy_code: String(code)
-                  })
+                  text: "📋 Copiar código",
+                  copy: String(code)
                 }
-              ],
-              headerType: 1
+              ]
             },
             { quoted: msg }
           );
         } catch (e) {
-          console.log("[subbots] Botón copiar falló, enviando texto plano:", e.message);
-          await conn.sendMessage(chatId, { text: texto }, { quoted: msg }).catch(() => {});
+          console.log("[subbots] Mensaje interactivo falló, usando fallback:", e.message);
+          await conn.sendMessage(
+            chatId,
+            { video: { url: CODE_VIDEO }, caption: texto },
+            { quoted: msg }
+          ).catch(async () => {
+            await conn.sendMessage(chatId, { text: texto }, { quoted: msg }).catch(() => {});
+          });
         }
       },
       onConnected: async () => {
