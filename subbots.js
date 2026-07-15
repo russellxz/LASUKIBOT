@@ -228,10 +228,11 @@ un usuario para que el subbot le responda en
 // ------------------------------------------------------------
 // Gating: a quién responde el subbot
 // ------------------------------------------------------------
-function isAllowedMessage(number, m, senderNum, isGroup, chatId) {
+function isAllowedMessage(number, m, senderVariants, isGroup, chatId) {
   if (m.key.fromMe) return true;
 
   const dir = subDataDir(number);
+  const variants = Array.isArray(senderVariants) ? senderVariants : [senderVariants].filter(Boolean);
 
   if (isGroup) {
     // En grupos solo responde si el grupo fue agregado con addgrupo
@@ -239,10 +240,12 @@ function isAllowedMessage(number, m, senderNum, isGroup, chatId) {
     return Array.isArray(grupos) && grupos.includes(chatId);
   }
 
-  // Privado: él mismo o números agregados con addlista
-  if (senderNum && senderNum === DIGITS(number)) return true;
+  // Privado: él mismo o números agregados con addlista (PN, PN+0 o LID)
+  if (variants.includes(DIGITS(number))) return true;
   const lista = readJsonCached(path.join(dir, "lista.json"), []);
-  return Array.isArray(lista) && lista.map(DIGITS).includes(senderNum);
+  if (!Array.isArray(lista)) return false;
+  const listaNums = new Set(lista.map(DIGITS).filter(Boolean));
+  return variants.some((n) => listaNums.has(n));
 }
 
 // ------------------------------------------------------------
@@ -269,9 +272,12 @@ async function getGroupMetaCached(sock, chatId) {
   return meta;
 }
 
-async function isGroupAdminSub(sock, chatId, senderNum) {
+async function isGroupAdminSub(sock, chatId, senderNums) {
   try {
-    if (!senderNum) return false;
+    const variants = (Array.isArray(senderNums) ? senderNums : [senderNums])
+      .map(DIGITS)
+      .filter(Boolean);
+    if (!variants.length) return false;
     const meta = await getGroupMetaCached(sock, chatId);
     const parts = Array.isArray(meta?.participants) ? meta.participants : [];
     const adminNums = new Set();
@@ -292,8 +298,7 @@ async function isGroupAdminSub(sock, chatId, senderNum) {
         }
       }
     }
-    const z = addZero(senderNum);
-    return adminNums.has(senderNum) || (z && adminNums.has(z));
+    return variants.some((v) => adminNums.has(v) || (addZero(v) && adminNums.has(addZero(v))));
   } catch {
     return false;
   }
@@ -313,9 +318,33 @@ async function saveAntideleteSub(sock, number, m, chatId, isGroup) {
 
   const content = m.message[type];
   const botNumber = DIGITS(String(sock.user?.id || "").split(":")[0]);
-  const senderId = m.key.participant || (m.key.fromMe ? `${botNumber}@s.whatsapp.net` : m.key.remoteJid);
 
-  const guardado = { chatId, sender: senderId, type, timestamp: Date.now() };
+  // Guardar la identidad REAL del autor (PN si se pudo resolver) + variantes
+  // (PN, PN+0, LID) para que la detección del borrado siempre haga match.
+  let senderId;
+  let variants;
+  if (m.key.fromMe) {
+    senderId = `${botNumber}@s.whatsapp.net`;
+    variants = [botNumber, addZero(botNumber)].filter(Boolean);
+  } else {
+    senderId =
+      (m.realJid && String(m.realJid).endsWith("@s.whatsapp.net") && m.realJid) ||
+      m.key.participant ||
+      m.key.remoteJid;
+    variants = Array.isArray(m.senderVariants) && m.senderVariants.length
+      ? m.senderVariants
+      : [DIGITS(String(senderId).split("@")[0].split(":")[0])].filter(Boolean);
+  }
+
+  const guardado = {
+    chatId,
+    sender: senderId,
+    senderNum: DIGITS(String(senderId).split("@")[0].split(":")[0]),
+    senderLid: m.realLid ? DIGITS(String(m.realLid).split("@")[0].split(":")[0]) : "",
+    variants,
+    type,
+    timestamp: Date.now()
+  };
 
   if (AD_MEDIA_TYPES.includes(type)) {
     if (content?.fileLength && Number(content.fileLength) > 10 * 1024 * 1024) return;
@@ -347,31 +376,92 @@ async function saveAntideleteSub(sock, number, m, chatId, isGroup) {
   writeJson(file, db);
 }
 
-// Reenvía el mensaje eliminado (igual que el antidelete del bot principal)
+// Reenvía el mensaje eliminado (igual que el antidelete del bot principal,
+// resolviendo LID → número real para el match y la mención)
 async function handleDeletedSub(sock, number, m, chatId, isGroup) {
   try {
-    const deletedId = m.message.protocolMessage.key.id;
-    const whoDeleted = m.message.protocolMessage.key.participant || m.key.participant || m.key.remoteJid;
-    const senderNumber = DIGITS(String(whoDeleted).split("@")[0].split(":")[0]);
-    const mentionTag = [`${senderNumber}@s.whatsapp.net`];
-
     const enabled = isGroup
       ? Number(sock.getSubConfig(chatId, "antidelete")) === 1
       : Number(sock.getSubConfig("global", "antideletepri")) === 1;
     if (!enabled) return;
+
+    const isUser = (j) => typeof j === "string" && j.endsWith("@s.whatsapp.net");
+    const isLid = (j) => typeof j === "string" && j.endsWith("@lid");
+    const JIDNUM = (j) => DIGITS(String(j || "").split("@")[0].split(":")[0]);
+
+    const deletedId = m.message.protocolMessage.key.id;
+
+    // Identidades del que borró: la normalización del mensaje externo
+    // (m.senderVariants) + el participant del protocolMessage resuelto
+    const deleterVariants = new Set(
+      (Array.isArray(m.senderVariants) ? m.senderVariants : []).filter(Boolean)
+    );
+
+    const protoPart = m.message.protocolMessage.key.participant || null;
+    let deleterPnJid = (isUser(m.realJid) && m.realJid) || (isUser(protoPart) && protoPart) || null;
+
+    if (protoPart) {
+      const d = JIDNUM(protoPart);
+      if (d) {
+        deleterVariants.add(d);
+        if (addZero(d)) deleterVariants.add(addZero(d));
+      }
+      if (isLid(protoPart)) {
+        const cached = sock.__lidMap?.get?.(protoPart);
+        let pn = isUser(cached) ? cached : null;
+        if (!pn) {
+          try {
+            const r = await sock.signalRepository?.lidMapping?.getPNForLID?.(protoPart);
+            if (isUser(r)) pn = r;
+          } catch {}
+        }
+        if (pn) {
+          if (!deleterPnJid) deleterPnJid = pn;
+          const pd = JIDNUM(pn);
+          if (pd) {
+            deleterVariants.add(pd);
+            if (addZero(pd)) deleterVariants.add(addZero(pd));
+          }
+        }
+      }
+    }
+
+    if (!deleterVariants.size) return;
 
     const db = readJson(antideleteFile(number), { g: {}, p: {} });
     const data = (isGroup ? db.g : db.p) || {};
     const deletedData = data[deletedId];
     if (!deletedData) return;
 
-    const senderClean = DIGITS(String(deletedData.sender || "").split("@")[0].split(":")[0]);
-    if (senderClean !== senderNumber) return;
+    // Identidades del AUTOR del mensaje guardado
+    const storedVariants = new Set(
+      [
+        ...(Array.isArray(deletedData.variants) ? deletedData.variants : []),
+        deletedData.senderNum,
+        deletedData.senderLid,
+        JIDNUM(deletedData.sender)
+      ].map(DIGITS).filter(Boolean)
+    );
+
+    // Solo reenviar si quien borró es el mismo autor (match por cualquier variante)
+    const match = [...storedVariants].some((v) => deleterVariants.has(v));
+    if (!match) return;
 
     if (isGroup) {
-      const isAdmin = await isGroupAdminSub(sock, chatId, senderNumber);
+      const isAdmin = await isGroupAdminSub(sock, chatId, [...deleterVariants]);
       if (isAdmin) return;
     }
+
+    // Mención con el número REAL: preferir el PN guardado, luego el resuelto
+    let mentionJid = null;
+    const storedSender = String(deletedData.sender || "");
+    if (isUser(storedSender)) mentionJid = `${JIDNUM(storedSender)}@s.whatsapp.net`;
+    else if (deleterPnJid) mentionJid = `${JIDNUM(deleterPnJid)}@s.whatsapp.net`;
+    else if (m.realLid) mentionJid = m.realLid;
+    else mentionJid = `${deletedData.senderNum || [...storedVariants][0] || "0"}@s.whatsapp.net`;
+
+    const senderNumber = JIDNUM(mentionJid);
+    const mentionTag = [mentionJid];
 
     const type = deletedData.type;
     const mimetype = deletedData.mimetype || "application/octet-stream";
@@ -414,7 +504,8 @@ async function handleDeletedSub(sock, number, m, chatId, isGroup) {
 // Advertencias por enlaces (antilink 3 strikes / linkall 10 strikes)
 async function handleLinkViolation(sock, number, m, chatId, senderNum, tipo, limite) {
   const mentionJid =
-    (m.realJid && String(m.realJid).includes("@") && m.realJid) ||
+    (m.realJid && String(m.realJid).endsWith("@s.whatsapp.net") && m.realJid) ||
+    m.realLid ||
     `${senderNum}@s.whatsapp.net`;
 
   // Borrar el mensaje (probando llaves PN/LID)
@@ -433,7 +524,9 @@ async function handleLinkViolation(sock, number, m, chatId, senderNum, tipo, lim
   const adv = readJson(advFile, {});
   adv[chatId] = adv[chatId] || {};
 
-  const keys = [...new Set([senderNum, addZero(senderNum)].filter(Boolean))];
+  const keys = [...new Set(
+    [...(Array.isArray(m.senderVariants) ? m.senderVariants : []), senderNum, addZero(senderNum)].filter(Boolean)
+  )];
   let current = 0;
   for (const k of keys) current = Math.max(current, Number(adv[chatId][k] || 0));
   const total = current + 1;
@@ -480,33 +573,74 @@ async function handleSubMessage(sock, number, m) {
   if (!chatId || chatId === "status@broadcast") return;
   const isGroup = chatId.endsWith("@g.us");
 
-  // --- Normalización ligera LID → número real ---
+  // --- Normalización LID → número real (como el index.js del bot principal:
+  // conserva las DOS identidades, PN y LID, y las cachea en un mapa) ---
   const isUser = (j) => typeof j === "string" && j.endsWith("@s.whatsapp.net");
   const isLid = (j) => typeof j === "string" && j.endsWith("@lid");
+  const JIDNUM = (j) => DIGITS(String(j || "").split("@")[0].split(":")[0]);
 
-  let senderJid = m.key.participant || m.key.remoteJid;
-  const pnAlt =
+  sock.__lidMap = sock.__lidMap || new Map();
+
+  const rawSender = m.key.participant || m.key.remoteJid;
+
+  let lidJid =
+    (isLid(m.key?.senderLid) && m.key.senderLid) ||
+    (isLid(m.key?.participantLid) && m.key.participantLid) ||
+    (isLid(rawSender) && rawSender) ||
+    null;
+
+  let pnJid =
+    (isUser(rawSender) && rawSender) ||
     (isUser(m.key?.senderPn) && m.key.senderPn) ||
     (isUser(m.key?.participantPn) && m.key.participantPn) ||
     (isUser(m.key?.senderAlt) && m.key.senderAlt) ||
     (isUser(m.key?.participantAlt) && m.key.participantAlt) ||
     null;
 
-  if (pnAlt) {
-    senderJid = pnAlt;
-    if (isGroup) m.key.participant = pnAlt;
-  } else if (isLid(senderJid)) {
-    try {
-      const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(senderJid);
-      if (isUser(pn)) {
-        senderJid = pn;
-        if (isGroup) m.key.participant = pn;
-      }
-    } catch {}
+  // Resolver LID → PN: primero mapa local, luego signalRepository
+  if (!pnJid && lidJid) {
+    const cached = sock.__lidMap.get(lidJid);
+    if (isUser(cached)) {
+      pnJid = cached;
+    } else {
+      try {
+        const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(lidJid);
+        if (isUser(pn)) pnJid = pn;
+      } catch {}
+    }
   }
 
+  // Completar el LID desde el mapa si solo tenemos PN
+  if (pnJid && !lidJid) {
+    const cachedLid = sock.__lidMap.get(pnJid);
+    if (isLid(cachedLid)) lidJid = cachedLid;
+  }
+
+  // Guardar el mapeo LID ↔ PN para futuros mensajes (con tope de memoria)
+  if (pnJid && lidJid) {
+    sock.__lidMap.set(lidJid, pnJid);
+    sock.__lidMap.set(pnJid, lidJid);
+    if (sock.__lidMap.size > 1000) {
+      const first = sock.__lidMap.keys().next().value;
+      sock.__lidMap.delete(first);
+    }
+  }
+
+  const senderJid = pnJid || rawSender;
+  if (isGroup && pnJid) m.key.participant = pnJid;
+
   m.realJid = senderJid;
-  m.realNumber = DIGITS(String(senderJid).split("@")[0].split(":")[0]);
+  m.realLid = lidJid;
+  m.realNumber = JIDNUM(senderJid);
+
+  const pnNum = pnJid ? JIDNUM(pnJid) : "";
+  const lidNum = lidJid ? JIDNUM(lidJid) : "";
+
+  // Todas las identidades numéricas del remitente (PN, PN+0, LID)
+  const senderVariants = [...new Set(
+    [pnNum, addZero(pnNum), lidNum, m.realNumber].filter(Boolean)
+  )];
+  m.senderVariants = senderVariants;
 
   const senderNum = m.realNumber;
   const fromMe = !!m.key.fromMe;
@@ -530,7 +664,7 @@ async function handleSubMessage(sock, number, m) {
   }
 
   // --- Filtro de a quién responde ---
-  if (!isAllowedMessage(number, m, senderNum, isGroup, chatId)) return;
+  if (!isAllowedMessage(number, m, senderVariants, isGroup, chatId)) return;
 
   // === 🔇 USUARIOS MUTEADOS (lista por subbot en setwelcome.json) ===
   if (isGroup && !fromMe) {
@@ -541,13 +675,15 @@ async function handleSubMessage(sock, number, m) {
           .map(DIGITS)
           .filter(Boolean)
       );
-      const variants = [...new Set([senderNum, addZero(senderNum)].filter(Boolean))];
 
-      if (variants.some((n) => mutedNums.has(n))) {
+      if (senderVariants.some((n) => mutedNums.has(n))) {
         sock.__muteCounter = sock.__muteCounter || {};
         const ck = `${chatId}:${senderNum}`;
         const count = (sock.__muteCounter[ck] = (sock.__muteCounter[ck] || 0) + 1);
-        const mentionJid = `${senderNum}@s.whatsapp.net`;
+        const mentionJid =
+          (m.realJid && String(m.realJid).endsWith("@s.whatsapp.net") && m.realJid) ||
+          m.realLid ||
+          `${senderNum}@s.whatsapp.net`;
 
         if (count === 8) {
           await sock.sendMessage(chatId, {
@@ -564,7 +700,7 @@ async function handleSubMessage(sock, number, m) {
         }
 
         if (count >= 15) {
-          const isAdmin = await isGroupAdminSub(sock, chatId, senderNum);
+          const isAdmin = await isGroupAdminSub(sock, chatId, senderVariants);
           if (!isAdmin) {
             let removed = false;
             for (const jid of [...new Set([m.key.participant, mentionJid].filter(Boolean))]) {
@@ -604,7 +740,7 @@ async function handleSubMessage(sock, number, m) {
   if (isGroup && !fromMe) {
     try {
       if (Number(sock.getSubConfig(chatId, "modoadmins")) === 1) {
-        const isAdmin = await isGroupAdminSub(sock, chatId, senderNum);
+        const isAdmin = await isGroupAdminSub(sock, chatId, senderVariants);
         if (!isAdmin) return;
       }
     } catch {}
@@ -637,7 +773,10 @@ async function handleSubMessage(sock, number, m) {
         ud.last = now;
         sock.__antisSpam[key] = ud;
 
-        const mentionJid = `${senderNum}@s.whatsapp.net`;
+        const mentionJid =
+          (m.realJid && String(m.realJid).endsWith("@s.whatsapp.net") && m.realJid) ||
+          m.realLid ||
+          `${senderNum}@s.whatsapp.net`;
 
         if (ud.count === 5) {
           await sock.sendMessage(chatId, {
@@ -655,7 +794,7 @@ async function handleSubMessage(sock, number, m) {
 
           ud.strikes++;
           if (ud.strikes >= 3) {
-            const isAdmin = await isGroupAdminSub(sock, chatId, senderNum);
+            const isAdmin = await isGroupAdminSub(sock, chatId, senderVariants);
             if (!isAdmin) {
               await sock.sendMessage(chatId, {
                 text: `❌ @${senderNum} fue eliminado por ignorar advertencias y abusar de stickers.`,
@@ -694,7 +833,7 @@ async function handleSubMessage(sock, number, m) {
         }
 
         if (tipo) {
-          const isAdmin = await isGroupAdminSub(sock, chatId, senderNum);
+          const isAdmin = await isGroupAdminSub(sock, chatId, senderVariants);
           if (!isAdmin) {
             await handleLinkViolation(sock, number, m, chatId, senderNum, tipo, limite);
             return;
@@ -709,7 +848,7 @@ async function handleSubMessage(sock, number, m) {
     try {
       sock.__ccBuf = sock.__ccBuf || {};
       sock.__ccBuf[chatId] = sock.__ccBuf[chatId] || {};
-      for (const k of [...new Set([senderNum, addZero(senderNum)].filter(Boolean))]) {
+      for (const k of senderVariants) {
         sock.__ccBuf[chatId][k] = (sock.__ccBuf[chatId][k] || 0) + 1;
       }
 
@@ -756,9 +895,8 @@ async function handleSubMessage(sock, number, m) {
           .map(DIGITS)
           .filter(Boolean)
       );
-      const variants = [...new Set([senderNum, addZero(senderNum)].filter(Boolean))];
 
-      if (variants.some((n) => bannedNums.has(n))) {
+      if (senderVariants.some((n) => bannedNums.has(n))) {
         const frases = [
           "🚫 @usuario estás baneado. ¡Abusaste demasiado del subbot!",
           "❌ Lo siento @usuario, pero tú ya no puedes usarme.",
@@ -850,6 +988,35 @@ export function stopSubbot(number, { wipe = false } = {}) {
 }
 
 // ------------------------------------------------------------
+// 🧼 Limpieza periódica del antidelete (como SistemaLimpieza del
+// bot principal, que vacía antidelete.db cada 15 minutos)
+// ------------------------------------------------------------
+let antideleteCleanerStarted = false;
+
+function startAntideleteCleaner() {
+  if (antideleteCleanerStarted) return;
+  antideleteCleanerStarted = true;
+
+  setInterval(() => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) return;
+      const dirs = fs.readdirSync(DATA_DIR, { withFileTypes: true }).filter((d) => d.isDirectory());
+      let cleaned = 0;
+      for (const d of dirs) {
+        const f = path.join(DATA_DIR, d.name, "antidelete.json");
+        if (fs.existsSync(f)) {
+          writeJson(f, { g: {}, p: {} });
+          cleaned++;
+        }
+      }
+      if (cleaned) console.log(chalk.cyanBright(`🧼 [subbots] antidelete.json limpiado en ${cleaned} subbot(s).`));
+    } catch (e) {
+      console.error(chalk.red("❌ [subbots] Error limpiando antidelete:"), e.message);
+    }
+  }, 15 * 60 * 1000); // cada 15 minutos, igual que el bot principal
+}
+
+// ------------------------------------------------------------
 // Conexión de un subbot (con auto-reconexión)
 // ------------------------------------------------------------
 export async function startSubbot(number, opts = {}) {
@@ -877,6 +1044,7 @@ export async function startSubbot(number, opts = {}) {
   subbots.set(num, entry);
 
   await loadSubPlugins();
+  startAntideleteCleaner();
   await connectSubbot(num, entry);
 
   // Si es una vinculación nueva, dar 5 minutos para completar el código
