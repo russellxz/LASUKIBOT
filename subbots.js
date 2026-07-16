@@ -1436,6 +1436,27 @@ async function connectSubbot(num, entry) {
 
   sock.ev.on("creds.update", saveCreds);
 
+  // 🏷️ Guardar el nombre del subbot en cuanto WhatsApp lo entregue.
+  // En una vinculación nueva sock.user.name llega vacío en "open" y se
+  // rellena unos segundos después; sin esto salía "Sin nombre" hasta reiniciar.
+  const refreshSubName = () => {
+    try {
+      const nm = sock.user?.name || sock.user?.verifiedName || sock.user?.notify || "";
+      if (!nm) return false;
+      const cfg = getSubConfig(num);
+      if (cfg.name !== nm) {
+        cfg.name = nm;
+        saveSubConfig(num, cfg);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  sock.__refreshSubName = refreshSubName;
+  sock.ev.on("creds.update", refreshSubName);
+  sock.ev.on("contacts.update", refreshSubName);
+
   // Plugins con eventos (bienvenidas/despedidas del subbot)
   for (const plugin of global.subPlugins || []) {
     if (typeof plugin.run === "function" && !plugin.command) {
@@ -1473,12 +1494,17 @@ async function connectSubbot(num, entry) {
         cfg2.connectedSince = Date.now();
         cfgChanged = true;
       }
-      const userName = sock.user?.name || sock.user?.verifiedName || "";
+      const userName = sock.user?.name || sock.user?.verifiedName || sock.user?.notify || "";
       if (userName && cfg2.name !== userName) {
         cfg2.name = userName;
         cfgChanged = true;
       }
       if (cfgChanged) saveSubConfig(num, cfg2);
+
+      // Reintentos por si el nombre aún no llega (vinculación nueva)
+      if (!userName && typeof sock.__refreshSubName === "function") {
+        [3000, 8000, 20000].forEach((ms) => setTimeout(() => sock.__refreshSubName(), ms));
+      }
 
       // Primera conexión: instrucciones a su propio número
       if (!cfg2.welcomed) {
@@ -1581,10 +1607,13 @@ export function listSubbots() {
   ensureDirs();
   const out = [];
   for (const [num, entry] of subbots.entries()) {
+    // Aprovechar para refrescar el nombre si el socket ya lo tiene
+    try { entry.sock?.__refreshSubName?.(); } catch {}
     const cfg = getSubConfig(num);
+    const liveName = entry.sock?.user?.name || entry.sock?.user?.verifiedName || entry.sock?.user?.notify || "";
     out.push({
       number: num,
-      name: cfg.name || entry.sock?.user?.name || "Sin nombre",
+      name: liveName || cfg.name || "Suki Subbot",
       status: entry.status,
       connected: entry.status === "open",
       connectedSince: cfg.connectedSince
