@@ -873,6 +873,115 @@ export async function handleSubMessage(sock, number, m) {
   // filtro privado del bot principal que va después de mute/antilink) ---
   if (!isAllowedMessage(number, m, senderVariants, isGroup, chatId)) return;
 
+  // === 🤖 CHATGPT POR GRUPO (toggle "chat on/off" por subbot) ===
+  if (isGroup && !fromMe && messageContent) {
+    try {
+      if (Number(sock.getSubConfig(chatId, "chatgpt")) === 1) {
+        const axios = (await import("axios")).default;
+        const encodedText = encodeURIComponent(messageContent);
+        const sessionID = "1727468410446638";
+        const apiUrl = `https://api.neoxr.eu/api/gpt4-session?q=${encodedText}&session=${sessionID}&apikey=russellxz`;
+        const res = await axios.get(apiUrl);
+        const respuesta = res.data?.data?.message;
+        if (respuesta) {
+          await sock.sendMessage(chatId, { text: respuesta }, { quoted: m }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.error(`❌ [subbot ${number}] Error en ChatGPT por grupo:`, e.message);
+    }
+  }
+
+  // === 💬 RESPUESTA POR PALABRA CLAVE (guar — datos globales compartidos,
+  // toggle "reacion" por subbot en activoss.json) ===
+  if (messageContent) {
+    try {
+      const activossData = readJsonCached(path.join(subDataDir(number), "activoss.json"), {});
+      const estadoReacion = String(activossData?.[chatId]?.reacion || "on").toLowerCase();
+
+      if (estadoReacion !== "off") {
+        let guarData = {};
+
+        const guarPath = path.resolve("./guar.json");
+        if (fs.existsSync(guarPath)) {
+          try {
+            guarData = JSON.parse(fs.readFileSync(guarPath, "utf-8"));
+          } catch {
+            guarData = {};
+          }
+        }
+
+        const guarFilesPath = path.resolve("./guar_files.json");
+        if (fs.existsSync(guarFilesPath)) {
+          try {
+            const filesDb = JSON.parse(fs.readFileSync(guarFilesPath, "utf-8"));
+            for (const k of Object.keys(filesDb)) {
+              if (!Array.isArray(guarData[k])) guarData[k] = [];
+              guarData[k] = guarData[k].concat(filesDb[k]);
+            }
+          } catch {}
+        }
+
+        if (Object.keys(guarData).length > 0) {
+          const cleanText = String(messageContent || "")
+            .toLowerCase()
+            .normalize("NFD").replace(/[̀-ͯ]/g, "")
+            .replace(/[^\w]/g, "");
+
+          for (const key of Object.keys(guarData)) {
+            const cleanKey = String(key || "")
+              .toLowerCase()
+              .normalize("NFD").replace(/[̀-ͯ]/g, "")
+              .replace(/[^\w]/g, "");
+
+            if (cleanText === cleanKey && guarData[key]?.length) {
+              const item = guarData[key][Math.floor(Math.random() * guarData[key].length)];
+
+              let buffer = null;
+              if (item.path) {
+                try {
+                  const filePath = path.resolve(item.path);
+                  if (fs.existsSync(filePath)) buffer = fs.readFileSync(filePath);
+                } catch {}
+              }
+              if (!buffer && item.media) {
+                try {
+                  buffer = Buffer.from(item.media, "base64");
+                } catch {}
+              }
+              if (!buffer || !buffer.length) break;
+
+              const extension = String(item.ext || item.mime?.split("/")?.[1] || "bin").toLowerCase();
+              const mime = item.mime || "";
+              const payload = {};
+
+              if (["jpg", "jpeg", "png"].includes(extension)) {
+                payload.image = buffer;
+              } else if (["mp4", "mkv", "webm"].includes(extension)) {
+                payload.video = buffer;
+              } else if (["mp3", "ogg", "opus"].includes(extension)) {
+                payload.audio = buffer;
+                payload.mimetype = mime || "audio/mpeg";
+                payload.ptt = false;
+              } else if (["webp"].includes(extension)) {
+                payload.sticker = buffer;
+              } else {
+                payload.document = buffer;
+                payload.mimetype = mime || "application/octet-stream";
+                payload.fileName = item.fileName || `archivo.${extension}`;
+              }
+
+              await sock.sendMessage(chatId, payload, { quoted: m }).catch(() => {});
+              return;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`❌ [subbot ${number}] Error en palabra clave:`, e.message);
+    }
+  }
+
   // === 🧮 CONTEO DE MENSAJES (para totalchat/fantasmas) — bufferizado ===
   if (isGroup && senderNum) {
     try {
@@ -1182,6 +1291,14 @@ async function connectSubbot(num, entry) {
   };
   sock.wa = { downloadContentFromMessage };
   global.wa = global.wa || { downloadContentFromMessage };
+
+  // Compat con plugins que usan sendMessage2 (menús del bot principal)
+  sock.sendMessage2 = async (chat, content, quotedMsg, options = {}) => {
+    if (content?.sticker) {
+      return sock.sendMessage(chat, { sticker: content.sticker }, { quoted: quotedMsg, ...options });
+    }
+    return sock.sendMessage(chat, content, { quoted: quotedMsg, ...options });
+  };
 
   sock.lidParser = function (participants = []) {
     try {
