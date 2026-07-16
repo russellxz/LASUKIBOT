@@ -1,103 +1,107 @@
-// subplugins/menu.js — Menú de comandos del subbot
+// subplugins/menu.js — Menú general del subbot (estilo del menú principal,
+// con diseño propio y la imagen de los subbots)
 const MENU_IMAGE = "https://cdn.russellxz.click/c678c800.jpg";
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
-  const p = conn?.subPrefixes?.[0] || ".";
+  const pref = (Array.isArray(conn?.subPrefixes) && conn.subPrefixes[0]) || ".";
 
-  await conn.sendMessage(chatId, { react: { text: "📖", key: msg.key } }).catch(() => {});
+  try { await conn.sendMessage(chatId, { react: { text: "✨", key: msg.key } }); } catch {}
 
-  const caption = `
-╭━━━━━━━━━━━━━━━━━━╮
-   ❦ 𝑺𝑼𝑲𝑰 𝑺𝑼𝑩𝑩𝑶𝑻𝑺 ❦
-╰━━━━━━━━━━━━━━━━━━╯
+  const caption = `⟡─── ❦ 𝑺𝑼𝑲𝑰 𝑺𝑼𝑩𝑩𝑶𝑻𝑺 ❦ ───⟡
 
-📌 *Prefijo actual:* ${ (conn?.subPrefixes || [".", "#", "/"]).join("  ") }
+⟡ 𝙈𝙀𝙉𝙐 𝙂𝙀𝙉𝙀𝙍𝘼𝙇 ⟡
+⟡ 𝗣𝗿𝗲𝗳𝗶𝗷𝗼 𝗔𝗰𝘁𝘂𝗮𝗹: 〔 ${pref} 〕
+⟡ 𝗨𝘀𝗮𝗹𝗼 𝗲𝗻 𝗰𝗮𝗱𝗮 𝗰𝗼𝗺𝗮𝗻𝗱𝗼
 
-━━━━━━━━━━━━━━━━━━
-⚙️ *CONFIGURACIÓN DEL SUBBOT*
-━━━━━━━━━━━━━━━━━━
-🔧 *${p}setprefix* — cambia tu prefijo
-👥 *${p}addgrupo* — el subbot responde a todos en este grupo
-✖️ *${p}delgrupo* — quita el grupo de la lista
-📱 *${p}addlista +número* — permite a un usuario usarte en privado
-✖️ *${p}dellista +número* — quita al usuario de la lista
-🤖 *${p}bots* — subbots conectados y tiempo activo
-🔗 *${p}code +número* — conecta a alguien más como subbot
+⟡ 𝙄𝙉𝙁𝙊𝙍𝙈𝘼𝘾𝙄𝙊𝙉 ⟡
+┌───⟡
+│ ✦ ${pref}ping
+│ ✦ ${pref}speedtest
+│ ✦ ${pref}creador
+│ ✦ ${pref}bots
+└───⟡
 
-━━━━━━━━━━━━━━━━━━
-🎉 *BIENVENIDAS Y DESPEDIDAS*
-━━━━━━━━━━━━━━━━━━
-👋 *${p}welcome on/off* — activa/desactiva bienvenidas
-🚪 *${p}despedidas on/off* — activa/desactiva despedidas
-📝 *${p}setwelcome <texto>* — bienvenida personalizada
-📝 *${p}setdespedidas <texto>* — despedida personalizada
-🧹 *${p}delwelcome* — borra los textos personalizados
+⟡ 𝙈𝙀𝙉𝙐𝙎 𝘿𝙄𝙎𝙋𝙊𝙉𝙄𝘽𝙇𝙀𝙎 ⟡
+┌───⟡
+│ ✦ ${pref}menugrupo
+│ ✦ ${pref}menuaudio
+│ ✦ ${pref}menurpg
+│ ✦ ${pref}menufree
+│ ✦ ${pref}allmenu
+└───⟡
 
-━━━━━━━━━━━━━━━━━━
-🛡️ *SEGURIDAD DEL GRUPO*
-━━━━━━━━━━━━━━━━━━
-🗑️ *${p}antidelete on/off* — reenvía mensajes eliminados
-🗑️ *${p}antideletepri on/off* — antidelete en privados (solo tú)
-🔗 *${p}antilink on/off* — bloquea links de grupos de WhatsApp
-🌐 *${p}linkall on/off* — bloquea todos los enlaces
-🚫 *${p}antis on/off* — anti spam de stickers
-🚷 *${p}antiarabe on/off* — bloquea prefijos prohibidos
-👮 *${p}modoadmins on/off* — solo responde a admins y a ti
-🚷 *${p}restchat <comando>* — restringe un comando
+⟡ 𝙎𝙐𝘽𝘽𝙊𝙏 ⟡
+┌───⟡
+│ ✦ ${pref}code +número
+│ ✦ ${pref}addgrupo / delgrupo
+│ ✦ ${pref}addlista / dellista
+│ ✦ ${pref}setprefix
+│ ✦ ${pref}antideletepri on/off
+└───⟡
 
-━━━━━━━━━━━━━━━━━━
-👥 *ADMINISTRACIÓN DE GRUPOS*
-━━━━━━━━━━━━━━━━━━
-🦶 *${p}kick @user* — expulsa a un usuario
-⛔ *${p}ban / ${p}unban @user* — banea comandos a un usuario
-🔇 *${p}mute / ${p}unmute @user* — mutea a un usuario
-👑 *${p}daradmins / ${p}quitaradmins @user*
-📢 *${p}todos <texto>* — menciona a todos
-🏷️ *${p}tag <texto>* — notificación oculta
-🧾 *${p}infogrupo* — info del grupo
-🔗 *${p}linkgrupo* — link del grupo
-🔓 *${p}abrirgrupo* / 🔒 *${p}cerrargrupo*
-⏰ *${p}abrir / ${p}cerrar <tiempo>* — abrir/cerrar programado
-🖼️ *${p}setfoto* — cambia la foto del grupo
-✏️ *${p}setname / ${p}setinfo* — nombre y descripción
-📜 *${p}reglas / ${p}setreglas* — reglas del grupo
-🗑️ *${p}delete* — borra el mensaje citado
-🧹 *${p}delwar* — limpia advertencias
-👻 *${p}fantasmas* — miembros inactivos
-📊 *${p}totalchat* — mensajes por usuario
-⚙️ *${p}configrupo* — ver configuración del grupo
+⟡ 𝙄𝘼 - 𝘾𝙃𝘼𝙏 𝘽𝙊𝙏 ⟡
+┌───⟡
+│ ✦ ${pref}gemini
+│ ✦ ${pref}chatgpt
+│ ✦ ${pref}dalle
+│ ✦ ${pref}vision / vision2
+│ ✦ ${pref}chat on/off
+│ ✦ ${pref}luminai
+└───⟡
 
-━━━━━━━━━━━━━━━━━━
-📥 *DESCARGAS*
-━━━━━━━━━━━━━━━━━━
-🎵 *${p}play <búsqueda>* — audio/video de YouTube (con botones)
-🎵 *${p}play2 <búsqueda>*
-🎧 *${p}ytmp3 <link>* — audio de YouTube
-🎬 *${p}ytmp4 <link>* — video de YouTube
-▶️ *${p}yt1* / *${p}yt2* / *${p}yt3* / *${p}yt4*
-📸 *${p}ig <link>* — Instagram
-📘 *${p}fb <link>* — Facebook
-🎪 *${p}tiktok <link>* / *${p}tt2*
-🐦 *${p}twitter <link>* — X/Twitter
-🎶 *${p}spotify <búsqueda>*
-📌 *${p}pinterest <búsqueda>* / *${p}pinvideo*
-📦 *${p}apk <nombre>* — descargar APK
-📂 *${p}mediafire <link>*
-📝 *${p}letra <canción>* — letra de canciones
+⟡ 𝘿𝙀𝙎𝘾𝘼𝙍𝙂𝘼𝙎 ⟡
+┌───⟡
+│ ✦ ${pref}play / play2
+│ ✦ ${pref}ytmp3 / ytmp4
+│ ✦ ${pref}tiktok / fb / ig / spotify
+│ ✦ ${pref}mediafire / apk
+│ ✦ ${pref}x / twitter / tw
+└───⟡
 
-━━━━━━━━━━━━━━━━━━
-🧰 *UTILIDADES*
-━━━━━━━━━━━━━━━━━━
-🖼️ *${p}perfil @usuario* — foto de perfil
-👁️ *${p}ver* — reenvía imagen/video/audio citado
-📖 *${p}menu* — este menú
+⟡ 𝘽𝙐𝙎𝘾𝘼𝘿𝙊𝙍𝙀𝙎 ⟡
+┌───⟡
+│ ✦ ${pref}pixai
+│ ✦ ${pref}tiktoksearch
+│ ✦ ${pref}yts
+│ ✦ ${pref}tiktokstalk
+└───⟡
 
-━━━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots* — se irán agregando más comandos 💖
-━━━━━━━━━━━━━━━━━━`.trim();
+⟡ 𝘾𝙊𝙉𝙑𝙀𝙍𝙏𝙄𝘿𝙊𝙍𝙀𝙎 ⟡
+┌───⟡
+│ ✦ ${pref}tomp3 / toaudio
+│ ✦ ${pref}hd / tts
+│ ✦ ${pref}tovideo / toimg
+│ ✦ ${pref}gifvideo / ff / ff2
+└───⟡
 
-  return conn.sendMessage(
+⟡ 𝙎𝙏𝙄𝘾𝙆𝙀𝙍𝙎 ⟡
+┌───⟡
+│ ✦ ${pref}s / qc / qc2 / texto
+│ ✦ ${pref}mixemoji / aniemoji
+│ ✦ ${pref}sks / guarsk
+│ ✦ ${pref}versk / sendsk
+└───⟡
+
+⟡ 𝙃𝙀𝙍𝙍𝘼𝙈𝙄𝙀𝙉𝙏𝘼𝙎 ⟡
+┌───⟡
+│ ✦ ${pref}ver / perfil / get
+│ ✦ ${pref}tourl / whatmusic
+└───⟡
+
+⟡ 𝙈𝙄𝙉𝙄 𝙅𝙐𝙀𝙂𝙊𝙎 ⟡
+┌───⟡
+│ ✦ ${pref}verdad / reto
+│ ✦ ${pref}personalidad
+│ ✦ ${pref}parejas / ship
+│ ✦ ${pref}kiss / topkiss
+│ ✦ ${pref}slap / topslap
+│ ✦ ${pref}menurpg
+└───⟡
+
+✨ Gracias por usar *Suki Subbots*. Eres adorable 💖`.trim();
+
+  await conn.sendMessage(
     chatId,
     {
       image: { url: MENU_IMAGE },

@@ -8,11 +8,11 @@ const handler = async (msg, { conn, command }) => {
   const texto = `
 🚧 *Sistema en desarrollo...* 🚧
 
-💡 El sistema de *subbots* aún no está disponible en *La Suki Bot*.  
+💡 El sistema de *subbots* aún no está disponible en *Suki Subbots*.  
 Estamos trabajando en ello para que funcione perfectamente.  
 🕒 Estimamos que tomará entre *2 a 3 meses más* para estar listo.
 
-✨ Gracias por tu paciencia y por ser parte del desarrollo de *La Suki Bot* 💖
+✨ Gracias por tu paciencia y por ser parte del desarrollo de *Suki Subbots* 💖
 `.trim();
 
   await conn.sendMessage(chatId, {
