@@ -5,10 +5,10 @@
 import fs from 'fs';
 import path from 'path';
 
-const FILES_DB = path.resolve("./guar_files.json");
-const OLD_DB = path.resolve("./guar.json");
-
 const handler = async (msg, { conn }) => {
+  const base = conn?.subDataDir || process.cwd();
+  const FILES_DB = path.join(base, "guar_files.json");
+  const OLD_DB = path.join(base, "guar.json");
   const chatId = msg.key.remoteJid;
 
   await conn.sendMessage2(chatId, {

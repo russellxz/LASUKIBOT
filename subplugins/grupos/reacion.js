@@ -223,13 +223,11 @@ const handler = async (msg, { conn, args }) => {
     }, { quoted: msg });
   }
 
-  const filePath = path.join(conn.subDataDir, "activoss.json");
-
   let data = {};
   try {
-    if (fs.existsSync(filePath)) {
-      data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-    }
+    data = typeof conn.readSubData === "function"
+      ? (conn.readSubData("activoss.json", {}) || {})
+      : JSON.parse(fs.readFileSync(path.join(conn.subDataDir, "activoss.json"), "utf-8"));
   } catch {
     data = {};
   }
@@ -237,10 +235,15 @@ const handler = async (msg, { conn, args }) => {
   data[chatId] = data[chatId] || {};
   data[chatId].reacion = estado;
 
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  // Usar writeSubData para invalidar el caché del pipeline (efecto inmediato)
+  if (typeof conn.writeSubData === "function") {
+    conn.writeSubData("activoss.json", data);
+  } else {
+    fs.writeFileSync(path.join(conn.subDataDir, "activoss.json"), JSON.stringify(data, null, 2));
+  }
 
   return conn.sendMessage(chatId, {
-    text: `✅ Respuestas automáticas *${estado === "on" ? "activadas" : "desactivadas"}* correctamente.`
+    text: `✅ Respuestas automáticas del subbot *${estado === "on" ? "activadas" : "desactivadas"}* en este grupo.`
   }, { quoted: msg });
 };
 

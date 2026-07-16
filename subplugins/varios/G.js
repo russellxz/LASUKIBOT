@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import { guarPaths } from './_guarpaths.js';
 
 const handler = async (msg, { conn, args }) => {
+  const { guarJson: guarPath } = guarPaths(conn);
   const chatId = msg.key.remoteJid;
 
   await conn.sendMessage(chatId, { react: { text: "📦", key: msg.key } });
@@ -15,7 +17,6 @@ const handler = async (msg, { conn, args }) => {
     }, { quoted: msg });
   }
 
-  const guarPath = path.resolve("./guar.json");
   if (!fs.existsSync(guarPath)) {
     return conn.sendMessage(chatId, { text: "❌ No hay archivos guardados aún." }, { quoted: msg });
   }

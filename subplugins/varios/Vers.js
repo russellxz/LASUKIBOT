@@ -5,9 +5,9 @@
 import fs from 'fs';
 import path from 'path';
 
-const PACKS_DB = path.resolve("./guars_packs.json");
 
 const handler = async (msg, { conn }) => {
+  const PACKS_DB = path.join(conn?.subDataDir || process.cwd(), "guars_packs.json");
   const chatId = msg.key.remoteJid;
   const pref = (typeof conn !== "undefined" && conn && conn.subPrefixes ? conn.subPrefixes : global.prefixes)?.[0] || ".";
 

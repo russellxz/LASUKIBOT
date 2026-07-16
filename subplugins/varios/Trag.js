@@ -9,9 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-const RUTA_VIEJA = path.resolve("./guar.json");
-const RUTA_NUEVA = path.resolve("./guar_files.json");
-const MEDIA_ROOT = path.resolve("./guar_media");
+import { guarPaths } from './_guarpaths.js';
 
 function mimeToExt(mime, fallback = "bin") {
   if (!mime || typeof mime !== "string") return fallback;
@@ -36,6 +34,7 @@ function sanitizeKey(key) {
 }
 
 const handler = async (msg, { conn, args }) => {
+  const { guarJson: RUTA_VIEJA, filesDb: RUTA_NUEVA, mediaRoot: MEDIA_ROOT } = guarPaths(conn);
   const chatId = msg.key.remoteJid;
   const pref = (typeof conn !== "undefined" && conn && conn.subPrefixes ? conn.subPrefixes : global.prefixes)?.[0] || ".";
 

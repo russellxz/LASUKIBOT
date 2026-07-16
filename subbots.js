@@ -892,8 +892,8 @@ export async function handleSubMessage(sock, number, m) {
     }
   }
 
-  // === 💬 RESPUESTA POR PALABRA CLAVE (guar — datos globales compartidos,
-  // toggle "reacion" por subbot en activoss.json) ===
+  // === 💬 RESPUESTA POR PALABRA CLAVE (guar — almacén LOCAL de cada subbot,
+  // toggle "reacion" por grupo en activoss.json del subbot) ===
   if (messageContent) {
     try {
       const activossData = readJsonCached(path.join(subDataDir(number), "activoss.json"), {});
@@ -902,7 +902,8 @@ export async function handleSubMessage(sock, number, m) {
       if (estadoReacion !== "off") {
         let guarData = {};
 
-        const guarPath = path.resolve("./guar.json");
+        // Datos propios del subbot (no comparte multimedia con otros ni con el principal)
+        const guarPath = path.join(subDataDir(number), "guar.json");
         if (fs.existsSync(guarPath)) {
           try {
             guarData = JSON.parse(fs.readFileSync(guarPath, "utf-8"));
@@ -911,7 +912,7 @@ export async function handleSubMessage(sock, number, m) {
           }
         }
 
-        const guarFilesPath = path.resolve("./guar_files.json");
+        const guarFilesPath = path.join(subDataDir(number), "guar_files.json");
         if (fs.existsSync(guarFilesPath)) {
           try {
             const filesDb = JSON.parse(fs.readFileSync(guarFilesPath, "utf-8"));

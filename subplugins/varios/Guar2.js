@@ -4,11 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-
-// Carpeta raíz donde se guardarán los multimedia
-const MEDIA_ROOT = path.resolve("./guar_media");
-// Archivo JSON LIGERO para los registros nuevos (solo rutas, sin base64)
-const FILES_DB = path.resolve("./guar_files.json");
+import { guarPaths } from './_guarpaths.js';
 
 function unwrapMessage(m) {
   let node = m;
@@ -58,6 +54,7 @@ function sanitizeKey(key) {
 }
 
 const handler = async (msg, { conn, args, wa }) => {
+  const { filesDb: FILES_DB, mediaRoot: MEDIA_ROOT } = guarPaths(conn);
   const chatId = msg.key.remoteJid;
   const sender = msg.key.participant || msg.key.remoteJid;
   const userId = String(sender || "").replace(/[^0-9]/g, "");
