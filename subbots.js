@@ -655,13 +655,26 @@ export async function handleSubMessage(sock, number, m) {
     } catch {}
   }
 
-  // Guardar el mapeo LID ↔ PN para futuros mensajes (con tope de memoria)
+  // Guardar el mapeo LID ↔ PN para futuros mensajes (con tope de memoria).
+  // También lo espejamos en global.lidMap: los comandos de grupo portados
+  // del bot principal (isAdminByNumber/isAdminInGroup) resuelven admins con
+  // global.lidMap. El bot principal la llena en su normalización; el subbot
+  // debe hacer lo mismo para que sepa quién es admin. Son mapeos LID↔PN
+  // globales (hechos ciertos), seguros de compartir entre bots.
   if (pnJid && lidJid) {
     sock.__lidMap.set(lidJid, pnJid);
     sock.__lidMap.set(pnJid, lidJid);
     if (sock.__lidMap.size > 1000) {
       const first = sock.__lidMap.keys().next().value;
       sock.__lidMap.delete(first);
+    }
+
+    if (!(global.lidMap instanceof Map)) global.lidMap = new Map();
+    global.lidMap.set(lidJid, pnJid);
+    global.lidMap.set(pnJid, lidJid);
+    if (global.lidMap.size > 20000) {
+      const gfirst = global.lidMap.keys().next().value;
+      global.lidMap.delete(gfirst);
     }
   }
 
