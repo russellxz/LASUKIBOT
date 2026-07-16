@@ -1,6 +1,6 @@
 // subplugins/menu.js — Menú general del subbot (estilo del menú principal,
 // con diseño propio y la imagen de los subbots)
-const MENU_IMAGE = "https://cdn.russellxz.click/707c3d7c.jpg";
+const MENU_IMAGE = "https://cdn.russellxz.click/c678c800.jpg";
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
