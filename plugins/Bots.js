@@ -9,10 +9,10 @@ const handler = async (msg, { conn }) => {
   const bots = listSubbots();
   const conectados = bots.filter((b) => b.connected);
 
-  if (!bots.length) {
+  if (!conectados.length) {
     return conn.sendMessage(
       chatId,
-      { text: "🤖 No hay subbots vinculados por ahora.\nUsa *code +tunúmero* para conectarte al sistema de subbots." },
+      { text: "🤖 No hay subbots conectados por ahora.\nUsa *code +tunúmero* para conectarte al sistema de subbots." },
       { quoted: msg }
     );
   }
@@ -22,15 +22,14 @@ const handler = async (msg, { conn }) => {
    ❦ 𝑺𝑼𝑲𝑰 𝑺𝑼𝑩𝑩𝑶𝑻𝑺 ❦
 ╰━━━━━━━━━━━━━━━━━━╯
 
-🤖 *Subbots conectados:* ${conectados.length}/${bots.length}
+🤖 *Total de subbots conectados:* ${conectados.length}
 
 `.trim() + "\n\n";
 
   let i = 1;
-  for (const b of bots) {
-    const estado = b.connected ? "🟢 Activo" : "🔴 Reconectando";
+  for (const b of conectados) {
     const tiempo = b.connectedSince ? formatUptime(Date.now() - b.connectedSince) : "—";
-    texto += `${i}. 👤 *${b.name}*\n   ${estado} • ⏱️ ${tiempo}\n`;
+    texto += `${i}. 👤 *${b.name}* • ⏱️ ${tiempo}\n`;
     i++;
   }
 
