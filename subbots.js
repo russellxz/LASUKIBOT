@@ -1168,6 +1168,125 @@ function startAntideleteCleaner() {
 }
 
 // ------------------------------------------------------------
+// ⏰ ABRIR/CERRAR GRUPOS PROGRAMADO — ejecuta las acciones de los
+// comandos "abrir Xm" y "cerrar Xm" de cada subbot. Es UN SOLO
+// intervalo global que usa siempre el socket VIVO de cada subbot
+// (así las reconexiones no dejan tareas huérfanas).
+// ------------------------------------------------------------
+const TIMER_OPEN_VIDEO = "https://cdn.russellxz.click/b5635057.mp4";
+const TIMER_CLOSE_VIDEO = "https://cdn.russellxz.click/1f9e8232.mp4";
+
+function emptyTimeGroup(obj, key) {
+  return obj[key] && Object.keys(obj[key]).length === 0;
+}
+
+// Procesa los tiempos programados de UN subbot (exportado para pruebas)
+export async function processGroupTimes(sock, num, now = Date.now()) {
+  const dir = subDataDir(num);
+  const openFile = path.join(dir, "tiempo_grupo.json");
+  const closeFile = path.join(dir, "tiempogrupo2.json");
+
+  const hasOpen = fs.existsSync(openFile);
+  const hasClose = fs.existsSync(closeFile);
+  if (!hasOpen && !hasClose) return;
+
+  const abrirData = hasOpen ? readJson(openFile, {}) : {};
+  const cerrarData = hasClose ? readJson(closeFile, {}) : {};
+
+  const groups = new Set([
+    ...Object.keys(abrirData || {}),
+    ...Object.keys(cerrarData || {})
+  ]);
+
+  let changedOpen = false;
+  let changedClose = false;
+
+  for (const chatId of groups) {
+    try {
+      const openTime = abrirData?.[chatId]?.abrir ?? null;
+      const closeTime = cerrarData?.[chatId]?.cerrar ?? null;
+
+      const dueOpen = typeof openTime === "number" && now >= openTime;
+      const dueClose = typeof closeTime === "number" && now >= closeTime;
+      if (!dueOpen && !dueClose) continue;
+
+      // Si ambos vencieron, ejecuta el MÁS RECIENTE (mayor timestamp)
+      let action;
+      if (dueOpen && dueClose) {
+        action = closeTime >= openTime ? "close" : "open";
+      } else if (dueClose) {
+        action = "close";
+      } else {
+        action = "open";
+      }
+
+      try {
+        if (action === "close") {
+          await sock.groupSettingUpdate(chatId, "announcement");
+          await sock.sendMessage(chatId, {
+            video: { url: TIMER_CLOSE_VIDEO },
+            caption: "🔒 El grupo ha sido cerrado automáticamente."
+          }).catch(() => {});
+        } else {
+          await sock.groupSettingUpdate(chatId, "not_announcement");
+          await sock.sendMessage(chatId, {
+            video: { url: TIMER_OPEN_VIDEO },
+            caption: "🔓 El grupo ha sido abierto automáticamente."
+          }).catch(() => {});
+        }
+        console.log(chalk.cyan(`⏰ [subbot ${num}] Grupo ${chatId} ${action === "close" ? "cerrado" : "abierto"} automáticamente.`));
+      } catch (e) {
+        // Si falla (por permisos, etc.), igual limpiamos el tiempo para no ciclar
+        await sock.sendMessage(chatId, {
+          text: `⚠️ No pude ${action === "close" ? "cerrar" : "abrir"} el grupo (quizá no soy admin). Se limpia la tarea programada.`
+        }).catch(() => {});
+      }
+
+      // Limpiar tiempos ejecutados
+      if (action === "open" && abrirData?.[chatId]?.abrir) {
+        delete abrirData[chatId].abrir;
+        if (emptyTimeGroup(abrirData, chatId)) delete abrirData[chatId];
+        changedOpen = true;
+      }
+      if (action === "close" && cerrarData?.[chatId]?.cerrar) {
+        delete cerrarData[chatId].cerrar;
+        if (emptyTimeGroup(cerrarData, chatId)) delete cerrarData[chatId];
+        changedClose = true;
+      }
+    } catch (err) {
+      console.error(chalk.red(`❌ [subbot ${num}] Error procesando tiempo de grupo ${chatId}:`), err?.message || err);
+    }
+  }
+
+  if (changedOpen) writeJson(openFile, abrirData);
+  if (changedClose) writeJson(closeFile, cerrarData);
+}
+
+let groupTimerStarted = false;
+let groupTimerRunning = false;
+
+function startGroupTimeChecker() {
+  if (groupTimerStarted) return;
+  groupTimerStarted = true;
+
+  setInterval(async () => {
+    if (groupTimerRunning) return; // evita solapes
+    groupTimerRunning = true;
+    try {
+      const now = Date.now();
+      for (const [num, entry] of subbots.entries()) {
+        if (entry.stopped || entry.status !== "open" || !entry.sock) continue;
+        await processGroupTimes(entry.sock, num, now).catch(() => {});
+      }
+    } catch (e) {
+      console.error(chalk.red("❌ [subbots] Error en el chequeo de tiempos de grupos:"), e?.message || e);
+    } finally {
+      groupTimerRunning = false;
+    }
+  }, 10000); // cada 10s, igual que el bot principal
+}
+
+// ------------------------------------------------------------
 // Conexión de un subbot (con auto-reconexión)
 // ------------------------------------------------------------
 export async function startSubbot(number, opts = {}) {
@@ -1196,6 +1315,7 @@ export async function startSubbot(number, opts = {}) {
 
   await loadSubPlugins();
   startAntideleteCleaner();
+  startGroupTimeChecker();
   await connectSubbot(num, entry);
 
   // Si es una vinculación nueva, dar 5 minutos para completar el código
