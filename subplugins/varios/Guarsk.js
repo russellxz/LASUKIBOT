@@ -8,7 +8,6 @@ import path from 'path';
 import crypto from 'crypto';
 
 const PACKS_ROOT = path.resolve("./guars_media");
-const PACKS_DB = path.resolve("./guars_packs.json");
 
 function unwrapMessage(m) {
   let node = m;
@@ -50,6 +49,7 @@ async function streamToBuffer(stream) {
 }
 
 const handler = async (msg, { conn, args, wa }) => {
+  const PACKS_DB = path.join(conn?.subDataDir || process.cwd(), "guars_packs.json");
   const chatId = msg.key.remoteJid;
   const sender = msg.key.participant || msg.key.remoteJid;
   const userId = String(sender || "").replace(/[^0-9]/g, "");

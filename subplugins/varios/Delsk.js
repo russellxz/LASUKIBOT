@@ -8,9 +8,9 @@ import fs from 'fs';
 import { isAdminInGroup, isOwnerCheck } from '../../libs/adminCheck.js';
 import path from 'path';
 
-const PACKS_DB = path.resolve("./guars_packs.json");
 
 const handler = async (msg, { conn, args }) => {
+  const PACKS_DB = path.join(conn?.subDataDir || process.cwd(), "guars_packs.json");
   const chatId = msg.key.remoteJid;
   const sender = (msg.key.participant || msg.key.remoteJid).replace(/\D/g, "");
   const isGroup = chatId.endsWith("@g.us");

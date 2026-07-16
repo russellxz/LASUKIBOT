@@ -1,9 +1,7 @@
 import fs from 'fs';
 import { isAdminInGroup, isOwnerCheck } from '../../libs/adminCheck.js';
 import path from 'path';
-
-const RUTA_VIEJA = path.resolve("./guar.json");       // legacy (base64)
-const RUTA_NUEVA = path.resolve("./guar_files.json"); // nuevo (rutas)
+import { guarPaths } from './_guarpaths.js';
 
 function getPaqueteCandidates(paquete) {
   const clean = String(paquete || "").trim().toLowerCase();
@@ -29,6 +27,7 @@ function resolveKey(db, paquete) {
 }
 
 const handler = async (msg, { conn, args }) => {
+  const { guarJson: RUTA_VIEJA, filesDb: RUTA_NUEVA } = guarPaths(conn);
   const chatId = msg.key.remoteJid;
   const sender = (msg.key.participant || msg.key.remoteJid).replace(/\D/g, "");
   const isGroup = chatId.endsWith("@g.us");

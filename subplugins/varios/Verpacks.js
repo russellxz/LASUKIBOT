@@ -1,10 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-
-const RUTA_VIEJA = path.resolve("./guar.json");       // legacy (base64)
-const RUTA_NUEVA = path.resolve("./guar_files.json"); // nuevo (rutas)
+import { guarPaths } from './_guarpaths.js';
 
 const handler = async (msg, { conn }) => {
+  const { guarJson: RUTA_VIEJA, filesDb: RUTA_NUEVA } = guarPaths(conn);
   const chatId = msg.key.remoteJid;
   await conn.sendMessage(chatId, {
     react: { text: "📦", key: msg.key }
