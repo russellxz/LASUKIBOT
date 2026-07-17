@@ -102,6 +102,23 @@ const loadPluginsRecursively = async (dir) => {
 global.plugins = [];
 await loadPluginsRecursively("./plugins");
 
+// ⚡ Índice comando → plugin para despacho O(1) (antes recorría TODOS los
+// plugins en cada mensaje). El primero que registra un comando gana, igual
+// que el orden del recorrido clásico.
+global.buildPluginIndex = function () {
+  const index = new Map();
+  for (const plugin of global.plugins) {
+    const cmds = Array.isArray(plugin?.command) ? plugin.command : [];
+    for (const c of cmds) {
+      const key = String(c).toLowerCase();
+      if (!index.has(key)) index.set(key, plugin);
+    }
+  }
+  global.pluginIndex = index;
+  return index;
+};
+global.buildPluginIndex();
+
 // 🎯 Función global para verificar si es owner
 global.isOwner = function (jid) {
   const num = jid.replace(/[^0-9]/g, "");
@@ -164,7 +181,12 @@ let phoneNumber = "";
       // ✅ usa la función de versión disponible en tu Baileys
       const { version } = await getWaVersion();
 
-      const sock = makeWASocket({ 
+      // 🚀 Caché de metadata de grupos: evita que Baileys consulte la
+      // metadata del grupo en CADA envío (gran parte de la latencia en grupos).
+      global.groupMetaCache = global.groupMetaCache || new Map();
+      const metaCache = global.groupMetaCache;
+
+      const sock = makeWASocket({
         version,
         logger: pino({ level: "silent" }),
         auth: {
@@ -173,7 +195,28 @@ let phoneNumber = "";
         },
         browser: method === "1" ? ["AzuraBot", "Safari", "1.0.0"] : ["Ubuntu", "Chrome", "20.0.04"],
         printQRInTerminal: method === "1",
+        markOnlineOnConnect: false,
+        syncFullHistory: false,
+        generateHighQualityLinkPreview: false,
+        cachedGroupMetadata: async (jid) => {
+          const hit = metaCache.get(jid);
+          return hit && Date.now() - hit.ts < 60000 ? hit.meta : undefined;
+        },
       });
+
+      // Cada consulta de metadata (nuestra o de un plugin) alimenta el caché
+      const __origGroupMetadata = sock.groupMetadata.bind(sock);
+      sock.groupMetadata = async (jid, ...rest) => {
+        const meta = await __origGroupMetadata(jid, ...rest);
+        if (meta && typeof jid === "string" && jid.endsWith("@g.us")) {
+          metaCache.set(jid, { meta, ts: Date.now() });
+          if (metaCache.size > 500) {
+            const first = metaCache.keys().next().value;
+            metaCache.delete(first);
+          }
+        }
+        return meta;
+      };
 
       // ⬇️⬇️ **INYECCIÓN WA PARA TODOS LOS PLUGINS** ⬇️⬇️
       global.wa = { downloadContentFromMessage };
@@ -233,6 +276,22 @@ try {
 sock.ev.on("messages.upsert", async ({ messages }) => {
   const m = messages[0];
   if (!m || !m.message) return;
+
+  // ⚡ Marca de entrada: los comandos (ej. ping) miden con esto la velocidad
+  // REAL de procesamiento interno del bot.
+  m.__recvAt = Date.now();
+
+  // 🔥 Precalentar el caché de metadata del grupo SIN bloquear este mensaje,
+  // para que los envíos al grupo no tengan que consultar la metadata.
+  try {
+    const __cid = m.key?.remoteJid;
+    if (__cid && __cid.endsWith("@g.us") && global.groupMetaCache) {
+      const __hit = global.groupMetaCache.get(__cid);
+      if (!__hit || Date.now() - __hit.ts > 45000) {
+        sock.groupMetadata(__cid).catch(() => {});
+      }
+    }
+  } catch {}
 
   // 🔎 Normalización PROFUNDA: convierte LIDs a números reales en TODO el mensaje,
   // incluyendo chats PRIVADOS (consulta al signalRepository cuando hace falta).
@@ -2707,21 +2766,19 @@ if (isGroup) {
   
   const command = messageContent.slice(prefixUsed.length).trim().split(" ")[0].toLowerCase();
   const rawArgs = messageContent.trim().slice(prefixUsed.length + command.length).trim();
-  const args = rawArgs.length ? rawArgs.split(/\s+/) : [];        
-  // 🔁 Ejecutar comando desde plugins
-  for (const plugin of global.plugins) {
-    const isClassic = typeof plugin === "function";
-    const isCompatible = plugin.command?.includes?.(command);
-
+  const args = rawArgs.length ? rawArgs.split(/\s+/) : [];
+  // 🔁 Ejecutar comando desde plugins (despacho O(1) por índice, con
+  // fallback al recorrido clásico por si el índice aún no se construyó)
+  let plugin = global.pluginIndex?.get?.(command);
+  if (!plugin) {
+    plugin = global.plugins.find(p => p?.command?.includes?.(command));
+  }
+  if (plugin) {
     try {
-      if (isClassic && plugin.command?.includes?.(command)) {
-        await plugin(m, { conn: sock, text: rawArgs, args, command }); // ← CAMBIO aquí
-        break;
-      }
-
-      if (!isClassic && isCompatible) {
+      if (typeof plugin === "function") {
+        await plugin(m, { conn: sock, text: rawArgs, args, command });
+      } else if (typeof plugin.run === "function") {
         await plugin.run({ msg: m, conn: sock, args, command });
-        break;
       }
     } catch (e) {
       console.error(chalk.red(`❌ Error ejecutando ${command}:`), e);
