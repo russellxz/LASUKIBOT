@@ -19,12 +19,21 @@ const handler = async (msg, { conn, wa }) => {
   const isGroup = chatId.endsWith("@g.us");
 
   try {
-    try { await conn.sendMessage(chatId, { react: { text: "🏓", key: msg.key } }); } catch {}
+    // ⚡ Velocidad interna: desde que el mensaje entró al sistema del bot
+    // hasta que llegó a este comando (procesamiento real, sin la red).
+    const speed = typeof msg.__recvAt === "number"
+      ? Math.max(Date.now() - msg.__recvAt, 1)
+      : null;
 
     const start = Date.now();
     const sent = await conn.sendMessage(chatId, { text: "🏓 Pong..." }, { quoted: msg });
-    const ping = Date.now() - start;
-    const resultText = `🏓 Pong\n\n✅ Ping: ${ping} ms`;
+    const rtt = Date.now() - start;
+
+    const resultText =
+`🏓 *Pong*
+
+⚡ *Velocidad del bot:* ${speed !== null ? `${speed} ms` : "—"}
+📡 *Respuesta WhatsApp:* ${rtt} ms`;
 
     const WA = ensureWA(wa, conn);
     const proto = WA?.proto;
@@ -53,12 +62,9 @@ const handler = async (msg, { conn, wa }) => {
       // en PV o si no hay proto, solo enviamos el resultado
       await conn.sendMessage(chatId, { text: resultText }, { quoted: msg });
     }
-
-    try { await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }); } catch {}
   } catch (e) {
     console.error("Error en ping:", e);
-    try { await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } }); } catch {}
-    await conn.sendMessage(chatId, { text: "❌ Error calculando el ping." }, { quoted: msg });
+    await conn.sendMessage(chatId, { text: "❌ Error calculando el ping." }, { quoted: msg }).catch(() => {});
   }
 };
 
