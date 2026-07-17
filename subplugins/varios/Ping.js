@@ -1,12 +1,13 @@
-// plugins/ping.js
-// Compatible con Baileys ESM/CJS: NO importes '@whiskeysockets/baileys' aquí.
-// Usa `wa` inyectado desde tu index.js o `conn.wa`.
+// subplugins/varios/Ping.js — Ping optimizado del subbot
+// Sin reacciones previas (cada reacción es un viaje completo a WhatsApp que
+// retrasaba la respuesta). Muestra dos números:
+//  ⚡ Velocidad del bot: tiempo REAL de procesamiento interno (ms)
+//  📡 Respuesta WhatsApp: viaje de red del mensaje hasta el servidor
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// obtiene el módulo de Baileys para acceder a `proto`
 function ensureWA(wa, conn) {
   if (wa && wa.proto) return wa;
   if (conn && conn.wa && conn.wa.proto) return conn.wa;
@@ -19,12 +20,21 @@ const handler = async (msg, { conn, wa }) => {
   const isGroup = chatId.endsWith("@g.us");
 
   try {
-    try { await conn.sendMessage(chatId, { react: { text: "🏓", key: msg.key } }); } catch {}
+    // ⚡ Velocidad interna: desde que el mensaje entró al sistema del subbot
+    // hasta que llegó a este comando (pipeline completo).
+    const speed = typeof msg.__subRecvAt === "number"
+      ? Math.max(Date.now() - msg.__subRecvAt, 1)
+      : null;
 
     const start = Date.now();
     const sent = await conn.sendMessage(chatId, { text: "🏓 Pong..." }, { quoted: msg });
-    const ping = Date.now() - start;
-    const resultText = `🏓 Pong\n\n✅ Ping: ${ping} ms`;
+    const rtt = Date.now() - start;
+
+    const resultText =
+`🏓 *Pong*
+
+⚡ *Velocidad del bot:* ${speed !== null ? `${speed} ms` : "—"}
+📡 *Respuesta WhatsApp:* ${rtt} ms`;
 
     const WA = ensureWA(wa, conn);
     const proto = WA?.proto;
@@ -46,19 +56,14 @@ const handler = async (msg, { conn, wa }) => {
           { messageId: sent.key.id }
         );
       } catch {
-        // si falla la edición, enviamos un nuevo mensaje
         await conn.sendMessage(chatId, { text: resultText }, { quoted: msg });
       }
     } else {
-      // en PV o si no hay proto, solo enviamos el resultado
       await conn.sendMessage(chatId, { text: resultText }, { quoted: msg });
     }
-
-    try { await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }); } catch {}
   } catch (e) {
     console.error("Error en ping:", e);
-    try { await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } }); } catch {}
-    await conn.sendMessage(chatId, { text: "❌ Error calculando el ping." }, { quoted: msg });
+    await conn.sendMessage(chatId, { text: "❌ Error calculando el ping." }, { quoted: msg }).catch(() => {});
   }
 };
 
