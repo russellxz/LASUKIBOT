@@ -160,7 +160,20 @@ export async function loadSubPlugins() {
       const list = [];
       await loadDirRecursively(PLUGINS_DIR, list);
       global.subPlugins = list;
-      console.log(chalk.cyan(`🧩 [subbots] ${list.length} plugins de subbots cargados.`));
+
+      // Índice comando → plugin para despacho O(1) (el primero que registra
+      // un comando gana, igual que el orden de carga del bot principal)
+      const index = new Map();
+      for (const plugin of list) {
+        const cmds = Array.isArray(plugin?.command) ? plugin.command : [];
+        for (const c of cmds) {
+          const key = String(c).toLowerCase();
+          if (!index.has(key)) index.set(key, plugin);
+        }
+      }
+      global.subPluginIndex = index;
+
+      console.log(chalk.cyan(`🧩 [subbots] ${list.length} plugins de subbots cargados (${index.size} comandos).`));
       return list;
     })();
   }
@@ -581,9 +594,22 @@ async function handleLinkViolation(sock, number, m, chatId, senderNum, tipo, lim
 export async function handleSubMessage(sock, number, m) {
   if (!m || !m.message) return;
 
+  // Marca de llegada: los comandos (ej. ping) la usan para medir la
+  // velocidad real de procesamiento del bot.
+  m.__subRecvAt = Date.now();
+
   const chatId = m.key.remoteJid;
   if (!chatId || chatId === "status@broadcast") return;
   const isGroup = chatId.endsWith("@g.us");
+
+  // 🔥 Precalentar el caché de metadata del grupo SIN bloquear este mensaje:
+  // así los envíos a grupos no tienen que consultar la metadata (más rápidos).
+  if (isGroup && sock.__metaCache) {
+    const hit = sock.__metaCache.get(chatId);
+    if (!hit || Date.now() - hit.ts > 45000) {
+      getGroupMetaCached(sock, chatId).catch(() => {});
+    }
+  }
 
   // --- Normalización LID → número real (como el index.js del bot principal:
   // conserva las DOS identidades, PN y LID, y las cachea en un mapa) ---
@@ -609,16 +635,35 @@ export async function handleSubMessage(sock, number, m) {
     (isUser(m.key?.participantAlt) && m.key.participantAlt) ||
     null;
 
+  // Caché negativo: si una resolución LID↔PN ya falló hace poco, no volver
+  // a esperar al signalRepository en cada mensaje (evita latencia repetida).
+  sock.__lidMiss = sock.__lidMiss || new Map();
+  const LID_MISS_TTL = 5 * 60 * 1000;
+  const lidMissRecently = (k) => {
+    const t = sock.__lidMiss.get(k);
+    return typeof t === "number" && Date.now() - t < LID_MISS_TTL;
+  };
+  const markLidMiss = (k) => {
+    sock.__lidMiss.set(k, Date.now());
+    if (sock.__lidMiss.size > 500) {
+      const first = sock.__lidMiss.keys().next().value;
+      sock.__lidMiss.delete(first);
+    }
+  };
+
   // Resolver LID → PN: primero mapa local, luego signalRepository
   if (!pnJid && lidJid) {
     const cached = sock.__lidMap.get(lidJid);
     if (isUser(cached)) {
       pnJid = cached;
-    } else {
+    } else if (!lidMissRecently(lidJid)) {
       try {
         const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(lidJid);
         if (isUser(pn)) pnJid = pn;
-      } catch {}
+        else markLidMiss(lidJid);
+      } catch {
+        markLidMiss(lidJid);
+      }
     }
   }
 
@@ -626,11 +671,14 @@ export async function handleSubMessage(sock, number, m) {
   if (pnJid && !lidJid) {
     const cachedLid = sock.__lidMap.get(pnJid);
     if (isLid(cachedLid)) lidJid = cachedLid;
-    if (!lidJid) {
+    if (!lidJid && !lidMissRecently(pnJid)) {
       try {
         const lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(pnJid);
         if (isLid(lid)) lidJid = lid;
-      } catch {}
+        else markLidMiss(pnJid);
+      } catch {
+        markLidMiss(pnJid);
+      }
     }
   }
 
@@ -1088,31 +1136,29 @@ export async function handleSubMessage(sock, number, m) {
     } catch {}
   }
 
-  const plugins = global.subPlugins || [];
+  // Despacho O(1) por índice (con fallback al recorrido clásico)
+  let plugin = global.subPluginIndex?.get?.(command);
+  if (!plugin) {
+    plugin = (global.subPlugins || []).find((p) => p?.command?.includes?.(command));
+  }
+  if (!plugin) return;
 
-  for (const plugin of plugins) {
-    const isClassic = typeof plugin === "function";
-    const isCompatible = plugin.command?.includes?.(command);
-    try {
-      if (isClassic && isCompatible) {
-        await plugin(m, {
-          conn: sock,
-          text: rawArgs,
-          args,
-          command,
-          usedPrefix: prefixUsed,
-          isSubbot: true,
-          subbotNumber: number
-        });
-        break;
-      }
-      if (!isClassic && isCompatible && typeof plugin.run === "function") {
-        await plugin.run({ msg: m, conn: sock, args, command, isSubbot: true, subbotNumber: number });
-        break;
-      }
-    } catch (e) {
-      console.error(chalk.red(`❌ [subbot ${number}] Error ejecutando ${command}:`), e);
+  try {
+    if (typeof plugin === "function") {
+      await plugin(m, {
+        conn: sock,
+        text: rawArgs,
+        args,
+        command,
+        usedPrefix: prefixUsed,
+        isSubbot: true,
+        subbotNumber: number
+      });
+    } else if (typeof plugin.run === "function") {
+      await plugin.run({ msg: m, conn: sock, args, command, isSubbot: true, subbotNumber: number });
     }
+  } catch (e) {
+    console.error(chalk.red(`❌ [subbot ${number}] Error ejecutando ${command}:`), e);
   }
 }
 
@@ -1372,6 +1418,11 @@ async function connectSubbot(num, entry) {
     return null;
   }
 
+  // Caché de metadata de grupos compartido con los chequeos de admin.
+  // Pasarlo a makeWASocket evita que Baileys consulte la metadata del grupo
+  // en CADA envío (esa consulta era gran parte de la latencia en grupos).
+  const metaCache = new Map();
+
   const sock = makeWASocket({
     version,
     logger: silentLogger,
@@ -1383,11 +1434,30 @@ async function connectSubbot(num, entry) {
     printQRInTerminal: false,
     markOnlineOnConnect: false,
     syncFullHistory: false,
-    generateHighQualityLinkPreview: false
+    generateHighQualityLinkPreview: false,
+    cachedGroupMetadata: async (jid) => {
+      const hit = metaCache.get(jid);
+      return hit && Date.now() - hit.ts < 60000 ? hit.meta : undefined;
+    }
   });
 
   entry.sock = sock;
   entry.status = "connecting";
+  sock.__metaCache = metaCache;
+
+  // Cualquier consulta de metadata (nuestra o de un plugin) alimenta el caché
+  const origGroupMetadata = sock.groupMetadata.bind(sock);
+  sock.groupMetadata = async (jid, ...rest) => {
+    const meta = await origGroupMetadata(jid, ...rest);
+    if (meta && typeof jid === "string" && jid.endsWith("@g.us")) {
+      metaCache.set(jid, { meta, ts: Date.now() });
+      if (metaCache.size > 200) {
+        const first = metaCache.keys().next().value;
+        metaCache.delete(first);
+      }
+    }
+    return meta;
+  };
 
   // Helpers inyectados para los plugins del subbot
   const cfg = getSubConfig(num);
