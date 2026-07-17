@@ -6,5 +6,5 @@ const handler = async (msg, { conn, args }) => {
   await handleCodeCommand(msg, { conn, args, botName: "La Suki Bot" });
 };
 
-handler.command = ["code"];
+handler.command = ["code", "jadibot", "serbot", "sercode", "qr"];
 export default handler;
