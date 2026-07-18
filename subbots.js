@@ -1665,6 +1665,12 @@ async function connectSubbot(num, entry) {
         cfg2.name = userName;
         cfgChanged = true;
       }
+      // Dispositivo/plataforma del teléfono vinculado (para el comando "bots")
+      const platform = sock.authState?.creds?.platform || "";
+      if (platform && cfg2.platform !== platform) {
+        cfg2.platform = platform;
+        cfgChanged = true;
+      }
       if (cfgChanged) saveSubConfig(num, cfg2);
 
       // Reintentos por si el nombre aún no llega (vinculación nueva)
@@ -1777,15 +1783,35 @@ export function listSubbots() {
     try { entry.sock?.__refreshSubName?.(); } catch {}
     const cfg = getSubConfig(num);
     const liveName = entry.sock?.user?.name || entry.sock?.user?.verifiedName || entry.sock?.user?.notify || "";
+
+    // Prefijos actuales (en vivo si el socket está activo, si no del config)
+    const livePrefixes = Array.isArray(entry.sock?.subPrefixes) && entry.sock.subPrefixes.length
+      ? entry.sock.subPrefixes
+      : null;
+
     out.push({
       number: num,
       name: liveName || cfg.name || "Suki Subbot",
+      prefixes: livePrefixes || cfg.prefixes || [...DEFAULT_SUB_PREFIXES],
+      platform: entry.sock?.authState?.creds?.platform || cfg.platform || "",
       status: entry.status,
       connected: entry.status === "open",
       connectedSince: cfg.connectedSince
     });
   }
   return out;
+}
+
+// Traduce el valor de creds.platform a un nombre legible del dispositivo
+export function formatPlatform(p) {
+  const v = String(p || "").toLowerCase();
+  if (!v) return "Desconocido";
+  if (v === "android") return "Android 🤖";
+  if (v === "iphone" || v === "ios") return "iPhone 🍎";
+  if (v === "smba") return "WhatsApp Business (Android) 💼";
+  if (v === "smbi") return "WhatsApp Business (iPhone) 💼";
+  if (v.includes("web")) return "WhatsApp Web 🌐";
+  return v.charAt(0).toUpperCase() + v.slice(1);
 }
 
 export function formatUptime(ms) {
