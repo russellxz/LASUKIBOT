@@ -311,6 +311,43 @@ const addZero = (n) => {
   return c.endsWith("0") ? c : c + "0";
 };
 
+// 🔥 Precalienta dispositivos y sesiones de cifrado de TODOS los miembros
+// de un grupo en segundo plano. En grupos grandes, el envío paga pedir los
+// dispositivos y sesiones de cada miembro (por eso ~360ms en grupos llenos
+// y ~15ms en chicos). Con esto, cuando el bot responde ya está todo listo.
+async function prewarmGroupSessions(sock, chatId) {
+  try {
+    sock.__prewarmTs = sock.__prewarmTs || new Map();
+    const last = sock.__prewarmTs.get(chatId) || 0;
+    if (Date.now() - last < 10 * 60 * 1000) return; // 1 vez cada 10 min por grupo
+    sock.__prewarmTs.set(chatId, Date.now());
+    if (sock.__prewarmTs.size > 300) {
+      const first = sock.__prewarmTs.keys().next().value;
+      sock.__prewarmTs.delete(first);
+    }
+
+    const meta = await getGroupMetaCached(sock, chatId);
+    const jids = (meta?.participants || [])
+      .map((p) => (typeof p?.jid === "string" && p.jid) || (typeof p?.id === "string" && p.id) || null)
+      .filter(Boolean);
+    if (!jids.length) return;
+
+    // 1) Llenar el caché de listas de dispositivos (solo consulta los que faltan)
+    if (typeof sock.getUSyncDevices === "function") {
+      const devices = await sock.getUSyncDevices(jids, true, false);
+      const deviceJids = (devices || []).map((d) => d?.jid).filter(Boolean);
+
+      // 2) Asegurar sesiones de cifrado (assertSessions sin force solo
+      //    pide a la red las sesiones que NO existen todavía)
+      if (deviceJids.length && typeof sock.assertSessions === "function") {
+        await sock.assertSessions(deviceJids, false);
+      }
+    }
+  } catch {
+    // silencioso: es solo precalentamiento
+  }
+}
+
 async function getGroupMetaCached(sock, chatId) {
   sock.__metaCache = sock.__metaCache || new Map();
   const hit = sock.__metaCache.get(chatId);
@@ -650,6 +687,9 @@ export async function handleSubMessage(sock, number, m) {
     if (!hit || Date.now() - hit.ts > 45000) {
       getGroupMetaCached(sock, chatId).catch(() => {});
     }
+    // Y precalentar dispositivos + sesiones de cifrado de los miembros
+    // (en grupos grandes esto era lo que hacía lentos los envíos)
+    prewarmGroupSessions(sock, chatId).catch(() => {});
   }
 
   // --- Normalización LID → número real (como el index.js del bot principal:

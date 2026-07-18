@@ -254,6 +254,44 @@ let phoneNumber = "";
         return meta;
       };
 
+      // 🔥 Precalienta dispositivos y sesiones de cifrado de los miembros de
+      // un grupo en segundo plano. En grupos grandes el envío pagaba pedir
+      // los dispositivos/sesiones de cada miembro (~360ms en grupos llenos
+      // vs ~15ms en chicos). Con esto, al responder ya está todo listo.
+      sock.__prewarmTs = new Map();
+      sock.__prewarmGroup = async (chatId) => {
+        try {
+          const last = sock.__prewarmTs.get(chatId) || 0;
+          if (Date.now() - last < 10 * 60 * 1000) return; // 1 vez cada 10 min
+          sock.__prewarmTs.set(chatId, Date.now());
+          if (sock.__prewarmTs.size > 300) {
+            const first = sock.__prewarmTs.keys().next().value;
+            sock.__prewarmTs.delete(first);
+          }
+
+          const hit = metaCache.get(chatId);
+          const meta = (hit && Date.now() - hit.ts < 60000 ? hit.meta : null) ||
+            (await sock.groupMetadata(chatId).catch(() => null));
+
+          const jids = (meta?.participants || [])
+            .map((p) => (typeof p?.jid === "string" && p.jid) || (typeof p?.id === "string" && p.id) || null)
+            .filter(Boolean);
+          if (!jids.length) return;
+
+          if (typeof sock.getUSyncDevices === "function") {
+            const devices = await sock.getUSyncDevices(jids, true, false);
+            const deviceJids = (devices || []).map((d) => d?.jid).filter(Boolean);
+
+            // assertSessions sin force solo pide las sesiones que faltan
+            if (deviceJids.length && typeof sock.assertSessions === "function") {
+              await sock.assertSessions(deviceJids, false);
+            }
+          }
+        } catch {
+          // silencioso: es solo precalentamiento
+        }
+      };
+
       // ⬇️⬇️ **INYECCIÓN WA PARA TODOS LOS PLUGINS** ⬇️⬇️
       global.wa = { downloadContentFromMessage };
       // por comodidad, también accesible como conn.wa
@@ -326,6 +364,9 @@ sock.ev.on("messages.upsert", async ({ messages }) => {
       if (!__hit || Date.now() - __hit.ts > 45000) {
         sock.groupMetadata(__cid).catch(() => {});
       }
+      // Y precalentar dispositivos + sesiones de cifrado de los miembros
+      // (en grupos grandes esto era lo que hacía lentos los envíos)
+      sock.__prewarmGroup?.(__cid)?.catch?.(() => {});
     }
   } catch {}
 
