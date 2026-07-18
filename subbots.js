@@ -107,6 +107,47 @@ export function saveSubConfig(number, cfg) {
 }
 
 // ------------------------------------------------------------
+// 🚀 Caché de listas de dispositivos COMPARTIDA entre el bot principal
+// y todos los subbots (son datos globales de WhatsApp: usuario → sus
+// dispositivos, iguales para cualquier bot). El default de Baileys expira
+// cada 5 min y cada expiración cuesta una consulta de red (~100ms) en el
+// siguiente envío. Es seguro alargarla: Baileys la invalida sola cuando
+// WhatsApp notifica cambios de dispositivos.
+// ------------------------------------------------------------
+function getDeviceListCache() {
+  if (!global.__deviceListCache) {
+    const dlStore = new Map();
+    const DL_TTL = 60 * 60 * 1000; // 1 hora
+    global.__deviceListCache = {
+      get(k) {
+        const e = dlStore.get(k);
+        if (!e) return undefined;
+        if (Date.now() > e.exp) { dlStore.delete(k); return undefined; }
+        return e.v;
+      },
+      set(k, v) {
+        dlStore.set(k, { v, exp: Date.now() + DL_TTL });
+        if (dlStore.size > 10000) dlStore.delete(dlStore.keys().next().value);
+      },
+      mget(keys) {
+        const out = {};
+        for (const k of keys || []) {
+          const v = this.get(k);
+          if (v !== undefined) out[k] = v;
+        }
+        return out;
+      },
+      mset(entries) {
+        for (const { key, value } of entries || []) this.set(key, value);
+      },
+      del(k) { dlStore.delete(k); },
+      flushAll() { dlStore.clear(); }
+    };
+  }
+  return global.__deviceListCache;
+}
+
+// ------------------------------------------------------------
 // Baileys (import dinámico compatible CJS/ESM, cacheado)
 // ------------------------------------------------------------
 async function getBaileys() {
@@ -1438,7 +1479,8 @@ async function connectSubbot(num, entry) {
     cachedGroupMetadata: async (jid) => {
       const hit = metaCache.get(jid);
       return hit && Date.now() - hit.ts < 60000 ? hit.meta : undefined;
-    }
+    },
+    userDevicesCache: getDeviceListCache()
   });
 
   entry.sock = sock;
