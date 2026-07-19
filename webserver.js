@@ -15,6 +15,14 @@ import {
   getAllConfigs
 } from "./db.js";
 
+import {
+  listSubbots,
+  formatPlatform,
+  formatUptime,
+  getSubbotHosting,
+  setSubbotHosting
+} from "./subbots.js";
+
 /*
   webserver.js para La Suki Bot
   - Relay/polling con el panel central.
@@ -199,7 +207,12 @@ const TASK_TYPE_ALIASES = {
 
   leave_group: "leave_group",
   salir_grupo: "leave_group",
-  leave: "leave_group"
+  leave: "leave_group",
+
+  set_subbot_hosting: "set_subbot_hosting",
+  subbot_hosting: "set_subbot_hosting",
+  toggle_subbot_hosting: "set_subbot_hosting",
+  allow_subbots: "set_subbot_hosting"
 };
 
 let relayBusy = false;
@@ -1293,17 +1306,62 @@ function buildPanelKeyPayload() {
   return out;
 }
 
+function buildSubbotInfo() {
+  try {
+    const sock = getSock();
+    const rawId = String(sock?.user?.id || sock?.user?.jid || "");
+    const ownerNumber = rawId.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
+    const ownerName = sock?.user?.name || sock?.user?.verifiedName || "La Suki Bot";
+
+    let subbots = [];
+    try {
+      subbots = (listSubbots() || [])
+        .filter(b => b.connected)
+        .map(b => ({
+          name: b.name || "Suki Subbot",
+          device: formatPlatform(b.platform),
+          uptime: b.connectedSince ? formatUptime(Date.now() - b.connectedSince) : "—",
+          connectedSince: b.connectedSince || null
+        }));
+    } catch {}
+
+    return {
+      subbotHosting: getSubbotHosting(),
+      ownerNumber,
+      ownerName,
+      subbotsCount: subbots.length,
+      subbots
+    };
+  } catch {
+    return {
+      subbotHosting: getSubbotHosting(),
+      ownerNumber: "",
+      ownerName: "La Suki Bot",
+      subbotsCount: 0,
+      subbots: []
+    };
+  }
+}
+
 function buildPanelBody(reason, state = {}, extra = {}) {
   const keys = buildPanelKeyPayload();
   const keyHashes = unique(keys.map(k => k.hash));
   const primaryKeyHash = getPrimaryKeyHash();
   const groups = hydrateGroups(Array.isArray(state.groups) ? state.groups : []);
+  const subbotInfo = buildSubbotInfo();
 
   return {
     botName: "La Suki Bot",
     publicUrl: getPublicBaseUrl(),
     reason,
     registeredAt: Date.now(),
+
+    // 🤖 Info del sistema de subbots (para el directorio público del panel)
+    subbotHosting: subbotInfo.subbotHosting,
+    ownerNumber: subbotInfo.ownerNumber,
+    ownerName: subbotInfo.ownerName,
+    subbotsCount: subbotInfo.subbotsCount,
+    subbots: subbotInfo.subbots,
 
     keys,
     hashes: keyHashes,
@@ -1459,7 +1517,26 @@ async function executeTask(sock, task) {
   if (type === "get_status") {
     return {
       connected: !!sock?.user,
-      user: sock?.user || null
+      user: sock?.user || null,
+      ...buildSubbotInfo()
+    };
+  }
+
+  if (type === "set_subbot_hosting") {
+    const enabled = normalizeConfigValue(firstValue(
+      payload.enabled,
+      payload.value,
+      payload.active,
+      payload.status,
+      payload.state,
+      payload.on
+    ));
+
+    setSubbotHosting(enabled);
+
+    return {
+      subbotHosting: enabled,
+      ...buildSubbotInfo()
     };
   }
 
