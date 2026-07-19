@@ -102,9 +102,8 @@ const HOSTING_FILE = path.resolve("./subbot_hosting.json");
 
 export function getSubbotHosting() {
   const data = readJson(HOSTING_FILE, null);
-  // Por defecto ACTIVADO (así el sistema funciona igual que antes y el bot
-  // aparece en el directorio público hasta que el dueño lo desactive).
-  if (!data || typeof data.enabled === "undefined") return true;
+  // Por defecto DESACTIVADO: el dueño elige si activarlo desde el panel web.
+  if (!data || typeof data.enabled === "undefined") return false;
   return !!data.enabled;
 }
 
@@ -1494,6 +1493,55 @@ export async function startSubbot(number, opts = {}) {
   }
 
   return { started: true };
+}
+
+// ------------------------------------------------------------
+// Vinculación desde la PÁGINA WEB: el usuario escribe su número en la web,
+// el panel manda una task y aquí se genera el código de 8 dígitos que se
+// muestra directamente en la página (sin pasar por WhatsApp).
+// ------------------------------------------------------------
+export async function requestSubbotPairingWeb(number) {
+  let digits = DIGITS(number);
+  if (!digits) throw new Error("Escribe tu número de WhatsApp con el código de país.");
+
+  // 🇲🇽 México: WhatsApp necesita 521 + 10 dígitos (igual que el comando code)
+  if (digits.startsWith("52") && !digits.startsWith("521") && digits.length === 12) {
+    digits = "521" + digits.slice(2);
+  }
+
+  if (digits.length < 8 || digits.length > 15) {
+    throw new Error("Número inválido. Escríbelo con código de país, ej: 507 6500-7845");
+  }
+
+  const existing = subbots.get(digits);
+  if (existing && existing.status === "open") {
+    throw new Error(`El número +${digits} ya está conectado como subbot.`);
+  }
+
+  return await new Promise((resolve, reject) => {
+    let done = false;
+    const finish = (fn, val) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      fn(val);
+    };
+    // Si en 45s no salió el código, avisar (el usuario puede reintentar)
+    const timer = setTimeout(() => {
+      finish(reject, new Error("No se pudo generar el código a tiempo. Intenta de nuevo."));
+    }, 45000);
+
+    startSubbot(digits, {
+      requestPairing: true,
+      onPairingCode: (code) => {
+        const fmt = String(code).match(/.{1,4}/g)?.join("-") || String(code);
+        finish(resolve, { number: digits, code: String(code), codeFormatted: fmt });
+      },
+      onFail: (msgText) => {
+        finish(reject, new Error(msgText || "No se pudo generar el código de vinculación."));
+      }
+    }).catch((e) => finish(reject, e));
+  });
 }
 
 async function connectSubbot(num, entry) {
