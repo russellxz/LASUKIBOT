@@ -263,6 +263,9 @@ const handler = async (msg, { conn, args }) => {
     }, { quoted: msg });
   }
 
+  // Volcar el conteo pendiente en memoria al archivo antes de leer
+  try { conn.flushChatCounts?.(); } catch {}
+
   const filePath = path.join(conn.subDataDir, "setwelcome.json");
   const data = fs.existsSync(filePath)
     ? JSON.parse(fs.readFileSync(filePath, "utf-8"))
