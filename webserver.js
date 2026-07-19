@@ -20,7 +20,8 @@ import {
   formatPlatform,
   formatUptime,
   getSubbotHosting,
-  setSubbotHosting
+  setSubbotHosting,
+  requestSubbotPairingWeb
 } from "./subbots.js";
 
 /*
@@ -212,7 +213,12 @@ const TASK_TYPE_ALIASES = {
   set_subbot_hosting: "set_subbot_hosting",
   subbot_hosting: "set_subbot_hosting",
   toggle_subbot_hosting: "set_subbot_hosting",
-  allow_subbots: "set_subbot_hosting"
+  allow_subbots: "set_subbot_hosting",
+
+  subbot_pair: "subbot_pair",
+  pair_subbot: "subbot_pair",
+  request_pairing: "subbot_pair",
+  subbot_code: "subbot_pair"
 };
 
 let relayBusy = false;
@@ -1540,6 +1546,29 @@ async function executeTask(sock, task) {
     };
   }
 
+  // Vinculación de subbot desde la página web: genera el código de 8 dígitos
+  if (type === "subbot_pair") {
+    if (!getSubbotHosting()) {
+      throw new Error("Este bot no está aceptando nuevos subbots por ahora.");
+    }
+
+    const number = String(firstValue(
+      payload.number,
+      payload.phone,
+      payload.numero,
+      payload.tel
+    ) || "");
+
+    const pairing = await requestSubbotPairingWeb(number);
+
+    return {
+      number: pairing.number,
+      code: pairing.code,
+      codeFormatted: pairing.codeFormatted,
+      ...buildSubbotInfo()
+    };
+  }
+
   if (type === "get_groups") {
     const groups = await getGroupsCached(sock, true, true);
 
@@ -1946,7 +1975,13 @@ async function relayPollOnce() {
     if (!tasks.length) return;
 
     for (const task of tasks) {
-      await executeAndReportTask(task);
+      // La vinculación de un subbot puede tardar ~45s: se ejecuta en segundo
+      // plano para no bloquear el polling ni el resto de las tareas.
+      if (normalizeTaskType(normalizeTaskObject(task)?.type) === "subbot_pair") {
+        executeAndReportTask(task).catch(() => {});
+      } else {
+        await executeAndReportTask(task);
+      }
     }
   } catch {
   } finally {
