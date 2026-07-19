@@ -1144,7 +1144,10 @@ export async function handleSubMessage(sock, number, m) {
     }
   }
 
-  // === 🧮 CONTEO DE MENSAJES (para totalchat/fantasmas) — bufferizado ===
+  // === 🧮 CONTEO DE MENSAJES (para totalchat/fantasmas/fankick) ===
+  // Se bufferiza en memoria y se escribe a setwelcome.json a los pocos
+  // segundos. sock.flushChatCounts() permite a los comandos volcar el
+  // buffer al instante antes de leer el archivo.
   if (isGroup && senderNum) {
     try {
       sock.__ccBuf = sock.__ccBuf || {};
@@ -1153,21 +1156,36 @@ export async function handleSubMessage(sock, number, m) {
         sock.__ccBuf[chatId][k] = (sock.__ccBuf[chatId][k] || 0) + 1;
       }
 
-      const now = Date.now();
-      if (!sock.__ccFlushTs) sock.__ccFlushTs = now;
-      if (now - sock.__ccFlushTs > 30000) {
-        sock.__ccFlushTs = now;
-        const buf = sock.__ccBuf;
-        sock.__ccBuf = {};
-        const sw = readJson(swFile, {});
-        for (const cid of Object.keys(buf)) {
-          sw[cid] = sw[cid] || {};
-          sw[cid].chatCount = sw[cid].chatCount || {};
-          for (const k of Object.keys(buf[cid])) {
-            sw[cid].chatCount[k] = Number(sw[cid].chatCount[k] || 0) + buf[cid][k];
+      if (!sock.flushChatCounts) {
+        sock.flushChatCounts = () => {
+          try {
+            clearTimeout(sock.__ccTimer);
+            sock.__ccTimer = null;
+            const buf = sock.__ccBuf;
+            if (!buf || !Object.keys(buf).length) return;
+            sock.__ccBuf = {};
+            const sw = readJson(swFile, {});
+            for (const cid of Object.keys(buf)) {
+              sw[cid] = sw[cid] || {};
+              sw[cid].chatCount = sw[cid].chatCount || {};
+              for (const k of Object.keys(buf[cid])) {
+                sw[cid].chatCount[k] = Number(sw[cid].chatCount[k] || 0) + buf[cid][k];
+              }
+            }
+            writeJson(swFile, sw);
+          } catch (e) {
+            console.error(`❌ [subbot ${number}] Error guardando conteo:`, e.message);
           }
-        }
-        writeJson(swFile, sw);
+        };
+      }
+
+      // Volcado automático a los 5s del primer mensaje bufferizado
+      // (aunque no lleguen más mensajes, el conteo llega al disco)
+      if (!sock.__ccTimer) {
+        sock.__ccTimer = setTimeout(() => {
+          sock.__ccTimer = null;
+          try { sock.flushChatCounts(); } catch {}
+        }, 5000);
       }
     } catch {}
   }
@@ -1289,6 +1307,7 @@ export function stopSubbot(number, { wipe = false } = {}) {
     entry.stopped = true;
     clearTimeout(entry.pairingTimer);
     clearTimeout(entry.reconnectTimer);
+    try { entry.sock?.flushChatCounts?.(); } catch {}
     try {
       entry.sock?.ev?.removeAllListeners?.();
       entry.sock?.end?.();
@@ -1772,6 +1791,9 @@ async function connectSubbot(num, entry) {
 
     if (connection === "close") {
       entry.status = "close";
+      // Guardar el conteo de mensajes pendiente antes de reconectar
+      // (el socket nuevo arranca con el buffer vacío)
+      try { entry.sock?.flushChatCounts?.(); } catch {}
       const codeErr =
         lastDisconnect?.error?.output?.statusCode ||
         lastDisconnect?.error?.output?.payload?.statusCode ||
