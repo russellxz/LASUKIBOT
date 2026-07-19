@@ -685,6 +685,194 @@ async function handleLinkViolation(sock, number, m, chatId, senderNum, tipo, lim
   }
 }
 
+// === ✅ CONTEO DE MENSAJES EN setwelcome.json PN / LID (por subbot) ===
+// Misma lógica que el index.js del bot principal, adaptada para guardar en
+// el setwelcome.json de cada subbot. Se llama directo desde el evento
+// messages.upsert (antes de cualquier filtro del pipeline), igual que en
+// el bot principal, para que totalchat/fantasmas/fankick funcionen bien.
+export async function countSubMessage(sock, number, m) {
+  try {
+    if (!m || !m.message) return;
+
+    const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
+    const JID_NUM = (jid = "") => DIGITS(String(jid || "").split("@")[0].split(":")[0]);
+
+    const isUser = (j) => typeof j === "string" && j.endsWith("@s.whatsapp.net");
+    const isLid = (j) => typeof j === "string" && j.endsWith("@lid");
+
+    const addZero = (n) => {
+      const clean = DIGITS(n);
+      if (!clean) return "";
+      return clean.endsWith("0") ? clean : clean + "0";
+    };
+
+    const cleanUserJid = (jid) => {
+      const n = JID_NUM(jid);
+      return n ? `${n}@s.whatsapp.net` : null;
+    };
+
+    const cleanLidJid = (jid) => {
+      const n = JID_NUM(jid);
+      return n ? `${n}@lid` : null;
+    };
+
+    async function getSenderChatKeys() {
+      const botNumber = JID_NUM(sock.user?.id || sock.user?.jid || "");
+      const botJid = botNumber ? `${botNumber}@s.whatsapp.net` : "";
+
+      const raw = m.key.fromMe
+        ? botJid
+        : String(m.key.participant || m.key.remoteJid || "");
+
+      let realJid = null;
+      let lidJid = null;
+
+      const pnFields = [
+        m.realJid,
+        m.key?.senderPn,
+        m.key?.participantPn,
+        m.key?.senderAlt,
+        m.key?.participantAlt,
+        raw
+      ].filter(Boolean);
+
+      for (const jid of pnFields) {
+        if (isUser(jid)) {
+          realJid = cleanUserJid(jid);
+          break;
+        }
+      }
+
+      const lidFields = [
+        m.realLid,
+        m.realJid,
+        m.key?.senderLid,
+        m.key?.participantLid,
+        raw
+      ].filter(Boolean);
+
+      for (const jid of lidFields) {
+        if (isLid(jid)) {
+          lidJid = cleanLidJid(jid);
+          break;
+        }
+      }
+
+      try {
+        if (global.lidMap instanceof Map) {
+          if (lidJid && !realJid) {
+            const pn = global.lidMap.get(lidJid);
+            if (isUser(pn)) realJid = cleanUserJid(pn);
+          }
+
+          if (realJid && !lidJid) {
+            const lid = global.lidMap.get(realJid);
+            if (isLid(lid)) lidJid = cleanLidJid(lid);
+          }
+        }
+      } catch {}
+
+      try {
+        if (lidJid && !realJid) {
+          const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(lidJid);
+          if (isUser(pn)) {
+            realJid = cleanUserJid(pn);
+
+            if (global.lidMap instanceof Map) {
+              global.lidMap.set(lidJid, realJid);
+              global.lidMap.set(realJid, lidJid);
+            }
+          }
+        }
+      } catch {}
+
+      try {
+        if (realJid && !lidJid) {
+          const lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(realJid);
+          if (isLid(lid)) {
+            lidJid = cleanLidJid(lid);
+
+            if (global.lidMap instanceof Map) {
+              global.lidMap.set(realJid, lidJid);
+              global.lidMap.set(lidJid, realJid);
+            }
+          }
+        }
+      } catch {}
+
+      let baseNumber = realJid ? JID_NUM(realJid) : "";
+      let lidNumber = lidJid ? JID_NUM(lidJid) : "";
+
+      if (!baseNumber && isUser(raw)) baseNumber = JID_NUM(raw);
+      if (!lidNumber && isLid(raw)) lidNumber = JID_NUM(raw);
+
+      if (!baseNumber && m.realNumber && isUser(m.realJid)) {
+        baseNumber = DIGITS(m.realNumber);
+      }
+
+      if (!lidNumber && m.realNumber && (isLid(m.realJid) || isLid(m.realLid) || isLid(raw))) {
+        lidNumber = DIGITS(m.realNumber);
+      }
+
+      const zeroNumber = baseNumber ? addZero(baseNumber) : "";
+
+      const keys = [];
+
+      if (baseNumber) keys.push(baseNumber);
+      if (zeroNumber && zeroNumber !== baseNumber) keys.push(zeroNumber);
+      if (lidNumber && lidNumber !== baseNumber && lidNumber !== zeroNumber) keys.push(lidNumber);
+
+      const rawNumber = JID_NUM(raw);
+      if (!keys.length && rawNumber) keys.push(rawNumber);
+
+      return [...new Set(keys)];
+    }
+
+    const welcomePath = path.join(subDataDir(number), "setwelcome.json");
+
+    if (!fs.existsSync(welcomePath)) {
+      fs.writeFileSync(welcomePath, JSON.stringify({}, null, 2));
+    }
+
+    let welcomeData = {};
+    try {
+      welcomeData = JSON.parse(fs.readFileSync(welcomePath, "utf-8"));
+    } catch {
+      welcomeData = {};
+    }
+
+    const chatId = m.key.remoteJid;
+    const isGroup = typeof chatId === "string" && chatId.endsWith("@g.us");
+
+    if (isGroup) {
+      welcomeData[chatId] = welcomeData[chatId] || {};
+      welcomeData[chatId].chatCount = welcomeData[chatId].chatCount || {};
+
+      const keys = await getSenderChatKeys();
+
+      if (keys.length) {
+        let current = 0;
+
+        for (const key of keys) {
+          const val = Number(welcomeData[chatId].chatCount[key] || 0);
+          if (val > current) current = val;
+        }
+
+        const next = current + 1;
+
+        for (const key of keys) {
+          welcomeData[chatId].chatCount[key] = next;
+        }
+
+        fs.writeFileSync(welcomePath, JSON.stringify(welcomeData, null, 2));
+      }
+    }
+  } catch (e) {
+    console.error(`❌ [subbot ${number}] Error en conteo de mensajes en setwelcome.json:`, e);
+  }
+}
+// === ✅ FIN CONTEO DE MENSAJES EN setwelcome.json PN / LID ===
+
 // ------------------------------------------------------------
 // Manejador de mensajes por subbot (ligero, para aguantar 500+)
 // ------------------------------------------------------------
@@ -1143,168 +1331,6 @@ export async function handleSubMessage(sock, number, m) {
       console.error(`❌ [subbot ${number}] Error en palabra clave:`, e.message);
     }
   }
-
-  // === ✅ CONTEO DE MENSAJES EN setwelcome.json PN / LID ===
-  // Misma lógica que el index.js del bot principal, pero guardando en el
-  // setwelcome.json propio de cada subbot: en cada mensaje se resuelven
-  // todas las identidades del remitente (PN, PN+0, LID; si es del propio
-  // subbot se usa su número), se toma el valor máximo entre ellas y se les
-  // asigna a todas ese máximo + 1, escribiendo el archivo al instante.
-  try {
-    const isUser = (j) => typeof j === "string" && j.endsWith("@s.whatsapp.net");
-    const isLid = (j) => typeof j === "string" && j.endsWith("@lid");
-
-    const cleanUserJid = (jid) => {
-      const n = JIDNUM(jid);
-      return n ? `${n}@s.whatsapp.net` : null;
-    };
-
-    const cleanLidJid = (jid) => {
-      const n = JIDNUM(jid);
-      return n ? `${n}@lid` : null;
-    };
-
-    async function getSenderChatKeys() {
-      const botNumber = JIDNUM(sock.user?.id || sock.user?.jid || "");
-      const botJid = botNumber ? `${botNumber}@s.whatsapp.net` : "";
-
-      const raw = m.key.fromMe
-        ? botJid
-        : String(m.key.participant || m.key.remoteJid || "");
-
-      let realJid = null;
-      let lidSender = null;
-
-      const pnFields = [
-        m.realJid,
-        m.key?.senderPn,
-        m.key?.participantPn,
-        m.key?.senderAlt,
-        m.key?.participantAlt,
-        raw
-      ].filter(Boolean);
-
-      for (const jid of pnFields) {
-        if (isUser(jid)) {
-          realJid = cleanUserJid(jid);
-          break;
-        }
-      }
-
-      const lidFields = [
-        m.realLid,
-        m.realJid,
-        m.key?.senderLid,
-        m.key?.participantLid,
-        raw
-      ].filter(Boolean);
-
-      for (const jid of lidFields) {
-        if (isLid(jid)) {
-          lidSender = cleanLidJid(jid);
-          break;
-        }
-      }
-
-      try {
-        if (global.lidMap instanceof Map) {
-          if (lidSender && !realJid) {
-            const pn = global.lidMap.get(lidSender);
-            if (isUser(pn)) realJid = cleanUserJid(pn);
-          }
-
-          if (realJid && !lidSender) {
-            const lid = global.lidMap.get(realJid);
-            if (isLid(lid)) lidSender = cleanLidJid(lid);
-          }
-        }
-      } catch {}
-
-      try {
-        if (lidSender && !realJid) {
-          const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(lidSender);
-          if (isUser(pn)) {
-            realJid = cleanUserJid(pn);
-
-            if (global.lidMap instanceof Map) {
-              global.lidMap.set(lidSender, realJid);
-              global.lidMap.set(realJid, lidSender);
-            }
-          }
-        }
-      } catch {}
-
-      try {
-        if (realJid && !lidSender) {
-          const lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(realJid);
-          if (isLid(lid)) {
-            lidSender = cleanLidJid(lid);
-
-            if (global.lidMap instanceof Map) {
-              global.lidMap.set(realJid, lidSender);
-              global.lidMap.set(lidSender, realJid);
-            }
-          }
-        }
-      } catch {}
-
-      let baseNumber = realJid ? JIDNUM(realJid) : "";
-      let lidNumber = lidSender ? JIDNUM(lidSender) : "";
-
-      if (!baseNumber && isUser(raw)) baseNumber = JIDNUM(raw);
-      if (!lidNumber && isLid(raw)) lidNumber = JIDNUM(raw);
-
-      if (!baseNumber && m.realNumber && isUser(m.realJid)) {
-        baseNumber = DIGITS(m.realNumber);
-      }
-
-      if (!lidNumber && m.realNumber && (isLid(m.realJid) || isLid(m.realLid) || isLid(raw))) {
-        lidNumber = DIGITS(m.realNumber);
-      }
-
-      const zeroNumber = baseNumber ? addZero(baseNumber) : "";
-
-      const keys = [];
-
-      if (baseNumber) keys.push(baseNumber);
-      if (zeroNumber && zeroNumber !== baseNumber) keys.push(zeroNumber);
-      if (lidNumber && lidNumber !== baseNumber && lidNumber !== zeroNumber) keys.push(lidNumber);
-
-      const rawNumber = JIDNUM(raw);
-      if (!keys.length && rawNumber) keys.push(rawNumber);
-
-      return [...new Set(keys)];
-    }
-
-    if (isGroup) {
-      const welcomeData = readJson(swFile, {});
-
-      welcomeData[chatId] = welcomeData[chatId] || {};
-      welcomeData[chatId].chatCount = welcomeData[chatId].chatCount || {};
-
-      const keys = await getSenderChatKeys();
-
-      if (keys.length) {
-        let current = 0;
-
-        for (const key of keys) {
-          const val = Number(welcomeData[chatId].chatCount[key] || 0);
-          if (val > current) current = val;
-        }
-
-        const next = current + 1;
-
-        for (const key of keys) {
-          welcomeData[chatId].chatCount[key] = next;
-        }
-
-        writeJson(swFile, welcomeData);
-      }
-    }
-  } catch (e) {
-    console.error(`❌ [subbot ${number}] Error en conteo de mensajes en setwelcome.json:`, e);
-  }
-  // === ✅ FIN CONTEO DE MENSAJES EN setwelcome.json PN / LID ===
 
   // === 👮 MODOADMINS: solo responde a admins y al mismo subbot ===
   // (va al final, como en el index.js principal, para que la moderación
@@ -1838,6 +1864,16 @@ async function connectSubbot(num, entry) {
 
   sock.ev.on("messages.upsert", async ({ messages }) => {
     const m = messages?.[0];
+
+    // Conteo de mensajes (totalchat/fantasmas/fankick): directo en el
+    // evento, ANTES de cualquier filtro del pipeline, igual que en el
+    // index.js del bot principal.
+    try {
+      await countSubMessage(sock, num, m);
+    } catch (e) {
+      console.error(chalk.red(`❌ [subbot ${num}] Error en conteo:`), e);
+    }
+
     try {
       await handleSubMessage(sock, num, m);
     } catch (e) {
