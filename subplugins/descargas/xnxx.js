@@ -61,6 +61,18 @@ function isSupportedUrl(u) {
 // Jobs pendientes por ID del mensaje preview
 const pendingXNXX = Object.create(null);
 
+// Todos los subbots comparten este módulo (mismo proceso Node): cada trabajo
+// se marca con el subbot que lo creó y solo ese subbot lo procesa.
+const __owner = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
+const __mio = (conn, id) => {
+  const j = pendingXNXX[id];
+  return j && j.__own === __owner(conn) ? j : undefined;
+};
+
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no se les mandan botones, se les da la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 async function react(conn, chatId, key, emoji) {
   try { await conn.sendMessage(chatId, { react: { text: emoji, key } }); } catch {}
 }
@@ -185,6 +197,7 @@ const handler = async (msg, { conn, args }) => {
     const fileBase = safeFileBase(title, "xnxx");
 
     pendingXNXX[preview.key.id] = {
+    __own: __owner(conn),
       chatId,
       url: d.video,
       fileBase,
@@ -221,7 +234,7 @@ const handler = async (msg, { conn, args }) => {
             // --- Reacciones (👍 / ❤️) al preview ---
             if (m.message?.reactionMessage) {
               const { key: reactKey, text: emoji } = m.message.reactionMessage;
-              const job = pendingXNXX[reactKey.id];
+              const job = __mio(conn, reactKey.id);
               if (!job) continue;
               if (job.chatId !== m.key.remoteJid) continue;
 
@@ -245,8 +258,8 @@ const handler = async (msg, { conn, args }) => {
                 m.message?.extendedTextMessage?.text ||
                 "").trim();
 
-            if (replyTo && pendingXNXX[replyTo]) {
-              const job = pendingXNXX[replyTo];
+            if (replyTo && __mio(conn, replyTo)) {
+              const job = __mio(conn, replyTo);
               if (job.chatId !== m.key.remoteJid) continue;
 
               if (body !== "1" && body !== "2") continue;

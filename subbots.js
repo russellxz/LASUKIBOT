@@ -2208,6 +2208,20 @@ vincular desde WhatsApp → *Dispositivos vinculados*.
       requestPairing: true,
       onPairingCode: async (code) => {
         const fmt = String(code).match(/.{1,4}/g)?.join("-") || code;
+
+        // 🍎 Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres:
+        // a esos usuarios no les salen los botones, así que se les manda la
+        // versión sin botón (el código va en el texto para copiarlo a mano).
+        const desdeIphone = /^3A.{18}$/.test(String(msg?.key?.id || ""));
+
+        const pasoCopiar = desdeIphone
+          ? `5️⃣ Escribe el *código de 8 dígitos* de arriba
+   (mantén presionado el código para copiarlo):
+
+\`\`\`${String(code)}\`\`\``
+          : `5️⃣ Escribe el *código de 8 dígitos* de arriba
+   (usa el botón 📋 para copiarlo).`;
+
         const texto = `
 ╭━━━━━━━━━━━━━━━━━━╮
    ❦ 𝑺𝑼𝑲𝑰 𝑺𝑼𝑩𝑩𝑶𝑻𝑺 ❦
@@ -2224,29 +2238,28 @@ vincular desde WhatsApp → *Dispositivos vinculados*.
 2️⃣ Ve a *Ajustes* → *Dispositivos vinculados*.
 3️⃣ Toca *Vincular un dispositivo*.
 4️⃣ Elige *Vincular con el número de teléfono*.
-5️⃣ Escribe el *código de 8 dígitos* de arriba
-   (usa el botón 📋 para copiarlo).
+${pasoCopiar}
 
 ⏳ Tienes *5 minutos* para completar la vinculación.
 🎥 Mira el video si tienes dudas.`.trim();
 
-        // 🎬 UN SOLO MENSAJE: video + explicación + código + botón de copiar
+        // 🎬 UN SOLO MENSAJE: video + explicación + código
+        // (+ botón de copiar solo si NO es iPhone)
         try {
-          await conn.sendMessage(
-            chatId,
-            {
-              video: { url: CODE_VIDEO },
-              caption: texto,
-              footer: "❦ Suki Subbots ❦",
-              nativeFlow: [
-                {
-                  text: "📋 Copiar código",
-                  copy: String(code)
-                }
-              ]
-            },
-            { quoted: msg }
-          );
+          const contenido = {
+            video: { url: CODE_VIDEO },
+            caption: texto,
+            footer: "❦ Suki Subbots ❦"
+          };
+          if (!desdeIphone) {
+            contenido.nativeFlow = [
+              {
+                text: "📋 Copiar código",
+                copy: String(code)
+              }
+            ];
+          }
+          await conn.sendMessage(chatId, contenido, { quoted: msg });
         } catch (e) {
           console.log("[subbots] Mensaje interactivo falló, usando fallback:", e.message);
           await conn.sendMessage(

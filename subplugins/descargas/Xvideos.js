@@ -16,6 +16,18 @@ const MAX_TIMEOUT = 60000;
 // Jobs pendientes
 const pendingXV = Object.create(null);
 
+// Todos los subbots comparten este módulo (mismo proceso Node): cada trabajo
+// se marca con el subbot que lo creó y solo ese subbot lo procesa.
+const __owner = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
+const __mio = (conn, id) => {
+  const j = pendingXV[id];
+  return j && j.__own === __owner(conn) ? j : undefined;
+};
+
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no se les mandan botones, se les da la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 // ---- helpers ----
 function safeFileBase(title, def = "xvideos") {
   const base = String(title || def).slice(0, 70);
@@ -280,6 +292,7 @@ Elige cómo enviarlo:
 
     // Guardar job
     pendingXV[preview.key.id] = {
+    __own: __owner(conn),
       chatId,
       urls: { proxy: d.proxy, direct: d.direct },
       caption:
@@ -311,7 +324,7 @@ Elige cómo enviarlo:
             // A) REACCIONES 👍 / ❤️
             if (m.message?.reactionMessage) {
               const { key: reactKey, text: emoji } = m.message.reactionMessage;
-              const job = pendingXV[reactKey.id];
+              const job = __mio(conn, reactKey.id);
               if (!job) continue;
               if (job.chatId !== m.key.remoteJid) continue;
               if (emoji !== "👍" && emoji !== "❤️") continue;
@@ -328,8 +341,8 @@ Elige cómo enviarlo:
             const ctx = m.message?.extendedTextMessage?.contextInfo;
             const replyTo = ctx?.stanzaId;
 
-            if (replyTo && pendingXV[replyTo]) {
-              const job = pendingXV[replyTo];
+            if (replyTo && __mio(conn, replyTo)) {
+              const job = __mio(conn, replyTo);
               if (job.chatId !== m.key.remoteJid) continue;
 
               const textLow = String(

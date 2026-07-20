@@ -24,6 +24,18 @@ const DEFAULT_QUALITY = "360";
 // Almacena trabajos pendientes para la interactividad
 const pendingYTV = Object.create(null);
 
+// Todos los subbots comparten este módulo (mismo proceso Node): cada trabajo
+// se marca con el subbot que lo creó y solo ese subbot lo procesa.
+const __owner = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
+const __mio = (conn, id) => {
+  const j = pendingYTV[id];
+  return j && j.__own === __owner(conn) ? j : undefined;
+};
+
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no se les mandan botones, se les da la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 function isYouTube(u = "") {
   return /^https?:\/\//i.test(u) && /(youtube\.com|youtu\.be|music\.youtube\.com)/i.test(u);
 }
@@ -124,6 +136,7 @@ O responde 1 (Video) / 2 (Doc)`;
 
     // Guardamos la tarea pendiente
     pendingYTV[sentMsg.key.id] = {
+    __own: __owner(conn),
       chatId,
       url,
       quality: chosenQ,
@@ -140,7 +153,7 @@ O responde 1 (Video) / 2 (Doc)`;
             // 1. Detección de Reacciones (👍 / ❤️)
             if (m.message?.reactionMessage) {
               const { key: reactedKey, text: emoji } = m.message.reactionMessage;
-              const job = pendingYTV[reactedKey.id];
+              const job = __mio(conn, reactedKey.id);
               if (!job) continue;
 
               if (emoji === "👍" || emoji === "❤️") {
@@ -152,8 +165,8 @@ O responde 1 (Video) / 2 (Doc)`;
 
             // 2. Detección de Respuestas de Texto (1 / 2)
             const ctx = m.message?.extendedTextMessage?.contextInfo;
-            if (ctx?.stanzaId && pendingYTV[ctx.stanzaId]) {
-                const job = pendingYTV[ctx.stanzaId];
+            if (ctx?.stanzaId && __mio(conn, ctx.stanzaId)) {
+                const job = __mio(conn, ctx.stanzaId);
                 const text = (m.message.conversation || m.message.extendedTextMessage.text || "").trim();
                 
                 if (text === "1" || text === "2") {
