@@ -37,6 +37,7 @@ const handler = async (msg, { conn }) => {
 │ ✦ ${pref}addgrupo / delgrupo
 │ ✦ ${pref}addlista / dellista
 │ ✦ ${pref}setprefix
+│ ✦ ${pref}reprefix
 │ ✦ ${pref}antideletepri on/off
 └───⟡
 
