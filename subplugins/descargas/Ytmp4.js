@@ -27,6 +27,18 @@ const ACTIVOSS_FILE = path.resolve("./activoss.json");
 
 const pending = {};
 
+// Todos los subbots comparten este módulo (mismo proceso Node): cada trabajo
+// se marca con el subbot que lo creó y solo ese subbot lo procesa.
+const __owner = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
+const __mio = (conn, id) => {
+  const j = pending[id];
+  return j && j.__own === __owner(conn) ? j : undefined;
+};
+
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no se les mandan botones, se les da la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 // ---------- utils ----------
 function safeName(name = "video") {
   return (
@@ -185,7 +197,7 @@ const handler = async (msg, { conn, args, command }) => {
   const chosenQuality = DEFAULT_VIDEO_QUALITY;
   const qualityLabel = chosenQuality === "4k" ? "4K" : `${chosenQuality}p`;
 
-  const usarBotones = botonesActivos();
+  const usarBotones = botonesActivos() && !esIphone(msg);
 
   // 🎨 Caption LIMPIO — solo explicación + marca de agua
   const caption = usarBotones
@@ -300,6 +312,7 @@ Cita este mensaje y escribe:
 
   // Guardar TODA la info para el caption final
   pending[preview.key.id] = {
+    __own: __owner(conn),
     chatId: msg.key.remoteJid,
     videoUrl: url,
     title,
@@ -324,7 +337,7 @@ Cita este mensaje y escribe:
         // 1) REACCIONES
         if (m.message?.reactionMessage) {
           const { key: reactKey, text: emoji } = m.message.reactionMessage;
-          const job = pending[reactKey.id];
+          const job = __mio(conn, reactKey.id);
           if (job) await handleReaction(conn, job, emoji, job.commandMsg);
           continue;
         }
@@ -363,11 +376,11 @@ Cita este mensaje y escribe:
             const ctxQuoted = m.message?.extendedTextMessage?.contextInfo?.stanzaId;
             let job = null;
 
-            if (ctxQuoted && pending[ctxQuoted]) {
-              job = pending[ctxQuoted];
+            if (ctxQuoted && __mio(conn, ctxQuoted)) {
+              job = __mio(conn, ctxQuoted);
             } else {
               const jobsInChat = Object.entries(pending)
-                .filter(([, j]) => j.chatId === m.key.remoteJid)
+                .filter(([, j]) => j.chatId === m.key.remoteJid && j.__own === __owner(conn))
                 .sort(([, a], [, b]) => (b._createdAt || 0) - (a._createdAt || 0));
               if (jobsInChat.length > 0) job = jobsInChat[0][1];
             }
@@ -386,7 +399,7 @@ Cita este mensaje y escribe:
           const context = m.message?.extendedTextMessage?.contextInfo;
           const citado = context?.stanzaId;
           const texto = String(m.message?.conversation || m.message?.extendedTextMessage?.text || "").trim().toLowerCase();
-          const job = pending[citado];
+          const job = __mio(conn, citado);
           const chatId = m.key.remoteJid;
 
           if (citado && job) {

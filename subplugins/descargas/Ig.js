@@ -23,6 +23,18 @@ const ACTIVOSS_FILE = path.resolve("./activoss.json");
 
 const pendingIG = Object.create(null);
 
+// Todos los subbots comparten este módulo (mismo proceso Node): cada trabajo
+// se marca con el subbot que lo creó y solo ese subbot lo procesa.
+const __owner = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
+const __mio = (conn, id) => {
+  const j = pendingIG[id];
+  return j && j.__own === __owner(conn) ? j : undefined;
+};
+
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no se les mandan botones, se les da la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 function mb(n) {
   return n / (1024 * 1024);
 }
@@ -436,9 +448,9 @@ function getTextMessage(m) {
   ).trim();
 }
 
-function findLatestJob(chatId) {
+function findLatestJob(conn, chatId) {
   const jobs = Object.entries(pendingIG)
-    .filter(([, j]) => j.chatId === chatId)
+    .filter(([, j]) => j.chatId === chatId && j.__own === __owner(conn))
     .sort(([, a], [, b]) => (b._createdAt || 0) - (a._createdAt || 0));
 
   return jobs.length ? jobs[0][1] : null;
@@ -492,7 +504,7 @@ ${pref}${command} https://www.instagram.com/reel/XXXX/`
 
     const title = getTitle(apiData);
     const thumb = getThumbnail(apiData, items);
-    const usarBotones = botonesActivos();
+    const usarBotones = botonesActivos() && !esIphone(msg);
 
     const totalVideos = items.filter(x => x.type === "video").length;
     const totalImages = items.filter(x => x.type === "image").length;
@@ -557,6 +569,7 @@ Cita este mensaje y escribe:
     const preview = await sendPreview(conn, chatId, msg, thumb, caption, usarBotones, pref);
 
     pendingIG[preview.key.id] = {
+    __own: __owner(conn),
       chatId,
       items,
       title,
@@ -583,7 +596,7 @@ Cita este mensaje y escribe:
             // ✅ REACCIONES
             if (m.message?.reactionMessage) {
               const { key: reactKey, text: emoji } = m.message.reactionMessage;
-              const job = pendingIG[reactKey.id];
+              const job = __mio(conn, reactKey.id);
 
               if (!job || job.chatId !== chatNow) continue;
               if (emoji !== "👍" && emoji !== "❤️") continue;
@@ -625,10 +638,10 @@ Cita este mensaje y escribe:
               const ctxQuoted = m.message?.extendedTextMessage?.contextInfo?.stanzaId;
               let job = null;
 
-              if (ctxQuoted && pendingIG[ctxQuoted]) {
-                job = pendingIG[ctxQuoted];
+              if (ctxQuoted && __mio(conn, ctxQuoted)) {
+                job = __mio(conn, ctxQuoted);
               } else {
-                job = findLatestJob(chatNow);
+                job = findLatestJob(conn, chatNow);
               }
 
               if (!job || job.isBusy) continue;
@@ -648,7 +661,7 @@ Cita este mensaje y escribe:
             const plainText = getTextMessage(m).toLowerCase();
 
             if (plainText.endsWith("ig_normal") || plainText.endsWith("ig_doc")) {
-              const job = findLatestJob(chatNow);
+              const job = findLatestJob(conn, chatNow);
               if (!job || job.isBusy) continue;
 
               await processSend(conn, job, plainText.endsWith("ig_doc"), m);
@@ -659,8 +672,8 @@ Cita este mensaje y escribe:
             const ctx = m.message?.extendedTextMessage?.contextInfo;
             const replyTo = ctx?.stanzaId;
 
-            if (replyTo && pendingIG[replyTo]) {
-              const job = pendingIG[replyTo];
+            if (replyTo && __mio(conn, replyTo)) {
+              const job = __mio(conn, replyTo);
               if (job.chatId !== chatNow) continue;
               if (job.isBusy) continue;
 

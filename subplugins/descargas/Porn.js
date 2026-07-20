@@ -17,6 +17,18 @@ const ENDPOINT = "/phfans";
 const MAX_MB = 200;
 const pendingPORN = Object.create(null);
 
+// Todos los subbots comparten este módulo (mismo proceso Node): cada trabajo
+// se marca con el subbot que lo creó y solo ese subbot lo procesa.
+const __owner = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
+const __mio = (conn, id) => {
+  const j = pendingPORN[id];
+  return j && j.__own === __owner(conn) ? j : undefined;
+};
+
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no se les mandan botones, se les da la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 function isUrl(u = "") {
   return /^https?:\/\//i.test(String(u || ""));
 }
@@ -321,6 +333,7 @@ const handler = async (msg, { conn, args, command }) => {
   }
 
   pendingPORN[preview.key.id] = {
+    __own: __owner(conn),
     chatId,
     quotedBase: msg,
     title,
@@ -345,7 +358,7 @@ const handler = async (msg, { conn, args, command }) => {
           // Reacciones (👍/❤️) al preview
           if (m.message?.reactionMessage) {
             const { key: reactKey, text: emoji } = m.message.reactionMessage;
-            const job = pendingPORN[reactKey.id];
+            const job = __mio(conn, reactKey.id);
             if (!job || job.chatId !== m.key.remoteJid) continue;
             if (emoji !== "👍" && emoji !== "❤️") continue;
             await sendPorn(conn, job, emoji === "❤️", m);
@@ -354,8 +367,8 @@ const handler = async (msg, { conn, args, command }) => {
 
           // Respuestas al preview
           const ctx = m.message?.extendedTextMessage?.contextInfo;
-          if (ctx?.stanzaId && pendingPORN[ctx.stanzaId]) {
-            const job = pendingPORN[ctx.stanzaId];
+          if (ctx?.stanzaId && __mio(conn, ctx.stanzaId)) {
+            const job = __mio(conn, ctx.stanzaId);
             if (!job || job.chatId !== m.key.remoteJid) continue;
 
             const body = String(

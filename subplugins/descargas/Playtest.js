@@ -18,6 +18,18 @@ const API_KEY  = process.env.API_KEY  || "Russellxz"; // <-- tu API Key
 // Almacena tareas pendientes por previewMessageId
 const pending = {};
 
+// Todos los subbots comparten este módulo (mismo proceso Node): cada trabajo
+// se marca con el subbot que lo creó y solo ese subbot lo procesa.
+const __owner = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
+const __mio = (conn, id) => {
+  const j = pending[id];
+  return j && j.__own === __owner(conn) ? j : undefined;
+};
+
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no se les mandan botones, se les da la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 // Utilidad: descarga a disco y devuelve ruta
 async function downloadToFile(url, filePath) {
   const res = await axios.get(url, { responseType: "stream" });
@@ -103,6 +115,7 @@ const handler = async (msg, { conn, text }) => {
 
   // guarda trabajo
   pending[preview.key.id] = {
+    __own: __owner(conn),
     chatId: msg.key.remoteJid,
     videoUrl,
     title,
@@ -123,7 +136,7 @@ const handler = async (msg, { conn, text }) => {
         // 1) REACCIONES
         if (m.message?.reactionMessage) {
           const { key: reactKey, text: emoji } = m.message.reactionMessage;
-          const job = pending[reactKey.id];
+          const job = __mio(conn, reactKey.id);
           if (job) {
             await handleDownload(conn, job, emoji, job.commandMsg);
           }
@@ -138,7 +151,7 @@ const handler = async (msg, { conn, text }) => {
             m.message?.extendedTextMessage?.text?.toLowerCase() ||
             ""
           ).trim();
-          const job = pending[citado];
+          const job = __mio(conn, citado);
           const chatId = m.key.remoteJid;
           if (citado && job) {
             // AUDIO
