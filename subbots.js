@@ -1351,7 +1351,15 @@ export async function handleSubMessage(sock, number, m) {
     ? sock.subPrefixes
     : DEFAULT_SUB_PREFIXES;
 
-  const prefixUsed = prefixes.find((p) => p && messageContent.startsWith(p));
+  let prefixUsed = prefixes.find((p) => p && messageContent.startsWith(p));
+
+  // 🆘 RESCATE: "reprefix" funciona SIEMPRE con . # / (prefijos de fábrica)
+  // aunque el subbot tenga otro prefijo configurado, por si el dueño olvidó
+  // cuál puso y quiere restablecerlo.
+  if (!prefixUsed && /^[.#/](reprefix|resetprefix)\s*$/i.test(messageContent.trim())) {
+    prefixUsed = messageContent.trim()[0];
+  }
+
   if (!prefixUsed) return;
 
   const command = messageContent.slice(prefixUsed.length).trim().split(" ")[0].toLowerCase();
