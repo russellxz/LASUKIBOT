@@ -23,6 +23,10 @@ const fmtSec = (s) => {
   return (h ? `${h}:` : "") + `${m.toString().padStart(2,"0")}:${sec.toString().padStart(2,"0")}`;
 };
 
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no les salen los botones, se les manda la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 function botonesActivos() {
   const defaultCfg = { botones: true, updatedAt: null, updatedBy: null };
   if (!fs.existsSync(ACTIVOSS_FILE)) {
@@ -105,7 +109,7 @@ Ej: ${pref}${command} https://vm.tiktok.com/xxxxxx/`
     const likes   = d.likes ?? 0;
     const comments= d.comments ?? 0;
 
-    const usarBotones = botonesActivos();
+    const usarBotones = botonesActivos() && !esIphone(msg);
 
     // 🎨 Caption LIMPIO — solo explicación + marca de agua
     const caption = usarBotones

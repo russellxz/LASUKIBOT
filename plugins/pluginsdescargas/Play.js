@@ -53,6 +53,10 @@ function ensureTmp() {
   return tmp;
 }
 
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no les salen los botones, se les manda la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 function botonesActivos() {
   const defaultCfg = { botones: true, updatedAt: null, updatedBy: null };
 
@@ -348,7 +352,7 @@ const handler = async (msg, { conn, text }) => {
   const chosenQuality = VALID_QUALITIES.has(quality) ? quality : DEFAULT_VIDEO_QUALITY;
   const qualityLabel = chosenQuality === "4k" ? "4K" : `${chosenQuality}p`;
 
-  const usarBotones = botonesActivos();
+  const usarBotones = botonesActivos() && !esIphone(msg);
 
   const caption = usarBotones
     ? `

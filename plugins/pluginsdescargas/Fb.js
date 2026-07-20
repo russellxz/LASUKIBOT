@@ -19,6 +19,10 @@ const ACTIVOSS_FILE = path.resolve("./activoss.json");
 const pendingFB = Object.create(null);
 const mb = (n) => n / (1024 * 1024);
 
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: a esos
+// usuarios no les salen los botones, se les manda la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
 function botonesActivos() {
   const defaultCfg = { botones: true, updatedAt: null, updatedBy: null };
   if (!fs.existsSync(ACTIVOSS_FILE)) {
@@ -137,7 +141,7 @@ const handler = async (msg, { conn, args, command }) => {
     const title = result?.title || "Facebook Video";
     const thumb = result?.thumbnail || result?.image || "";
 
-    const usarBotones = botonesActivos();
+    const usarBotones = botonesActivos() && !esIphone(msg);
 
     // 🎨 Caption LIMPIO — solo explicación + marca de agua
     const caption = usarBotones
