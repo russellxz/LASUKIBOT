@@ -1449,6 +1449,7 @@ export function stopSubbot(number, { wipe = false } = {}) {
     entry.stopped = true;
     clearTimeout(entry.pairingTimer);
     clearTimeout(entry.reconnectTimer);
+    clearInterval(entry.presenceTimer);
     try {
       entry.sock?.ev?.removeAllListeners?.();
       entry.sock?.end?.();
@@ -1629,6 +1630,7 @@ export async function startSubbot(number, opts = {}) {
     opts,
     pairingTimer: null,
     reconnectTimer: null,
+    presenceTimer: null,
     notifiedConnect: false
   };
   subbots.set(num, entry);
@@ -1890,6 +1892,22 @@ async function connectSubbot(num, entry) {
       clearTimeout(entry.pairingTimer);
       console.log(chalk.green(`✅ [subbot ${num}] Conectado.`));
 
+      // 🕶️ NO aparecer "en línea": mandar presencia "unavailable" al conectar.
+      // El fork ignora la presencia si creds.me.name está vacío (pasa en
+      // subbots recién vinculados), así que se le pone un nombre de respaldo.
+      // Se re-afirma cada 5 minutos por si algo la resetea; así el usuario
+      // solo sale en línea cuando ÉL abre su WhatsApp.
+      const goOffline = async () => {
+        try {
+          const me = sock.authState?.creds?.me;
+          if (me && !me.name) me.name = sock.user?.name || "Suki Subbot";
+          await sock.sendPresenceUpdate("unavailable");
+        } catch {}
+      };
+      setTimeout(goOffline, 2000);
+      clearInterval(entry.presenceTimer);
+      entry.presenceTimer = setInterval(goOffline, 5 * 60 * 1000);
+
       // Persistir tiempo de conexión (no se reinicia con el servidor)
       // y el nombre del usuario (para el comando "bots")
       const cfg2 = getSubConfig(num);
@@ -1942,6 +1960,7 @@ async function connectSubbot(num, entry) {
 
     if (connection === "close") {
       entry.status = "close";
+      clearInterval(entry.presenceTimer);
       const codeErr =
         lastDisconnect?.error?.output?.statusCode ||
         lastDisconnect?.error?.output?.payload?.statusCode ||
