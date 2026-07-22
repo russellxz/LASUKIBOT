@@ -14,7 +14,7 @@
   "license": "ISC",
   "engines": { "node": ">=20.0.0" },
   "dependencies": {
-    "@whiskeysockets/baileys": "github:itsliaaa/baileys",
+    "@whiskeysockets/baileys": "github:russellxz/ultra-baileys",
     "@hapi/boom": "^10.0.1",
     "@hiudyy/ytdl": "^0.2.3",
     "acrcloud": "^1.4.0",
