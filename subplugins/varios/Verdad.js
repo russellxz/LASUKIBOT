@@ -1,5 +1,5 @@
 
-import '../config.js'; // 🔁 Asegura cargar el archivo donde están los arrays
+import '../../config.js'; // 🔁 Cargar config.js (raíz del bot) donde están los arrays
 
 function pickRandom(list) {
   return list[Math.floor(Math.random() * list.length)];

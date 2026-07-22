@@ -1,5 +1,5 @@
 
-import '../config.js'; // 🔁 Cargar config.js para acceder a global.reto
+import '../../config.js'; // 🔁 Cargar config.js (raíz del bot) para acceder a global.reto
 
 function pickRandom(list) {
   return list[Math.floor(Math.random() * list.length)];
