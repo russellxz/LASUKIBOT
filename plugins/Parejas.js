@@ -55,7 +55,7 @@ const handler = async (msg, { conn }) => {
 
     let imageBuffer = null;
     try {
-      const response = await axios.get("https://cdn.dorratz.com/files/1741340936306.jpg", { responseType: "arraybuffer" });
+      const response = await axios.get("https://cdn.russellxz.click/5886d88b.jpg", { responseType: "arraybuffer" });
       imageBuffer = Buffer.from(response.data);
     } catch (e) {
       console.error("❌ Error al descargar imagen de pareja:", e);

@@ -47,7 +47,7 @@ const handler = async (msg, { conn }) => {
 
     msgTexto += "📊 *Datos generados aleatoriamente. ¿Lo representa?* 🤔\n\n────────────\n🤖 _La Suki Bot_";
 
-    let profilePic = "https://cdn.dorratz.com/files/1741338863359.jpg";
+    let profilePic = "https://cdn.russellxz.click/7427a830.jpg";
     try {
       profilePic = await conn.profilePictureUrl(userId, "image");
     } catch {}
