@@ -146,8 +146,63 @@ async function descargar(conn, nodo, tipo) {
   return buffer;
 }
 
-const responder = (conn, msg, texto) =>
-  conn.sendMessage(msg.key.remoteJid, { text: texto }, { quoted: msg }).catch(() => {});
+// ⚠️ En los subbots el dueño escribe desde su MISMO número, así que sus
+// mensajes llegan con fromMe = true... igual que los que manda el propio bot.
+// Para no confundirlos (el bot se respondía a sí mismo y guardaba su propio
+// texto como nombre), guardamos los IDs de todo lo que enviamos y los saltamos.
+const idsPropios = new Set();
+
+function recordarPropio(res) {
+  const id = res?.key?.id;
+  if (!id) return res;
+  idsPropios.add(id);
+  if (idsPropios.size > 400) {
+    // Mantener el set acotado: borrar los más viejos
+    const it = idsPropios.values();
+    for (let i = 0; i < 200; i++) idsPropios.delete(it.next().value);
+  }
+  return res;
+}
+
+// Textos con los que empiezan nuestros propios avisos: segunda barrera por si
+// el eco llega sin ID (o lo reenvía otro dispositivo vinculado).
+const MARCAS_PROPIAS = [
+  "🎨 *PERSONALIZACIÓN",
+  "🖼️ *Envía ahora",
+  "🎯 *¿A qué menú",
+  "✏️ *Escribe el nombre",
+  "📸 *Envía ahora",
+  "👀 *TU PERSONALIZACIÓN",
+  "⚠️ *¿SEGURO",
+  "✅ *Diseño aplicado",
+  "✅ *Media guardada",
+  "✅ *Nombre guardado",
+  "✅ *Foto de perfil",
+  "✅ *Personalización borrada",
+  "🚪 Personalización cancelada",
+  "🚪 Cancelado.",
+  "⚠️ Eso no es una imagen",
+  "⚠️ Escribe un nombre válido",
+  "⚠️ Número inválido",
+  "⚠️ Envía una *imagen*",
+  "❌ No se pudo",
+  "❌ El archivo pesa",
+  "❌ La media llegó",
+  "❌ Ese diseño no existe",
+  "ℹ️ No tienes ninguna personalización",
+  "ℹ️ No había nada que borrar"
+];
+
+const esTextoPropio = (t) =>
+  MARCAS_PROPIAS.some((m) => String(t || "").startsWith(m));
+
+async function responder(conn, msg, texto) {
+  try {
+    return recordarPropio(
+      await conn.sendMessage(msg.key.remoteJid, { text: texto }, { quoted: msg })
+    );
+  } catch {}
+}
 
 const reaccionar = (conn, msg, emoji) =>
   conn.sendMessage(msg.key.remoteJid, { react: { text: emoji, key: msg.key } }).catch(() => {});
@@ -499,11 +554,19 @@ function registrarListener(conn, puedeUsar) {
       try {
         if (!m?.message) continue;
 
+        // 🚫 Nunca tomar como respuesta un mensaje que enviamos nosotros
+        // (en subbots el dueño también es fromMe, por eso se comprueba el ID
+        // y además el texto con el que empiezan nuestros avisos).
+        if (m.key?.id && idsPropios.has(m.key.id)) continue;
+
         // Solo atendemos a quien tiene permiso (owner / el propio subbot)
         if (!puedeUsar(m, conn)) continue;
 
+        const textoCrudo = textoDe(m);
+        if (esTextoPropio(textoCrudo)) continue;
+
         const pend = getPendiente(conn, m);
-        const texto = textoDe(m).toLowerCase();
+        const texto = textoCrudo.toLowerCase();
 
         // Cancelar en cualquier paso
         if (pend && (texto === "cancelar" || texto === "cancel")) {
@@ -642,11 +705,11 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
 
   // iPhone: sin botones, con opciones numeradas
   if (esIphone(msg)) {
-    return conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg });
+    return recordarPropio(await conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg }));
   }
 
   try {
-    return await conn.sendMessage(
+    return recordarPropio(await conn.sendMessage(
       chatId,
       {
         text: cabecera,
@@ -655,10 +718,10 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
         headerType: 1
       },
       { quoted: msg }
-    );
+    ));
   } catch (e) {
     console.log("[setmenu] Botones fallaron, usando texto:", e.message);
-    return conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg });
+    return recordarPropio(await conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg }));
   }
 }
 
@@ -688,11 +751,11 @@ export async function abrirDelmenu(msg, conn, { puedeUsar } = {}) {
     `Responde *confirmar* para borrar o *cancelar* para dejarlo así.`;
 
   if (esIphone(msg)) {
-    return conn.sendMessage(chatId, { text: aviso }, { quoted: msg });
+    return recordarPropio(await conn.sendMessage(chatId, { text: aviso }, { quoted: msg }));
   }
 
   try {
-    return await conn.sendMessage(
+    return recordarPropio(await conn.sendMessage(
       chatId,
       {
         text: aviso,
@@ -724,9 +787,9 @@ export async function abrirDelmenu(msg, conn, { puedeUsar } = {}) {
         headerType: 1
       },
       { quoted: msg }
-    );
+    ));
   } catch {
-    return conn.sendMessage(chatId, { text: aviso }, { quoted: msg });
+    return recordarPropio(await conn.sendMessage(chatId, { text: aviso }, { quoted: msg }));
   }
 }
 

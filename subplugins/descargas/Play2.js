@@ -1,4 +1,4 @@
-import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
+import { cabeceraDescarga, camposDescarga, pieDescarga, getMarca } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -206,7 +206,7 @@ const handler = async (msg, { conn, text }) => {
     return conn.sendMessage(msg.key.remoteJid, { text: "❌ Sin resultados." }, { quoted: msg });
   }
 
-  const { url: videoUrl, title, timestamp: duration, views, author, thumbnail } = video;
+  const { url: videoUrl, title, timestamp: duration, views, author, thumbnail, ago } = video;
   const viewsFmt = (views || 0).toLocaleString();
   const authorName = author?.name || author || "Desconocido";
   const chosenQuality = VALID_QUALITIES.has(quality) ? quality : DEFAULT_VIDEO_QUALITY;
@@ -214,10 +214,22 @@ const handler = async (msg, { conn, text }) => {
 
   const usarBotones = botonesActivos() && !esIphone(msg);
 
+  // Ficha con la info del resultado (va UNA sola vez, aquí)
+  const fichaInfo = camposDescarga(conn, [
+    ["Título", title],
+    ["Canal", authorName],
+    ["Duración", duration],
+    ["Vistas", viewsFmt],
+    ["Publicado", ago],
+    ["Enlace", videoUrl]
+  ]);
+
   // 🎨 Caption LIMPIO — solo explicación + marca de agua
   const caption = usarBotones
     ? `
-${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
+${cabeceraDescarga(conn, "🎬 RESULTADO ENCONTRADO")}
+
+${fichaInfo}
 
 🟢 *OPCIÓN 1 — Menú de Botones*
 Toca el botón *📥 Menú de descarga* abajo del mensaje. Se abrirá una lista con todas las opciones de audio y video en distintas calidades.
@@ -225,7 +237,9 @@ Toca el botón *📥 Menú de descarga* abajo del mensaje. Se abrirá una lista 
 ${pieDescarga(conn)}
 `.trim()
     : `
-${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
+${cabeceraDescarga(conn, "🎬 RESULTADO ENCONTRADO")}
+
+${fichaInfo}
 
 🟡 *OPCIÓN 1 — Reaccionar*
 Reacciona con un emoji:
