@@ -45,6 +45,7 @@ const __jobDe = (conn, id) => {
 // de reacciones/números.
 const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
 
+
 // ---------- utils ----------
 function safeName(name = "file") {
   return (

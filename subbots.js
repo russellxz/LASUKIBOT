@@ -16,7 +16,7 @@ import path from "path";
 import { pathToFileURL } from "url";
 import pino from "pino";
 import chalk from "chalk";
-import { canal } from "./disenos.js";
+import { canal, limpiarRespuestaBoton } from "./disenos.js";
 
 const SUB_ROOT = path.resolve("./subbots");
 const SESSIONS_DIR = path.join(SUB_ROOT, "sessions");
@@ -1900,6 +1900,11 @@ async function connectSubbot(num, entry) {
 
   sock.ev.on("messages.upsert", async ({ messages }) => {
     const m = messages?.[0];
+
+    // 🧹 Igual que en el bot principal: quitar del chat la respuesta que
+    // genera el teléfono al tocar un botón (los demás la ven como
+    // "mensaje no compatible").
+    limpiarRespuestaBoton(sock, m);
 
     // Conteo de mensajes (totalchat/fantasmas/fankick): directo en el
     // evento, ANTES de cualquier filtro del pipeline, igual que en el

@@ -40,6 +40,7 @@ const __mio = (conn, id) => {
 // usuarios no se les mandan botones, se les da la versión de reacciones/números.
 const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
 
+
 // ---------- utils ----------
 function safeName(name = "video") {
   return (

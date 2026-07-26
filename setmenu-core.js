@@ -86,6 +86,7 @@ function limpiarViejos() {
 // Los mensajes de iPhone tienen ID "3A" + 18 caracteres: ahí no salen botones
 const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
 
+
 function desenvolver(m) {
   let n = m;
   while (

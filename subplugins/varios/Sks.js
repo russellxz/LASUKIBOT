@@ -55,6 +55,11 @@ function randomFileName(ext) {
   return `${Crypto.randomBytes(6).toString("hex")}.${ext}`;
 }
 
+// Los mensajes enviados desde iPhone tienen ID "3A" + 18 caracteres: ahí no
+// salen los botones, se usa la versión de reacciones/números.
+const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
+
+
 function botonesActivos() {
   const defaultCfg = { botones: true, updatedAt: null, updatedBy: null };
   if (!fs.existsSync(ACTIVOSS_FILE)) {
@@ -557,7 +562,7 @@ const handler = async (msg, { conn, wa }) => {
   }
 
   const senderName = msg.pushName || "Usuario";
-  const usarBotones = botonesActivos();
+  const usarBotones = botonesActivos() && !esIphone(msg);
 
   // Lista numerada (para OFF)
   const efectosEntries = Object.entries(EFECTOS);

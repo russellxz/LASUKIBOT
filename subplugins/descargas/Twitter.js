@@ -31,6 +31,7 @@ const __mio = (conn, id) => {
 // usuarios no se les mandan botones, se les da la versión de reacciones/números.
 const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
 
+
 function botonesActivos() {
   const defaultCfg = { botones: true, updatedAt: null, updatedBy: null };
   if (!fs.existsSync(ACTIVOSS_FILE)) {
