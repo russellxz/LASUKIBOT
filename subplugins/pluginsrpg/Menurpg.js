@@ -1,123 +1,109 @@
+// subplugins/pluginsrpg/Menurpg.js — Menú del sistema RPG del subbot.
+// El diseño, la imagen/video y el nombre salen de la personalización del
+// propio subbot (comando setmenu).
+import { enviarMenu } from "../../disenos.js";
+
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
-  const pref = (global?.prefixes?.[0]) || (global?.prefix) || ".";
+  // Prefijo propio del subbot (antes usaba el del bot principal)
+  const p =
+    (Array.isArray(conn?.subPrefixes) && conn.subPrefixes[0]) ||
+    global?.prefixes?.[0] ||
+    ".";
 
-  await conn.sendMessage2(chatId, { react: { text: "✨", key: msg.key } }, msg);
+  try { await conn.sendMessage(chatId, { react: { text: "✨", key: msg.key } }); } catch {}
 
-  const caption = `𖠺𝐿𝑎 𝑆𝑢𝑘𝑖 𝐵𝑜𝑡 — 𝙈𝙀𝙉𝙐 𝙍𝙋𝙂𖠺
+  await enviarMenu(conn, chatId, msg, "menurpg", {
+    titulo: "MENÚ RPG",
+    info: [
+      ["Prefijo actual", p],
+      ["Úsalo", "antes de cada comando"]
+    ],
+    secciones: [
+      {
+        titulo: "🧙 PERFIL",
+        items: [
+          `${p}rpg <Nombre Apellido Edad Fecha> — registrarte`,
+          `${p}nivel — ver tu progreso`,
+          `${p}nivelper — ver tu personaje principal`,
+          `${p}verper / ${p}verpersonajes — ver tus personajes`,
+          `${p}vermascotas / ${p}vermas — ver tus mascotas`,
+          `${p}saldo — ver tu saldo`
+        ]
+      },
+      {
+        titulo: "⚔️ PERSONAJE",
+        items: [
+          `${p}luchar`,
+          `${p}volar`,
+          `${p}enemigos`,
+          `${p}otromundo`,
+          `${p}otrouniverso`,
+          `${p}mododios`,
+          `${p}mododiablo`,
+          `${p}superpoder`,
+          `${p}poder`,
+          `${p}podermaximo`
+        ]
+      },
+      {
+        titulo: "🐾 MASCOTAS",
+        items: [
+          `${p}daragua`,
+          `${p}darcomida`,
+          `${p}darcariño`,
+          `${p}entrenar`,
+          `${p}cazar`,
+          `${p}pasear`,
+          `${p}presumir`,
+          `${p}supermascota`,
+          `${p}batallamascota / ${p}batallamas — retar`,
+          `${p}gomascota / ${p}gomas — aceptar`
+        ]
+      },
+      {
+        titulo: "🎌 BATALLA ANIME",
+        items: [
+          `${p}batallaanime / ${p}batallaani — retar (menciona o cita)`,
+          `${p}goani / ${p}goper — aceptar y pelear`
+        ]
+      },
+      {
+        titulo: "🥊 BATALLA DE USUARIOS",
+        items: [`${p}batallauser — retar`, `${p}gouser — aceptar y pelear`]
+      },
+      {
+        titulo: "💼 COMANDOS DE USUARIO",
+        items: [
+          `${p}minar`,
+          `${p}work`,
+          `${p}picar`,
+          `${p}correr`,
+          `${p}estudiar`,
+          `${p}claim`,
+          `${p}cofre`,
+          `${p}talar`,
+          `${p}cocinar`,
+          `${p}robar`
+        ]
+      },
+      {
+        titulo: "🛒 TIENDAS & BANCO",
+        items: [
+          `${p}tiendaper — tienda de personajes`,
+          `${p}tiendamascotas — tienda de mascotas`,
+          `${p}comprar — comprar personaje`,
+          `${p}comprarmas — comprar mascota`,
+          `${p}banco — ver/usar banco`,
+          `${p}tiendabank — ver opciones del banco`,
+          `${p}comprarbank — comprar/contratar en el banco`
+        ]
+      }
+    ],
+    nota: "Disfruta el mundo RPG. ¡Suerte, héroe! ⚔️"
+  });
 
-𖠁𝙋𝙍𝙀𝙁𝙄𝙅𝙊𖠁
-╭─────◆
-│๛ Prefijo actual: 『 ${pref} 』
-│๛ Úsalo antes de cada comando
-╰─────◆
-
-𖠁𝙋𝙀𝙍𝙁𝙄𝙇𖠁
-╭─────◆
-│๛ ${pref}rpg <Nombre Apellido Edad Fecha>
-│   — Registrarte en el RPG
-│๛ ${pref}nivel
-│   — Ver tu progreso
-│๛ ${pref}nivelper
-│   — Ver tu personaje principal
-│๛ ${pref}verper / ${pref}verpersonajes
-│   — Ver todos tus personajes
-│๛ ${pref}vermascotas / ${pref}vermas
-│   — Ver tus mascotas
-│๛ ${pref}saldo
-│   — Ver tu saldo
-╰─────◆
-
-𖠁𝙋𝙀𝙍𝙎𝙊𝙉𝘼𝙅𝙀𖠁
-╭─────◆
-│๛ ${pref}luchar
-│๛ ${pref}volar
-│๛ ${pref}enemigos
-│๛ ${pref}otromundo
-│๛ ${pref}otrouniverso
-│๛ ${pref}mododios
-│๛ ${pref}mododiablo
-│๛ ${pref}superpoder
-│๛ ${pref}poder
-│๛ ${pref}podermaximo
-╰─────◆
-
-𖠁𝙈𝘼𝙎𝘾𝙊𝙏𝘼𝙎𖠁
-╭─────◆
-│๛ ${pref}daragua
-│๛ ${pref}darcomida
-│๛ ${pref}darcariño
-│๛ ${pref}entrenar
-│๛ ${pref}cazar
-│๛ ${pref}pasear
-│๛ ${pref}presumir
-│๛ ${pref}supermascota
-│๛ ${pref}batallamascota / ${pref}batallamas  — Retar
-│๛ ${pref}gomascota / ${pref}gomas            — Aceptar
-╰─────◆
-
-𖠁𝘽𝘼𝙏𝘼𝙇𝙇𝘼 𝘼𝙉𝙄𝙈𝙀𖠁
-╭─────◆
-│๛ ${pref}batallaanime / ${pref}batallaani  — Retar (menciona o cita)
-│๛ ${pref}goani / ${pref}goper              — Aceptar y pelear
-╰─────◆
-
-𖠁𝘽𝘼𝙏𝘼𝙇𝙇𝘼 𝘿𝙀 𝙐𝙎𝙐𝘼𝙍𝙄𝙊𝙎𖠁
-╭─────◆
-│๛ ${pref}batallauser  — Retar (entre usuarios)
-│๛ ${pref}gouser       — Aceptar y pelear
-╰─────◆
-
-𖠁𝙐𝙎𝙐𝘼𝙍𝙄𝙊𝙎 𝘾𝙊𝙈𝘼𝙉𝘿𝙊𝙎𖠁
-╭─────◆
-│๛ ${pref}minar
-│๛ ${pref}work
-│๛ ${pref}picar
-│๛ ${pref}correr
-│๛ ${pref}estudiar
-│๛ ${pref}claim
-│๛ ${pref}cofre
-│๛ ${pref}talar
-│๛ ${pref}cocinar
-│๛ ${pref}robar
-╰─────◆
-
-𖠁𝙏𝙄𝙀𝙉𝘿𝘼𝙎 & 𝘽𝘼𝙉𝘾𝙊𖠁
-╭─────◆
-│๛ ${pref}tiendaper         — Tienda de personajes
-│๛ ${pref}tiendamascotas     — Tienda de mascotas
-│๛ ${pref}comprar           — Comprar personaje
-│๛ ${pref}comprarmas        — Comprar mascota
-│๛ ${pref}banco             — Ver/usar banco
-│๛ ${pref}tiendabank        — Ver opciones del banco
-│๛ ${pref}comprarbank       — Comprar/contratar en el banco
-╰─────◆
-
-𖠁𝘼𝘿𝙈𝙄𝙉𝙄𝙎𝙏𝙍𝘼𝘾𝙄𝙊́𝙉 𝙍𝙋𝙂 (OWNER)𖠁
-╭─────◆
-│๛ ${pref}addper        — Agregar personaje a un usuario
-│๛ ${pref}addmascota    — Agregar mascota a un usuario
-│๛ ${pref}addtime       — Ajustar tiempos/cooldowns
-│๛ ${pref}addmoney      — Agregar créditos
-│๛ ${pref}restbank      — Resetear ajustes del banco
-│๛ ${pref}delrpg        — Eliminar registro RPG de un usuario
-│๛ ${pref}detelerpg     — Eliminar/depurar por número (RPG)
-│๛ ${pref}dar
-│๛ ${pref}addbank
-╰─────◆
-
-✨ Disfruta el mundo RPG de *La Suki Bot*. ¡Suerte, héroe!`;
-
-  await conn.sendMessage2(
-    chatId,
-    {
-      image: { url: "https://cdn.russellxz.click/d744b5bf.jpeg" },
-      caption
-    },
-    msg
-  );
-
-  await conn.sendMessage2(chatId, { react: { text: "✅", key: msg.key } }, msg);
+  try { await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }); } catch {}
 };
 
 handler.command = ["menurpg", "menuRPG"];

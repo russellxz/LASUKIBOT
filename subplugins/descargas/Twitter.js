@@ -5,6 +5,7 @@
 
 "use strict";
 
+import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -146,7 +147,7 @@ async function sendMedia(conn, job, asDocument, triggerMsg) {
 ${date ? `📅 *Fecha:* ${date}\n` : ""}📦 *Formato:* ${asDocument ? "Documento" : "Normal"}
 
 ━━━━━━━━━━━━━━━━━━━━
-🤖 *Bot:* Suki Subbots
+🤖 *Bot:* ${getMarca(conn)}
 🔗 *API:* ${API_BASE}
 ━━━━━━━━━━━━━━━━━━━━`;
 
@@ -253,30 +254,16 @@ const handler = async (msg, { conn, args }) => {
     // 🎨 Caption LIMPIO — solo explicación + marca de agua
     const caption = usarBotones
       ? `
-╭━━━━━━━━━━━━━━━━━━╮
-   ⚡ 𝗫 / 𝗧𝗪𝗜𝗧𝗧𝗘𝗥 𝗗𝗟
-╰━━━━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟢 *OPCIÓN  — Botones*
 Toca un botón abajo del mensaje:
    🎬 *Normal*
    📁 *Documento*
 
-━━━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
-━━━━━━━━━━━━━━━━━━`.trim()
+${pieDescarga(conn)}`.trim()
       : `
-╭━━━━━━━━━━━━━━━━━━╮
-   ⚡ 𝗫 / 𝗧𝗪𝗜𝗧𝗧𝗘𝗥 𝗗𝗟
-╰━━━━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟡 *OPCIÓN 1 — Reaccionar*
 Reacciona con un emoji:
@@ -288,9 +275,7 @@ Cita este mensaje y escribe:
    *1*  →  Enviar normal
    *2*  →  Enviar como documento
 
-━━━━━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
-━━━━━━━━━━━━━━━━━━━━`.trim();
+${pieDescarga(conn)}`.trim();
 
     const nativeFlowButtons = [
       { text: "🎬 Normal",    id: `${pref}tw_normal` },
@@ -302,7 +287,7 @@ Cita este mensaje y escribe:
       try {
         preview = await conn.sendMessage(chatId, {
           text: caption,
-          footer: "❦ Suki Subbots — Selecciona una opción ❦",
+          footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons: nativeFlowButtons,
         }, { quoted: msg });
       } catch (e) {

@@ -1,50 +1,42 @@
+// subplugins/varios/Menufree.js — Menú Free Fire del subbot.
+// El diseño, la imagen/video y el nombre salen de la personalización del
+// propio subbot (comando setmenu).
+import { enviarMenu } from "../../disenos.js";
+
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
-  const pref = (typeof conn !== "undefined" && conn && conn.subPrefixes ? conn.subPrefixes : global.prefixes)?.[0] || ".";
+  const p =
+    (Array.isArray(conn?.subPrefixes) && conn.subPrefixes[0]) ||
+    global.prefixes?.[0] ||
+    ".";
 
-  await conn.sendMessage2(chatId, { react: { text: "📋", key: msg.key } }, msg);
+  try { await conn.sendMessage(chatId, { react: { text: "📋", key: msg.key } }); } catch {}
 
-  const texto = `𖠺𝑆𝑢𝑏𝑏𝑜𝑡𝑠 𝑆𝑢𝑘𝑖𖠺
-
-𖠁𝗠𝗘𝗡𝗨 𝗙𝗥𝗘𝗘 𝗙𝗜𝗥𝗘𖠁
-𖠁𝗣𝗿𝗲𝗳𝗶𝗷𝗼 𝗔𝗰𝘁𝘂𝗮𝗹: 『 ${pref} 』
-𖠁𝗨𝘀𝗮 𝗲𝗻 𝗰𝗮𝗱𝗮 𝗰𝗼𝗺𝗮𝗻𝗱𝗼
-
-🍉 *MAPAS*
-╭─────◆
-│๛ ${pref}mapas
-╰─────◆
-
-📃 *REGLAS*
-╭─────◆
-│๛ ${pref}reglas
-│๛ ${pref}setreglas
-╰─────◆
-
-🛡️ *LISTA DE VERSUS*
-╭─────◆
-│๛ ${pref}4vs4
-│๛ ${pref}6vs6
-│๛ ${pref}12vs12
-│๛ ${pref}16vs16
-│๛ ${pref}20vs20
-│๛ ${pref}24vs24
-│๛ ${pref}guerr
-╰─────◆
-
-🎮 *Sistema personalizado para clanes FF*
-
-🤖 *Suki Subbots*`.trim();
-
-  await conn.sendMessage2(chatId, {
-    image: { url: 'https://cdn.russellxz.click/c678c800.jpg' },
-    caption: texto
-  }, msg);
+  return enviarMenu(conn, chatId, msg, "menufree", {
+    titulo: "MENÚ FREE FIRE",
+    info: [
+      ["Prefijo actual", p],
+      ["Úsalo", "en cada comando"]
+    ],
+    secciones: [
+      { titulo: "🍉 MAPAS", items: [`${p}mapas`] },
+      { titulo: "📃 REGLAS", items: [`${p}reglas`, `${p}setreglas`] },
+      {
+        titulo: "🛡️ LISTA DE VERSUS",
+        items: [
+          `${p}4vs4`,
+          `${p}6vs6`,
+          `${p}12vs12`,
+          `${p}16vs16`,
+          `${p}20vs20`,
+          `${p}24vs24`,
+          `${p}guerr`
+        ]
+      }
+    ],
+    nota: "Sistema personalizado para clanes FF 🎮"
+  });
 };
 
 handler.command = ['menufree'];
-handler.help = ['menufree'];
-handler.tags = ['menu'];
-handler.register = true;
-
 export default handler;

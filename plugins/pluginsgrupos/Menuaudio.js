@@ -1,119 +1,79 @@
-// plugins/menuaudio.js
-// Lista los paquetes multimedia guardados en el NUEVO formato (guar_files.json + ./guar_media/)
-// Soporta también el formato viejo (guar.json) por compatibilidad: si existen ambos, los combina.
-
+// plugins/pluginsgrupos/Menuaudio.js — Paquetes multimedia guardados.
+// Lee el formato nuevo (guar_files.json + ./guar_media/) y el viejo (guar.json).
+// El diseño, la imagen/video y el nombre salen de la personalización (setmenu).
 import fs from 'fs';
 import path from 'path';
+import { enviarMenu, getMarca } from "../../disenos.js";
 
 const FILES_DB = path.resolve("./guar_files.json");
 const OLD_DB = path.resolve("./guar.json");
 
+function leerDB(file, etiqueta) {
+  if (!fs.existsSync(file)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf-8"));
+  } catch (e) {
+    console.error(`[menuaudio] error leyendo ${etiqueta}:`, e);
+    return {};
+  }
+}
+
+function contar(mapa, datos) {
+  for (const [clave, valor] of Object.entries(datos)) {
+    let cantidad = 0;
+    if (Array.isArray(valor)) cantidad = valor.length;
+    else if (valor && typeof valor === "object") cantidad = 1;
+    if (cantidad > 0) mapa.set(clave, (mapa.get(clave) || 0) + cantidad);
+  }
+}
+
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
+  const p = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
 
-  await conn.sendMessage2(chatId, {
-    react: { text: "🎵", key: msg.key }
-  }, msg);
+  try { await conn.sendMessage2(chatId, { react: { text: "🎵", key: msg.key } }, msg); } catch {}
 
-  // ====== Cargar paquetes del NUEVO formato (guar_files.json) ======
-  let guarFiles = {};
-  if (fs.existsSync(FILES_DB)) {
-    try {
-      guarFiles = JSON.parse(fs.readFileSync(FILES_DB, "utf-8"));
-    } catch (e) {
-      console.error("[menuaudio] error leyendo guar_files.json:", e);
-      guarFiles = {};
-    }
-  }
-
-  // ====== Cargar paquetes del formato VIEJO (guar.json) por si quedó algo sin migrar ======
-  let guarOld = {};
-  if (fs.existsSync(OLD_DB)) {
-    try {
-      guarOld = JSON.parse(fs.readFileSync(OLD_DB, "utf-8"));
-    } catch (e) {
-      console.error("[menuaudio] error leyendo guar.json:", e);
-      guarOld = {};
-    }
-  }
-
-  // ====== Combinar paquetes ======
-  // Cuenta cuántos archivos hay por paquete (sumando ambos formatos)
   const paquetesMap = new Map();
+  contar(paquetesMap, leerDB(FILES_DB, "guar_files.json"));
+  contar(paquetesMap, leerDB(OLD_DB, "guar.json"));
 
-  // Contar nuevo formato (puede ser array o objeto único)
-  for (const [clave, valor] of Object.entries(guarFiles)) {
-    let cantidad = 0;
-    if (Array.isArray(valor)) {
-      cantidad = valor.length;
-    } else if (valor && typeof valor === "object") {
-      cantidad = 1;
-    }
-    if (cantidad > 0) {
-      paquetesMap.set(clave, (paquetesMap.get(clave) || 0) + cantidad);
-    }
-  }
-
-  // Contar viejo formato (puede ser objeto único o array)
-  for (const [clave, valor] of Object.entries(guarOld)) {
-    let cantidad = 0;
-    if (Array.isArray(valor)) {
-      cantidad = valor.length;
-    } else if (valor && typeof valor === "object") {
-      cantidad = 1;
-    }
-    if (cantidad > 0) {
-      paquetesMap.set(clave, (paquetesMap.get(clave) || 0) + cantidad);
-    }
-  }
-
-  // Ordenar alfabéticamente para que se vea bonito
   const paquetes = Array.from(paquetesMap.entries()).sort((a, b) =>
     a[0].localeCompare(b[0], "es", { sensitivity: "base" })
   );
   const total = paquetes.length;
   const totalArchivos = paquetes.reduce((sum, [, n]) => sum + n, 0);
 
-  const caption = `𖠺𝐿𝑎 𝑆𝑢𝑘𝑖 𝐵𝑜𝑡𖠺
+  const secciones = [
+    {
+      titulo: "📝 CÓMO FUNCIONA",
+      items: [
+        `Escribe el *nombre del paquete* y ${getMarca(conn)} enviará al azar uno de sus archivos`,
+        `${p}guar <nombre> — guardar (responde a la media)`,
+        `${p}del <nombre> <número> — borrar un archivo`,
+        `${p}g <nombre> <número> — ver un archivo`
+      ]
+    }
+  ];
 
-𖠁🗂️ 𝙋𝘼𝙌𝙐𝙀𝙏𝙀𝙎 𝘿𝙀 𝙈𝙐𝙇𝙏𝙄𝙈𝙀𝘿𝙄𝘼𖠁
-🎧 Audios, 🎞️ videos, 🖼️ imágenes, 🧩 stickers y más...
+  if (total > 0) {
+    secciones.push({
+      titulo: "📦 PAQUETES DISPONIBLES",
+      items: paquetes.map(([key, n]) => `${key} [${n} archivo${n !== 1 ? "s" : ""}]`)
+    });
+  }
 
-📝 *¿Cómo funciona?*
-Solo escribe el *nombre del paquete* en el chat y *La Suki Bot* enviará al azar uno de los archivos guardados dentro de ese paquete.
-
-📥 Para *guardar multimedia* responde a cualquier imagen, audio, sticker o video con:
-➤ *.guar nombreDelPaquete*
-
-🗑️ Para *borrar un archivo específico* de un paquete:
-➤ *.del nombreDelPaquete número*
-
-🔍 Para *ver un archivo específico* de un paquete:
-➤ *.g nombreDelPaquete número*
-
-📦 Todos los paquetes son públicos y compartidos entre los usuarios del grupo.
-
-━━━━━━━━━━━━━━━
-
-📦 *Paquetes disponibles:* ${total}
-📄 *Archivos totales:* ${totalArchivos}
-
-${
-  total > 0
-    ? "╭─────◆\n" +
-      paquetes
-        .map(([key, n]) => `│๛ ${key} [${n} archivo${n !== 1 ? "s" : ""}]`)
-        .join("\n") +
-      "\n╰─────◆"
-    : "❌ No hay multimedia guardada aún. Usa *.guar nombre* para comenzar."
-}
-`.trim();
-
-  await conn.sendMessage2(chatId, {
-    video: { url: "https://cdn.russellxz.click/18bf4be2.mp4" },
-    gifPlayback: true,
-    caption
-  }, msg);
+  return enviarMenu(conn, chatId, msg, "menuaudio", {
+    titulo: "PAQUETES DE MULTIMEDIA",
+    info: [
+      ["Paquetes disponibles", total],
+      ["Archivos totales", totalArchivos]
+    ],
+    secciones,
+    nota:
+      total > 0
+        ? "Los paquetes son públicos y compartidos entre los usuarios del grupo 🎧"
+        : `Todavía no hay multimedia guardada. Usa *${p}guar nombre* para empezar.`
+  });
 };
 
 handler.command = ["menuaudio"];

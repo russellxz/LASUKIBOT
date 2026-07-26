@@ -1,46 +1,44 @@
+// subplugins/varios/Allmenu.js — Lista TODOS los comandos del subbot.
+// El diseño, la imagen/video y el nombre salen de la personalización del
+// propio subbot (comando setmenu).
+import { enviarMenu } from "../../disenos.js";
+
 const handler = async (msg, { conn }) => {
-  const chatId  = msg.key.remoteJid;
-  const prefijo = (typeof conn !== "undefined" && conn && conn.subPrefixes ? conn.subPrefixes : global.prefixes)?.[0] || ".";
+  const chatId = msg.key.remoteJid;
+  const p =
+    (Array.isArray(conn?.subPrefixes) && conn.subPrefixes[0]) ||
+    global.prefixes?.[0] ||
+    ".";
 
-  await conn.sendMessage2(chatId, { react: { text: "🧩", key: msg.key } }, msg);
+  try { await conn.sendMessage(chatId, { react: { text: "🧩", key: msg.key } }); } catch {}
 
-  const todosLosComandos = [
+  // Comandos del subbot (antes listaba por error los del bot principal)
+  const comandos = [
     ...new Set(
-      (global.plugins || [])
-        .flatMap(p => {
-          const c = p?.command;
-          if (!c) return [];
-          const arr = Array.isArray(c) ? c : [c];
-          return arr.filter(x => typeof x === "string");
-        })
+      (global.subPlugins || []).flatMap((pl) => {
+        const c = pl?.command;
+        if (!c) return [];
+        const arr = Array.isArray(c) ? c : [c];
+        return arr.filter((x) => typeof x === "string");
+      })
     )
   ].sort((a, b) => a.localeCompare(b));
 
-  const total = todosLosComandos.length;
-
-  const caption = `
-╔════════════════════╗
-║🤖 *ALL MENU SUKI SUBBOTS*
-╚════════════════════╝
-
-🧠 *Bot creado desde cero.*
-🔧 *Total comandos activos:* ${total}
-🔑 *Prefijo actual:* ${prefijo}
-
-📦 *Lista de comandos:*
-${todosLosComandos.map(c => `➤ ${prefijo}${c}`).join("\n")}
-  
-💫 *Gracias por usar suki Omega.*
-`.trim();
-
-  return conn.sendMessage2(chatId, {
-    image: { url: "https://cdn.russellxz.click/c678c800.jpg" },
-    caption
-  }, msg);
+  return enviarMenu(conn, chatId, msg, "allmenu", {
+    titulo: "TODOS LOS COMANDOS",
+    info: [
+      ["Comandos activos", comandos.length],
+      ["Prefijo actual", p]
+    ],
+    secciones: [
+      {
+        titulo: "📦 LISTA COMPLETA",
+        items: comandos.map((c) => `${p}${c}`)
+      }
+    ],
+    nota: "Gracias por usarme 💖"
+  });
 };
 
 handler.command = ["allmenu"];
-handler.help = ["allmenu"];
-handler.tags = ["menu"];
-
 export default handler;

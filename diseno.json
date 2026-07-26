@@ -1,0 +1,240 @@
+{
+  "version": 1,
+  "nota": "7 diseños para los menús y los comandos de descarga. Se eligen con el comando setmenu. Placeholders: {marca} {titulo} {seccion} {item} {clave} {valor} {texto}",
+  "disenos": [
+    {
+      "id": 1,
+      "nombre": "Clásico",
+      "emoji": "🦋",
+      "descripcion": "Bordes suaves y elegantes, el estilo de siempre",
+      "muestra": "╭━━━━━╮\n│ ✦ item\n╰━━━━━╯",
+      "cabecera": [
+        "╭━━━━━━━━━━━━━━━━━━╮",
+        "   ❦ {marca} ❦",
+        "╰━━━━━━━━━━━━━━━━━━╯"
+      ],
+      "titulo": "『 {titulo} 』",
+      "info": "❦ *{clave}:* {valor}",
+      "seccionAbre": "╭──❦ *{seccion}*",
+      "seccionItem": "│ ✦ {item}",
+      "seccionCierra": "╰───────────❦",
+      "nota": "✨ {texto}",
+      "pie": [
+        "━━━━━━━━━━━━━━━━━━",
+        "   🤖 *{marca}*"
+      ],
+      "descarga": {
+        "cabecera": [
+          "╭━━━━━━━━━━━━━━━━━━╮",
+          "   ❦ {titulo} ❦",
+          "╰━━━━━━━━━━━━━━━━━━╯"
+        ],
+        "campo": "❦ *{clave}:* {valor}",
+        "pie": [
+          "━━━━━━━━━━━━━━━━━━",
+          "   🤖 *{marca}*"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "nombre": "Neón",
+      "emoji": "💠",
+      "descripcion": "Estilo futurista con barras y diamantes",
+      "muestra": "▰▰▰▰▰▰▰\n◈ item\n▰▰▰▰▰▰▰",
+      "cabecera": [
+        "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰",
+        "  💠 {marca} 💠",
+        "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+      ],
+      "titulo": "⟪ {titulo} ⟫",
+      "info": "◈ *{clave}:* {valor}",
+      "seccionAbre": "▰▰▰ *{seccion}* ▰▰▰",
+      "seccionItem": "◈ {item}",
+      "seccionCierra": "▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱",
+      "nota": "⚡ {texto}",
+      "pie": [
+        "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰",
+        "  💠 *{marca}* 💠"
+      ],
+      "descarga": {
+        "cabecera": [
+          "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰",
+          "  💠 {titulo} 💠",
+          "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+        ],
+        "campo": "◈ *{clave}:* {valor}",
+        "pie": [
+          "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰",
+          "  💠 *{marca}* 💠"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "nombre": "Elegante",
+      "emoji": "🕊️",
+      "descripcion": "Líneas finas y limpias, muy sobrio",
+      "muestra": "──────────\n❖ item\n──────────",
+      "cabecera": [
+        "─────────────────",
+        "     {marca}",
+        "─────────────────"
+      ],
+      "titulo": "❖  {titulo}",
+      "info": "❖ *{clave}:* {valor}",
+      "seccionAbre": "◇ *{seccion}*",
+      "seccionItem": "   ❖ {item}",
+      "seccionCierra": "─────────────────",
+      "nota": "❖ {texto}",
+      "pie": [
+        "─────────────────",
+        "     *{marca}*"
+      ],
+      "descarga": {
+        "cabecera": [
+          "─────────────────",
+          "   {titulo}",
+          "─────────────────"
+        ],
+        "campo": "❖ *{clave}:* {valor}",
+        "pie": [
+          "─────────────────",
+          "     *{marca}*"
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "nombre": "Kawaii",
+      "emoji": "🌸",
+      "descripcion": "Tierno y colorido, con corazones y flores",
+      "muestra": "･ﾟ✧･ﾟ:*\n♡ item\n*:･ﾟ✧･ﾟ",
+      "cabecera": [
+        "･ﾟ✧･ﾟ:*✧･ﾟ:*✧･ﾟ:*✧･ﾟ",
+        "   🌸 {marca} 🌸",
+        "*:･ﾟ✧*:･ﾟ✧*:･ﾟ✧･ﾟ"
+      ],
+      "titulo": "♡ {titulo} ♡",
+      "info": "🌷 *{clave}:* {valor}",
+      "seccionAbre": "🌸 *{seccion}* 🌸",
+      "seccionItem": "  ♡ {item}",
+      "seccionCierra": "･ﾟ✧･ﾟ:*✧･ﾟ:*✧･ﾟ:*✧･ﾟ",
+      "nota": "💖 {texto}",
+      "pie": [
+        "*:･ﾟ✧*:･ﾟ✧*:･ﾟ✧･ﾟ",
+        "  🌸 *{marca}* 🌸"
+      ],
+      "descarga": {
+        "cabecera": [
+          "･ﾟ✧･ﾟ:*✧･ﾟ:*✧･ﾟ:*✧･ﾟ",
+          "   🌸 {titulo} 🌸",
+          "*:･ﾟ✧*:･ﾟ✧*:･ﾟ✧･ﾟ"
+        ],
+        "campo": "🌷 *{clave}:* {valor}",
+        "pie": [
+          "*:･ﾟ✧*:･ﾟ✧*:･ﾟ✧･ﾟ",
+          "  🌸 *{marca}* 🌸"
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "nombre": "Hacker",
+      "emoji": "💻",
+      "descripcion": "Estilo terminal, corchetes y flechas",
+      "muestra": "[■■■■■■]\n> item\n[■■■■■■]",
+      "cabecera": [
+        "[■■■■■■■■■■■■■■■]",
+        "  root@{marca}",
+        "[■■■■■■■■■■■■■■■]"
+      ],
+      "titulo": "> {titulo}",
+      "info": "[+] *{clave}:* {valor}",
+      "seccionAbre": "┌─[ *{seccion}* ]",
+      "seccionItem": "├─> {item}",
+      "seccionCierra": "└──────────────",
+      "nota": "[!] {texto}",
+      "pie": [
+        "[■■■■■■■■■■■■■■■]",
+        "  > *{marca}* _online_"
+      ],
+      "descarga": {
+        "cabecera": [
+          "[■■■■■■■■■■■■■■■]",
+          "  {titulo}",
+          "[■■■■■■■■■■■■■■■]"
+        ],
+        "campo": "[+] *{clave}:* {valor}",
+        "pie": [
+          "[■■■■■■■■■■■■■■■]",
+          "  > *{marca}* _online_"
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "nombre": "Real",
+      "emoji": "👑",
+      "descripcion": "Dorado y majestuoso, doble borde",
+      "muestra": "╔════════╗\n❥ item\n╚════════╝",
+      "cabecera": [
+        "╔══════════════════╗",
+        "   👑 {marca} 👑",
+        "╚══════════════════╝"
+      ],
+      "titulo": "「 {titulo} 」",
+      "info": "❥ *{clave}:* {valor}",
+      "seccionAbre": "╔══❥ *{seccion}*",
+      "seccionItem": "║ ❥ {item}",
+      "seccionCierra": "╚═══════════════",
+      "nota": "👑 {texto}",
+      "pie": [
+        "╔══════════════════╗",
+        "   👑 *{marca}* 👑",
+        "╚══════════════════╝"
+      ],
+      "descarga": {
+        "cabecera": [
+          "╔══════════════════╗",
+          "   👑 {titulo} 👑",
+          "╚══════════════════╝"
+        ],
+        "campo": "❥ *{clave}:* {valor}",
+        "pie": [
+          "╔══════════════════╗",
+          "   👑 *{marca}* 👑",
+          "╚══════════════════╝"
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "nombre": "Minimal",
+      "emoji": "⚪",
+      "descripcion": "Sin adornos, limpio y directo",
+      "muestra": "TÍTULO\n• item",
+      "cabecera": [
+        "*{marca}*"
+      ],
+      "titulo": "*{titulo}*",
+      "info": "{clave}: *{valor}*",
+      "seccionAbre": "*{seccion}*",
+      "seccionItem": "• {item}",
+      "seccionCierra": "",
+      "nota": "{texto}",
+      "pie": [
+        "_{marca}_"
+      ],
+      "descarga": {
+        "cabecera": [
+          "*{titulo}*"
+        ],
+        "campo": "{clave}: *{valor}*",
+        "pie": [
+          "_{marca}_"
+        ]
+      }
+    }
+  ]
+}

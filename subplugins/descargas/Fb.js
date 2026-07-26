@@ -5,6 +5,7 @@
 
 "use strict";
 
+import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -154,30 +155,16 @@ const handler = async (msg, { conn, args, command }) => {
     // 🎨 Caption LIMPIO — solo explicación + marca de agua
     const caption = usarBotones
       ? `
-╭━━━━━━━━━━━━━━━━━╮
-  ⚡ 𝗙𝗔𝗖𝗘𝗕𝗢𝗢𝗞 VIDEO
-╰━━━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟢 *OPCIÓN  — Botones*
 Toca un botón abajo del mensaje:
    🎬 *Video Normal*
    📁 *Video Documento*
 
-━━━━━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
-━━━━━━━━━━━━━━━━━━━━`.trim()
+${pieDescarga(conn)}`.trim()
       : `
-╭━━━━━━━━━━━━━━━━━╮
-  ⚡ 𝗙𝗔𝗖𝗘𝗕𝗢𝗢𝗞 VIDEO
-╰━━━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟡 *OPCIÓN 1 — Reaccionar*
 Reacciona con un emoji:
@@ -189,9 +176,7 @@ Cita este mensaje y escribe:
    *1*  →  Video normal
    *2*  →  Video como documento
 
-━━━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
-━━━━━━━━━━━━━━━━━━`.trim();
+${pieDescarga(conn)}`.trim();
 
     const nativeFlowButtons = [
       { text: "🎬 Video Normal",    id: `${pref}fb_video` },
@@ -204,7 +189,7 @@ Cita este mensaje y escribe:
         preview = await conn.sendMessage(chatId, {
           image: { url: thumb },
           caption,
-          footer: "❦ Suki Subbots — Selecciona una opción ❦",
+          footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons: nativeFlowButtons,
           headerType: 4,
         }, { quoted: msg });
@@ -216,7 +201,7 @@ Cita este mensaje y escribe:
       try {
         preview = await conn.sendMessage(chatId, {
           text: caption,
-          footer: "❦ Suki Subbots — Selecciona una opción ❦",
+          footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons: nativeFlowButtons,
         }, { quoted: msg });
       } catch (e) {
@@ -372,7 +357,7 @@ async function sendVideo(conn, job, asDocument, triggerMsg) {
 💾 *Tamaño:* ${sizeMB.toFixed(2)} MB
 
 ━━━━━━━━━━━━━━━━━━
-🤖 *Bot:* Suki Subbots
+🤖 *Bot:* ${getMarca(conn)}
 🔗 *API:* ${API_BASE}
 ━━━━━━━━━━━━━━━━━━`;
 

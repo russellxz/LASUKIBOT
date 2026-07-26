@@ -5,6 +5,7 @@
 
 "use strict";
 
+import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -124,17 +125,9 @@ Ej: ${pref}${command} https://vm.tiktok.com/xxxxxx/`
 Toca un botón abajo del mensaje:
    🎬 *Video Normal*
    📁 *Video Documento*
-━━━━━━━━━━━━━━━
-🤖 *La Suki Bot*
-━━━━━━━━━━━━━━━`.trim()
+${pieDescarga(conn)}`.trim()
       : `
-╭━━━━━━━━━━━━━━━━━╮
-   ⚡ 𝗧𝗜𝗞𝗧𝗢𝗞 𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗𝗘𝗥
-╰━━━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟡 *OPCIÓN 1 — Reaccionar*
 Reacciona con un emoji:
@@ -146,9 +139,7 @@ Cita este mensaje y escribe:
    *1*  →  Video normal
    *2*  →  Video como documento
 
-━━━━━━━━━━━━━━━━
-🤖 *La Suki Bot*
-━━━━━━━━━━━━━━━━`.trim();
+${pieDescarga(conn)}`.trim();
 
     const nativeFlowButtons = [
       { text: "🎬 Video Normal",    id: `${pref}tt_video` },
@@ -161,7 +152,7 @@ Cita este mensaje y escribe:
         preview = await conn.sendMessage(chatId, {
           image: { url: d.cover },
           caption,
-          footer: "❦ La Suki Bot — Selecciona una opción ❦",
+          footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons: nativeFlowButtons,
           headerType: 4,
         }, { quoted: msg });
@@ -173,7 +164,7 @@ Cita este mensaje y escribe:
       try {
         preview = await conn.sendMessage(chatId, {
           text: caption,
-          footer: "❦ La Suki Bot — Selecciona una opción ❦",
+          footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons: nativeFlowButtons,
         }, { quoted: msg });
       } catch (e) {
@@ -334,7 +325,7 @@ async function processSend(conn, job, asDocument, triggerMsg){
 📦 *Formato:* ${asDocument ? "Documento" : "Video"}
 
 ━━━━━━━━━━━━━━━━━━
-🤖 *Bot:* La Suki Bot
+🤖 *Bot:* ${getMarca(conn)}
 🔗 *API:* ${API_BASE}
 ━━━━━━━━━━━━━━━━━━`;
 

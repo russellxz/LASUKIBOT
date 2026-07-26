@@ -1,154 +1,124 @@
-import fs from 'fs';
-import path from 'path';
+// plugins/pluginsgrupos/Menu.js — Menú general.
+// El diseño, la imagen/video y el nombre salen de la personalización
+// (comando setmenu). Aquí solo va la lista de comandos.
+import { enviarMenu } from "../../disenos.js";
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
-  const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
+  const p = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
 
   try { await conn.sendMessage2(chatId, { react: { text: "✨", key: msg.key } }, msg); } catch {}
 
-  try {
-    const filePath = path.resolve("./setmenu.json");
-    if (fs.existsSync(filePath)) {
-      const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-      const texto  = typeof data?.texto === "string" ? data.texto : "";
-      const imagen = typeof data?.imagen === "string" && data.imagen.length ? data.imagen : null;
-
-      if (texto.trim().length || imagen) {
-        if (imagen) {
-          const buffer = Buffer.from(imagen, "base64");
-          await conn.sendMessage2(chatId, {
-            image: buffer,
-            caption: texto && texto.length ? texto : undefined
-          }, msg);
-          return;
-        } else {
-          await conn.sendMessage2(chatId, { text: texto }, msg);
-          return;
-        }
+  return enviarMenu(conn, chatId, msg, "menu", {
+    titulo: "MENÚ GENERAL",
+    info: [
+      ["Prefijo actual", p],
+      ["Úsalo", "en cada comando"]
+    ],
+    secciones: [
+      {
+        titulo: "INFORMACIÓN",
+        items: [`${p}ping`, `${p}speedtest`, `${p}creador`, `${p}info`]
+      },
+      {
+        titulo: "MENÚS DISPONIBLES",
+        items: [
+          `${p}menugrupo`,
+          `${p}menuaudio`,
+          `${p}menurpg`,
+          `${p}menuowner`,
+          `${p}menufree`
+        ]
+      },
+      {
+        titulo: "PARA VENTAS",
+        items: [
+          `${p}setstock / stock`,
+          `${p}setnetflix / netflix`,
+          `${p}setpago / pago`,
+          `${p}setcombos / combos`,
+          `${p}setpeliculas / peliculas`,
+          `${p}settramites / tramites`,
+          `${p}setcanvas / canvas`,
+          `${p}setreglas / reglas`,
+          `${p}sorteo`,
+          `${p}setsoporte / soporte`,
+          `${p}setpromo / promo`,
+          `${p}addfactura`,
+          `${p}delfactura`,
+          `${p}facpaga`,
+          `${p}verfac`
+        ]
+      },
+      {
+        titulo: "IA · CHAT BOT",
+        items: [
+          `${p}gemini`,
+          `${p}chatgpt`,
+          `${p}dalle`,
+          `${p}visión`,
+          `${p}visión2`,
+          `${p}chat on/off`,
+          `${p}luminai`
+        ]
+      },
+      {
+        titulo: "DESCARGAS",
+        items: [
+          `${p}play / play2`,
+          `${p}ytmp3 / ytmp4`,
+          `${p}tiktok / fb / ig / spotify`,
+          `${p}mediafire / apk`,
+          `${p}xnxx`,
+          `${p}porn`,
+          `${p}x / twitter / tw`
+        ]
+      },
+      {
+        titulo: "BUSCADORES",
+        items: [`${p}pixai`, `${p}tiktoksearch`, `${p}yts`, `${p}tiktokstalk`]
+      },
+      {
+        titulo: "CONVERTIDORES",
+        items: [
+          `${p}tomp3`,
+          `${p}toaudio`,
+          `${p}hd`,
+          `${p}tts`,
+          `${p}tovideo / toimg`,
+          `${p}gifvideo / ff / ff2`
+        ]
+      },
+      {
+        titulo: "STICKERS",
+        items: [
+          `${p}s / qc / qc2 / texto`,
+          `${p}mixemoji / aniemoji`,
+          `${p}addco / delco`,
+          `${p}sks`,
+          `${p}guarsk`,
+          `${p}versk`,
+          `${p}sendsk`
+        ]
+      },
+      {
+        titulo: "HERRAMIENTAS",
+        items: [`${p}ver / perfil / get / xxx`, `${p}tourl / whatmusic`]
+      },
+      {
+        titulo: "MINI JUEGOS",
+        items: [
+          `${p}verdad / reto`,
+          `${p}personalidad`,
+          `${p}parejas / ship`,
+          `${p}kiss / topkiss`,
+          `${p}slap / topslap`,
+          `${p}menurpg`
+        ]
       }
-    }
-  } catch (e) {
-    console.error("[menu] Error leyendo setmenu.json:", e);
-  }
-
-  const caption = `𖠺𝐿𝑎 𝑆𝑢𝑘𝑖 𝐵𝑜𝑡𖠺
-
-𖠁𝙈𝙀𝙉𝙐 𝙂𝙀𝙉𝙀𝙍𝘼𝙇𖠁
-𖠁𝗣𝗿𝗲𝗳𝗶𝗷𝗼 𝗔𝗰𝘁𝘂𝗮𝗹: 『 ${pref} 』
-𖠁𝗨𝘀𝗮 𝗲𝗻 𝗰𝗮𝗱𝗮 𝗰𝗼𝗺𝗮𝗻𝗱𝗼
-
-𖠁𝙄𝙉𝙁𝙊𝙍𝙈𝘼𝘾𝙄𝙊𝙉𖠁
-╭─────◆
-│๛ ${pref}ping
-│๛ ${pref}speedtest
-│๛ ${pref}creador
-│๛ ${pref}info
-╰─────◆
-
-𖠁𝙈𝙀𝙉𝙐𝙎 𝘿𝙄𝙎𝙋𝙊𝙉𝙄𝘽𝙇𝙀𝙎𖠁
-╭─────◆
-│๛ ${pref}menugrupo
-│๛ ${pref}menuaudio
-│๛ ${pref}menurpg
-│๛ ${pref}menuowner
-│๛ ${pref}menufree
-╰─────◆
-
-𖠁PARA VENTAS 𖠁
-╭─────◆
-│๛ ${pref}setstock / stock
-│๛ ${pref}setnetflix / netflix
-│๛ ${pref}setpago / pago
-│๛ ${pref}setcombos / combos
-│๛ ${pref}setpeliculas / peliculas
-│๛ ${pref}settramites / tramites
-│๛ ${pref}setcanvas / canvas
-│๛ ${pref}setreglas / reglas
-│๛ ${pref}sorteo
-│๛ ${pref}setsoporte / soporte
-│๛ ${pref}setpromo / promo
-│๛ ${pref}addfactura
-│๛ ${pref}delfactura
-│๛ ${pref}facpaga
-│๛ ${pref}verfac
-╰─────◆
-
-𖠁𝙄𝘼 - 𝘾𝙃𝘼𝙏 𝘽𝙊𝙏𖠁
-╭─────◆
-│๛ ${pref}gemini
-│๛ ${pref}chatgpt
-│๛ ${pref}dalle
-│๛ ${pref}visión
-│๛ ${pref}visión2
-│๛ ${pref}chat on/off
-│๛ ${pref}luminai
-╰─────◆
-
-𖠁𝘿𝙀𝙎𝘾𝘼𝙍𝙂𝘼𖠁
-╭─────◆
-│๛ ${pref}play / play2 
-│๛ ${pref}ytmp3 / ytmp4
-│๛ ${pref}tiktok / fb / ig / spotify
-│๛ ${pref}mediafire / apk
-│๛ ${pref}xnxx
-│๛ ${pref}porn
-│๛ ${pref}x / Twitter/ tw
-╰─────◆
-
-𖠁𝘽𝙐𝙎𝘾𝘼𝘿𝙊𝙍𝙀𝙎𖠁
-╭─────◆
-│๛ ${pref}pixai
-│๛ ${pref}tiktoksearch
-│๛ ${pref}yts
-│๛ ${pref}tiktokstalk
-╰─────◆
-
-𖠁𝘾𝙊𝙉𝙑𝙀𝙍𝙏𝙄𝘿𝙊𝙍𝙀𝙎𖠁
-╭─────◆
-│๛ ${pref}tomp3
-│๛ ${pref}toaudio
-│๛ ${pref}hd
-│๛ ${pref}tts
-│๛ ${pref}tovideo / toimg
-│๛ ${pref}gifvideo / ff / ff2
-╰─────◆
-
-𖠁𝙎𝙏𝙄𝘾𝙆𝙀𝙍𝙎𖠁
-╭─────◆
-│๛ ${pref}s / qc / qc2 / texto
-│๛ ${pref}mixemoji / aniemoji
-│๛ ${pref}addco / delco
-│๛ ${pref}sks
-│๛ ${pref}guarsk
-│๛ ${pref}versk
-│๛ ${pref}sendsk
-╰─────◆
-
-𖠁𝙃𝙀𝙍𝙍𝘼𝙈𝙄𝙀𝙉𝙏𝘼𝙎𖠁
-╭─────◆
-│๛ ${pref}ver / perfil / get / xxx
-│๛ ${pref}tourl / whatmusic
-╰─────◆
-
-𖠁𝙈𝙄𝙉𝙄 𝙅𝙐𝙀𝙂𝙊𝙎𖠁 
-╭─────◆
-│๛ ${pref}verdad / reto
-│๛ ${pref}personalidad
-│๛ ${pref}parejas / ship
-│๛ ${pref}kiss / topkiss
-│๛ ${pref}slap / topslap
-│๛ ${pref}menurpg
-╰─────◆
-
-✨ Gracias por usar *La Suki Bot*. Eres adorable 💖
-`.trim();
-
-  await conn.sendMessage2(chatId, {
-    video: { url: "https://cdn.russellxz.click/770fe00e.mp4" },
-    gifPlayback: true,
-    caption
-  }, msg);
+    ],
+    nota: "Gracias por usarme. Eres adorable 💖"
+  });
 };
 
 handler.command = ["menu"];

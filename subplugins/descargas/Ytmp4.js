@@ -1,3 +1,4 @@
+import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -202,29 +203,15 @@ const handler = async (msg, { conn, args, command }) => {
   // 🎨 Caption LIMPIO — solo explicación + marca de agua
   const caption = usarBotones
     ? `
-╭━━━━━━━━━━━━━━━╮
-   ⚡ 𝗬𝗼𝘂𝗧𝘂𝗯𝗲 𝗩𝗜𝗗𝗘𝗢 ⚡
-╰━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟢 *OPCIÓN 1 — Menú de Botones*
 Toca el botón *📥 Menú de descarga* abajo del mensaje. Se abrirá la lista con todas las calidades disponibles (144p hasta 4K) en formato Video o Documento.
 
-━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
-━━━━━━━━━━━━━━━━
+${pieDescarga(conn)}
 `.trim()
     : `
-╭━━━━━━━━━━━━━━━━╮
-   ⚡ 𝗬𝗼𝘂𝗧𝘂𝗯𝗲 𝗩𝗜𝗗𝗘𝗢 ⚡
-╰━━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟡 *OPCIÓN 1 — Reaccionar*
 Reacciona con un emoji:
@@ -239,9 +226,7 @@ Cita este mensaje y escribe:
 💡 *Tip:* Puedes cambiar la calidad escribiendo:
    _"video 720"_   o   _"2 1080"_   o   _"videodoc 4k"_
 
-━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
-━━━━━━━━━━━━━━━━
+${pieDescarga(conn)}
 `.trim();
 
   // ====== MENÚ INTERACTIVO ======
@@ -532,7 +517,7 @@ async function downloadVideo(conn, job, asDocument, quoted) {
 💾 *Tamaño:* ${sizeMB.toFixed(2)} MB
 
 ━━━━━━━━━━━━━━━━━
-🤖 *Bot:* Suki Subbots
+🤖 *Bot:* ${getMarca(conn)}
 🔗 *API:* ${API_BASE}
 ━━━━━━━━━━━━━━━━━━`;
 

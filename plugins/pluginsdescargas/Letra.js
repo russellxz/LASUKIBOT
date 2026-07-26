@@ -5,6 +5,7 @@
 
 "use strict";
 
+import { getMarca } from "../../disenos.js";
 import axios from 'axios';
 
 const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
@@ -79,7 +80,7 @@ Ej: ${pref}${command || "letra"} yemil difícil amarte`,
 
 🚀 *Powered by:* SkyUltraPlus API
 🔗 ${API_BASE}/tools/lyrics
-🤖 *Bot:* La Suki Bot
+🤖 *Bot:* ${getMarca(conn)}
 
 `;
 

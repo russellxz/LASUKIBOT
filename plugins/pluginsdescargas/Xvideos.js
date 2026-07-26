@@ -6,6 +6,7 @@
 
 "use strict";
 
+import { getMarca } from "../../disenos.js";
 import axios from 'axios';
 
 // === Config API ===
@@ -270,7 +271,7 @@ Elige cómo enviarlo:
 ✦ 𝗧𝗶́𝘁𝘂𝗹𝗼: ${d.title}
 ✦ 𝗖𝗮𝗹𝗶𝗱𝗮𝗱: ${d.quality}
 
-🤖 𝗕𝗼𝘁: La Suki Bot
+🤖 𝗕𝗼𝘁: ${getMarca(conn)}
 🔗 𝗔𝗣𝗜: ${API_BASE}`;
 
     // Puedes mandar con thumb si quieres:
@@ -288,7 +289,7 @@ Elige cómo enviarlo:
 ✦ 𝗧𝗶́𝘁𝘂𝗹𝗼: ${d.title}
 ✦ 𝗖𝗮𝗹𝗶𝗱𝗮𝗱: ${d.quality}
 
-🤖 𝗕𝗼𝘁: La Suki Bot
+🤖 𝗕𝗼𝘁: ${getMarca(conn)}
 🔗 𝗔𝗣𝗜: ${API_BASE}`,
       quotedBase: msg,
       isBusy: false
