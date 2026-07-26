@@ -268,8 +268,12 @@ ${pieDescarga(conn)}`.trim();
 
               const ctxQuoted = m.message?.extendedTextMessage?.contextInfo?.stanzaId;
               let job = null;
-              if (ctxQuoted && __mio(conn, ctxQuoted)) {
+              if (ctxQuoted) {
+              // La selección cita una tarjeta concreta: si no es NUESTRA, no es
+              // para este bot. Sin esto, el bot principal y los subbots
+              // descargaban lo mismo a la vez.
                 job = __mio(conn, ctxQuoted);
+                if (!job) continue;
               } else {
                 const jobs = Object.values(pendingTT)
                   .filter(j => j.chatId === m.key.remoteJid && j.__own === __owner(conn))
@@ -351,7 +355,6 @@ async function processSend(conn, job, asDocument, triggerMsg){
 
     if (asDocument) {
       await conn.sendMessage(chatId, {
-      contextInfo: canal(),
         document: { url },
         mimetype: "video/mp4",
         fileName: `tiktok-${Date.now()}.mp4`,

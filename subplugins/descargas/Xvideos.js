@@ -173,7 +173,6 @@ async function sendMediaWithFallback(conn, chatId, quoted, caption, asDocument, 
       await conn.sendMessage(
         chatId,
         {
-      contextInfo: canal(),
           document: { url: urls.proxy },
           mimetype: "video/mp4",
           fileName: `${safeFileBase("xvideos")}-${Date.now()}.mp4`,
@@ -197,7 +196,6 @@ async function sendMediaWithFallback(conn, chatId, quoted, caption, asDocument, 
     await conn.sendMessage(
       chatId,
       {
-      contextInfo: canal(),
         document: { url: urls.direct },
         mimetype: "video/mp4",
         fileName: `${safeFileBase("xvideos")}-${Date.now()}.mp4`,

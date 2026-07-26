@@ -51,7 +51,6 @@ const handler = async (msg, { conn, args, command }) => {
     }, { quoted: msg });
 
     await conn.sendMessage(chatId, {
-      contextInfo: canal(),
       document: fileBuffer,
       mimetype: fileInfo.mime,
       fileName: fileInfo.title

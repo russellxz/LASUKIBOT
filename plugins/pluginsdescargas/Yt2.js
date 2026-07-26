@@ -68,7 +68,6 @@ const handler = async (msg, { conn, args, command }) => {
 
     const caption = `📺 *YouTube DL (video)*\n• *Título:* ${title || "Sin título"}\n• *API:* SkyUltraPlus`;
     await conn.sendMessage(jid, {
-      contextInfo: canal(),
       video: fs.readFileSync(filePath),
       mimetype: "video/mp4",
       caption

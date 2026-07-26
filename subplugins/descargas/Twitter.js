@@ -161,7 +161,7 @@ ${date ? `📅 *Fecha:* ${date}\n` : ""}📦 *Formato:* ${asDocument ? "Document
           await conn.sendMessage(
             chatId,
             {
-      contextInfo: canal(), document: { url: urlTry }, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
+      document: { url: urlTry }, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
             { quoted: quotedBase || triggerMsg }
           );
         } else {
@@ -197,7 +197,7 @@ ${date ? `📅 *Fecha:* ${date}\n` : ""}📦 *Formato:* ${asDocument ? "Document
       await conn.sendMessage(
         chatId,
         {
-      contextInfo: canal(), document: mediaBuffer, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
+      document: mediaBuffer, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
         { quoted: quotedBase || triggerMsg }
       );
     } else {
@@ -388,8 +388,12 @@ ${pieDescarga(conn)}`.trim();
 
               const ctxQuoted = m.message?.extendedTextMessage?.contextInfo?.stanzaId;
               let job = null;
-              if (ctxQuoted && __mio(conn, ctxQuoted)) {
+              if (ctxQuoted) {
+              // La selección cita una tarjeta concreta: si no es NUESTRA, no es
+              // para este bot. Sin esto, el bot principal y los subbots
+              // descargaban lo mismo a la vez.
                 job = __mio(conn, ctxQuoted);
+                if (!job) continue;
               } else {
                 const jobs = Object.values(pendingTW)
                   .filter(j => j.chatId === m.key.remoteJid && j.__own === __owner(conn))

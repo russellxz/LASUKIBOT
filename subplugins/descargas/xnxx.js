@@ -126,7 +126,6 @@ async function sendVideo(conn, job, asDocument, triggerMsg) {
     await conn.sendMessage(
       chatId,
       {
-      contextInfo: canal(),
         [asDocument ? "document" : "video"]: { url },
         mimetype: "video/mp4",
         fileName: asDocument ? `${fileBase}-${Date.now()}.mp4` : undefined,

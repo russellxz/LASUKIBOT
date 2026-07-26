@@ -62,7 +62,6 @@ const handler = async (msg, { conn, args, command }) => {
 
     // Enviar el APK
     await conn.sendMessage(chatId, {
-      contextInfo: canal(),
       document: fileBuffer,
       mimetype: "application/vnd.android.package-archive",
       fileName: apkFile.filename

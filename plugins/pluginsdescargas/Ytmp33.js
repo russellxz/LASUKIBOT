@@ -70,7 +70,6 @@ const handler = async (msg, { conn, args, command }) => {
     await conn.sendMessage(
       chatId,
       {
-      contextInfo: canal(),
         audio: { url: mp3Url },
         mimetype: "audio/mpeg",
       },

@@ -168,7 +168,6 @@ const handler = async (msg, { conn, text }) => {
     await conn.sendMessage(
       chatId,
       {
-      contextInfo: canal(),
         video: fs.readFileSync(outFile),
         mimetype: "video/mp4",
         fileName: `${base}.mp4`,
