@@ -572,8 +572,12 @@ ${pieDescarga(conn)}
             const ctxQuoted = m.message?.extendedTextMessage?.contextInfo?.stanzaId;
             let job = null;
 
-            if (ctxQuoted && __jobDe(conn, ctxQuoted)) {
+            if (ctxQuoted) {
+              // La selección cita una tarjeta concreta: si no es NUESTRA, no es
+              // para este bot. Sin esto, el bot principal y los subbots
+              // descargaban lo mismo a la vez.
               job = __jobDe(conn, ctxQuoted);
+              if (!job) continue;
             } else {
               const jobsInChat = Object.entries(pending)
                 .filter(([, j]) => j.chatId === m.key.remoteJid && j.__own === __owner(conn))
@@ -970,6 +974,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     {
       [asDocument ? "document" : "audio"]: fs.readFileSync(outFile),
       mimetype: "audio/mpeg",
+      ptt: false,   // archivo MP3, no nota de voz
       fileName: `${base}.mp3`,
     },
     { quoted }

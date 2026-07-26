@@ -613,6 +613,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     {
       [asDocument ? "document" : "audio"]: fs.readFileSync(outFile),
       mimetype: "audio/mpeg",
+      ptt: false,   // archivo MP3, no nota de voz
       fileName: `${base}.mp3`,
     },
     { quoted }

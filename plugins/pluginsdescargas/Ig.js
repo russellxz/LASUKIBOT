@@ -634,8 +634,12 @@ Cita este mensaje y escribe:
               const ctxQuoted = m.message?.extendedTextMessage?.contextInfo?.stanzaId;
               let job = null;
 
-              if (ctxQuoted && pendingIG[ctxQuoted]) {
+              if (ctxQuoted) {
+              // La selección cita una tarjeta concreta: si no es NUESTRA, no es
+              // para este bot. Sin esto, el bot principal y los subbots
+              // descargaban lo mismo a la vez.
                 job = pendingIG[ctxQuoted];
+                if (!job) continue;
               } else {
                 job = findLatestJob(chatNow);
               }
