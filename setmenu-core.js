@@ -150,18 +150,33 @@ async function descargar(conn, nodo, tipo) {
 // mensajes llegan con fromMe = true... igual que los que manda el propio bot.
 // Para no confundirlos (el bot se respondía a sí mismo y guardaba su propio
 // texto como nombre), guardamos los IDs de todo lo que enviamos y los saltamos.
-const idsPropios = new Set();
+// ⚠️ Un set POR BOT: todos los subbots y el bot principal comparten este
+// módulo, así que si fuera uno solo cada bot creería que los mensajes de
+// los demás son suyos (y atendería menús ajenos).
+const idsPropios = new Map(); // dueño -> Set de ids enviados
 
-function recordarPropio(res) {
+function recordarPropio(conn, res) {
   const id = res?.key?.id;
   if (!id) return res;
-  idsPropios.add(id);
-  if (idsPropios.size > 400) {
+  const k = dueno(conn);
+  let set = idsPropios.get(k);
+  if (!set) {
+    set = new Set();
+    idsPropios.set(k, set);
+  }
+  set.add(id);
+  if (set.size > 400) {
     // Mantener el set acotado: borrar los más viejos
-    const it = idsPropios.values();
-    for (let i = 0; i < 200; i++) idsPropios.delete(it.next().value);
+    const it = set.values();
+    for (let i = 0; i < 200; i++) set.delete(it.next().value);
   }
   return res;
+}
+
+// ¿Este mensaje lo envió ESTE bot?
+function esIdPropio(conn, id) {
+  const set = idsPropios.get(dueno(conn));
+  return !!(id && set && set.has(id));
 }
 
 // Textos con los que empiezan nuestros propios avisos: segunda barrera por si
@@ -196,10 +211,27 @@ const MARCAS_PROPIAS = [
 const esTextoPropio = (t) =>
   MARCAS_PROPIAS.some((m) => String(t || "").startsWith(m));
 
+// ID del mensaje al que responde/cita este mensaje. Sirve para saber si el
+// usuario tocó NUESTRO menú o el de otro bot: en un grupo donde están el bot
+// principal y varios subbots, todos ven la misma selección y antes todos
+// respondían a la vez.
+function idCitado(m) {
+  const msg = desenvolver(m?.message) || {};
+  const ctx =
+    msg.listResponseMessage?.contextInfo ||
+    msg.buttonsResponseMessage?.contextInfo ||
+    msg.templateButtonReplyMessage?.contextInfo ||
+    msg.interactiveResponseMessage?.contextInfo ||
+    msg.extendedTextMessage?.contextInfo ||
+    msg.imageMessage?.contextInfo ||
+    msg.videoMessage?.contextInfo ||
+    null;
+  return ctx?.stanzaId || "";
+}
+
 async function responder(conn, msg, texto) {
   try {
-    return recordarPropio(
-      await conn.sendMessage(msg.key.remoteJid, { text: texto }, { quoted: msg })
+    return recordarPropio(conn, await conn.sendMessage(msg.key.remoteJid, { text: texto }, { quoted: msg })
     );
   } catch {}
 }
@@ -473,7 +505,7 @@ async function guardarPasoMedia(conn, msg, pend) {
     perso.medias[clave] = reg;
   }
   savePerso(conn, perso);
-  borrarPendiente(conn, msg);
+  setPendiente(conn, msg, { paso: "menu" }); // sigue con el menú abierto
 
   await reaccionar(conn, msg, "✅");
   const donde =
@@ -496,7 +528,7 @@ async function guardarPasoNombre(conn, msg) {
   const perso = getPerso(conn);
   perso.nombre = nombre;
   savePerso(conn, perso);
-  borrarPendiente(conn, msg);
+  setPendiente(conn, msg, { paso: "menu" }); // sigue con el menú abierto
 
   await reaccionar(conn, msg, "✅");
   return responder(
@@ -524,7 +556,7 @@ async function guardarPasoFoto(conn, msg) {
     return responder(conn, msg, "❌ No se pudo cambiar la foto de perfil. Intenta de nuevo.");
   }
 
-  borrarPendiente(conn, msg);
+  setPendiente(conn, msg, { paso: "menu" }); // sigue con el menú abierto
   await reaccionar(conn, msg, "✅");
   return responder(conn, msg, "✅ *Foto de perfil actualizada.*");
 }
@@ -557,7 +589,7 @@ function registrarListener(conn, puedeUsar) {
         // 🚫 Nunca tomar como respuesta un mensaje que enviamos nosotros
         // (en subbots el dueño también es fromMe, por eso se comprueba el ID
         // y además el texto con el que empiezan nuestros avisos).
-        if (m.key?.id && idsPropios.has(m.key.id)) continue;
+        if (esIdPropio(conn, m.key?.id)) continue;
 
         // Solo atendemos a quien tiene permiso (owner / el propio subbot)
         if (!puedeUsar(m, conn)) continue;
@@ -609,6 +641,16 @@ function registrarListener(conn, puedeUsar) {
           null;
 
         if (respuesta) {
+          // 🎯 Solo atendemos la selección si el usuario tocó NUESTRO menú.
+          // Si no se puede saber a qué mensaje responde, exigimos que este
+          // bot haya abierto el menú aquí (sesión activa).
+          const citado = idCitado(m);
+          if (citado) {
+            if (!esIdPropio(conn, citado)) continue; // era el menú de otro bot
+          } else if (!pend) {
+            continue;
+          }
+
           let id = "";
           if (m.message?.listResponseMessage?.singleSelectReply?.selectedRowId) {
             id = m.message.listResponseMessage.singleSelectReply.selectedRowId;
@@ -639,6 +681,10 @@ function registrarListener(conn, puedeUsar) {
         // Respuesta con número citando el menú en texto (iPhone / fallback)
         if (/^\d{1,2}$/.test(texto)) {
           const ctx = m.message?.extendedTextMessage?.contextInfo;
+          // Igual que arriba: solo si citó NUESTRO menú
+          const idDelCitado = ctx?.stanzaId || "";
+          if (idDelCitado && !esIdPropio(conn, idDelCitado)) continue;
+
           const citado = ctx?.quotedMessage;
           const textoCitado = citado
             ? String(
@@ -703,13 +749,17 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
     `✏️ Nombre actual: *${marca}*\n\n` +
     `Elige qué quieres cambiar 👇`;
 
+  // Sesión abierta en ESTE bot: si la selección llega sin referencia al
+  // mensaje del menú, solo actúa el bot que realmente lo abrió aquí.
+  setPendiente(conn, msg, { paso: "menu" });
+
   // iPhone: sin botones, con opciones numeradas
   if (esIphone(msg)) {
-    return recordarPropio(await conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg }));
+    return recordarPropio(conn, await conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg }));
   }
 
   try {
-    return recordarPropio(await conn.sendMessage(
+    return recordarPropio(conn, await conn.sendMessage(
       chatId,
       {
         text: cabecera,
@@ -721,7 +771,7 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
     ));
   } catch (e) {
     console.log("[setmenu] Botones fallaron, usando texto:", e.message);
-    return recordarPropio(await conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg }));
+    return recordarPropio(conn, await conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg }));
   }
 }
 
@@ -751,11 +801,11 @@ export async function abrirDelmenu(msg, conn, { puedeUsar } = {}) {
     `Responde *confirmar* para borrar o *cancelar* para dejarlo así.`;
 
   if (esIphone(msg)) {
-    return recordarPropio(await conn.sendMessage(chatId, { text: aviso }, { quoted: msg }));
+    return recordarPropio(conn, await conn.sendMessage(chatId, { text: aviso }, { quoted: msg }));
   }
 
   try {
-    return recordarPropio(await conn.sendMessage(
+    return recordarPropio(conn, await conn.sendMessage(
       chatId,
       {
         text: aviso,
@@ -789,7 +839,7 @@ export async function abrirDelmenu(msg, conn, { puedeUsar } = {}) {
       { quoted: msg }
     ));
   } catch {
-    return recordarPropio(await conn.sendMessage(chatId, { text: aviso }, { quoted: msg }));
+    return recordarPropio(conn, await conn.sendMessage(chatId, { text: aviso }, { quoted: msg }));
   }
 }
 
