@@ -52,6 +52,7 @@ import pino from "pino";
 import axios from "axios";
 import { setConfig, getConfig, getAntideleteDB, saveAntideleteDB } from "./db.js";
 import { startWebServer } from "./webserver.js";
+import { limpiarRespuestaBoton } from "./disenos.js";
 import "./config.js";
 
 // 🌐 Prefijos personalizados desde prefijos.json o por defecto
@@ -354,6 +355,10 @@ sock.ev.on("messages.upsert", async ({ messages }) => {
   // ⚡ Marca de entrada: los comandos (ej. ping) miden con esto la velocidad
   // REAL de procesamiento interno del bot.
   m.__recvAt = Date.now();
+
+  // 🧹 El mensaje que genera el teléfono al tocar un botón se ve como
+  // "no compatible" para los demás del grupo: lo borramos si podemos.
+  limpiarRespuestaBoton(sock, m);
 
   // 🔥 Precalentar el caché de metadata del grupo SIN bloquear este mensaje,
   // para que los envíos al grupo no tengan que consultar la metadata.

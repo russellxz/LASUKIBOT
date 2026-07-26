@@ -77,6 +77,31 @@ export const CANAL = {
   nombre: "👑 LA SUKI BOT 👑"
 };
 
+/**
+ * Limpia el mensaje que genera el TELÉFONO del usuario al tocar un botón.
+ *
+ * Al pulsar un botón nativo, quien lo toca envía un `interactiveResponseMessage`.
+ * Los WhatsApp que no saben mostrar ese tipo lo pintan como "Recibiste un
+ * mensaje que no es compatible con tu versión de WhatsApp": el que tocó lo ve
+ * bien, los demás del grupo ven ese aviso. El bot no puede cambiar lo que emite
+ * un teléfono ajeno, pero sí puede borrar ese mensaje del chat.
+ *
+ * Solo se hace en grupos (en privado no lo ve nadie más) y requiere que el bot
+ * sea admin para borrar mensajes de otros; si no puede, falla en silencio y
+ * todo lo demás sigue funcionando igual.
+ */
+export function limpiarRespuestaBoton(conn, m) {
+  try {
+    if (!m?.message?.interactiveResponseMessage) return;
+    const chatId = m.key?.remoteJid || "";
+    if (!chatId.endsWith("@g.us")) return;
+    // Pequeña espera: primero que el comando haga su trabajo
+    setTimeout(() => {
+      conn.sendMessage(chatId, { delete: m.key }).catch(() => {});
+    }, 1200);
+  } catch {}
+}
+
 /** contextInfo con el canal (botón "Ver canal"), conservando lo que ya hubiera */
 export function canal(extra = {}) {
   return {

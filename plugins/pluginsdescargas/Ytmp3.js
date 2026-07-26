@@ -1,4 +1,4 @@
-import { cabeceraDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
+import { cabeceraDescarga, camposDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -56,10 +56,6 @@ function ensureTmp() {
 // usuarios no les salen los botones, se les manda la versión de reacciones/números.
 const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
 
-// 🚫 Botones SOLO en privado: en grupos, cuando alguien toca un botón su
-// teléfono manda la respuesta y a los demás les sale "mensaje no compatible".
-// En grupos se usa la versión de reacciones/números, que todos ven bien.
-const esGrupo = (m) => String(m?.key?.remoteJid || "").endsWith("@g.us");
 
 function botonesActivos() {
   const defaultCfg = { botones: true, updatedAt: null, updatedBy: null };
@@ -268,11 +264,22 @@ const handler = async (msg, { conn, args, command }) => {
     }
   } catch {}
 
-  const usarBotones = botonesActivos() && !esIphone(msg) && !esGrupo(msg);
+  const usarBotones = botonesActivos() && !esIphone(msg);
+
+  // Ficha con la info del resultado (va UNA sola vez, aquí)
+  const fichaInfo = camposDescarga(conn, [
+    ["Título", title],
+    ["Canal", authorName],
+    ["Duración", duration],
+    ["Vistas", viewsFmt],
+    ["Enlace", url]
+  ]);
 
   const caption = usarBotones
     ? `
-${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
+${cabeceraDescarga(conn, "🎵 RESULTADO ENCONTRADO")}
+
+${fichaInfo}
 
 🟢 *OPCIÓN 1 — Botones*
 Toca un botón abajo del mensaje:
@@ -282,7 +289,9 @@ Toca un botón abajo del mensaje:
 ${pieDescarga(conn)}
 `.trim()
     : `
-${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
+${cabeceraDescarga(conn, "🎵 RESULTADO ENCONTRADO")}
+
+${fichaInfo}
 
 🟡 *OPCIÓN 1 — Reaccionar*
 Reacciona con un emoji:
@@ -634,22 +643,6 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     return;
   }
 
-  const finalCaption =
-`╭━━━━━━━━━━━━━━━━╮
-   🎵 𝗔𝗨𝗗𝗜𝗢 𝗗𝗘𝗦𝗖𝗔𝗥𝗚𝗔𝗗𝗢
-╰━━━━━━━━━━━━━━━━━╯
-
-📝 *Título:* ${title}
-👤 *Autor:* ${authorName}
-⏱️ *Duración:* ${duration}
-👁️ *Vistas:* ${viewsFmt}
-📦 *Formato:* ${asDocument ? "Documento MP3" : "Audio MP3"}
-💾 *Tamaño:* ${sizeMB.toFixed(2)} MB
-
-━━━━━━━━━━━━━━━━━
-🤖 *Bot:* ${getMarca(conn)}
-🔗 *API:* Neoxr API
-━━━━━━━━━━━━━━━━━`;
 
   await conn.sendMessage(
     chatId,
@@ -657,20 +650,12 @@ async function downloadAudio(conn, job, asDocument, quoted) {
       contextInfo: canal(),
       [asDocument ? "document" : "audio"]: fs.readFileSync(outFile),
       mimetype: "audio/mpeg",
+      ptt: false,   // archivo MP3, no nota de voz
       fileName: `${base}.mp3`,
-      caption: asDocument ? finalCaption : undefined
     },
     { quoted }
   );
 
-  if (!asDocument) {
-    await conn.sendMessage(
-      chatId,
-      {
-      contextInfo: canal(), text: finalCaption },
-      { quoted }
-    );
-  }
 
   try {
     fs.unlinkSync(outFile);
