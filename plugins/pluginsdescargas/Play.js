@@ -909,7 +909,6 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     await conn.sendMessage(
       chatId,
       {
-      contextInfo: canal(),
         text: `❌ Error descargando audio: ${e.message}`
       },
       { quoted }

@@ -153,7 +153,7 @@ ${date ? `📅 *Fecha:* ${date}\n` : ""}📦 *Formato:* ${asDocument ? "Document
           await conn.sendMessage(
             chatId,
             {
-      contextInfo: canal(), document: { url: urlTry }, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
+      document: { url: urlTry }, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
             { quoted: quotedBase || triggerMsg }
           );
         } else {
@@ -189,7 +189,7 @@ ${date ? `📅 *Fecha:* ${date}\n` : ""}📦 *Formato:* ${asDocument ? "Document
       await conn.sendMessage(
         chatId,
         {
-      contextInfo: canal(), document: mediaBuffer, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
+      document: mediaBuffer, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
         { quoted: quotedBase || triggerMsg }
       );
     } else {

@@ -209,8 +209,7 @@ async function processSend(conn, job, asDocument) {
     
     if (asDocument) {
         await conn.sendMessage(job.chatId, {
-      contextInfo: canal(), 
-            document: { url: filePath }, 
+      document: { url: filePath }, 
             mimetype: 'video/mp4', 
             fileName: fileName,
             caption 

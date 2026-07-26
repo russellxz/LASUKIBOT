@@ -132,7 +132,6 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     await conn.sendMessage(
       jid,
       {
-      contextInfo: canal(),
         video: fs.readFileSync(videoPath),
         mimetype: 'video/mp4',
         caption: `📹 *${title}*\n💾 Tamaño: ${sizeMB} MB\n⏱️ Descarga: ${took}s`

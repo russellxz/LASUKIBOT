@@ -758,7 +758,6 @@ async function processSend(conn, job, asDocument, triggerMsg) {
         await conn.sendMessage(
           chatId,
           {
-      contextInfo: canal(),
             document: buf,
             mimetype: fileData.mime,
             fileName: fileData.fileName,

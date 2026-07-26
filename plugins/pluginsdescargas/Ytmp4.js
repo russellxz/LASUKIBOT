@@ -533,7 +533,6 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   await conn.sendMessage(
     chatId,
     {
-      contextInfo: canal(),
       [asDocument ? "document" : "video"]: fs.readFileSync(file),
       mimetype: "video/mp4",
       fileName: `${base}_${tag}.mp4`,

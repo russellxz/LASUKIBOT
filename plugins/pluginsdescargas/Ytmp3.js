@@ -602,7 +602,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     await conn.sendMessage(
       chatId,
       {
-      contextInfo: canal(), text: `❌ Error descargando audio: ${e.message}` },
+      text: `❌ Error descargando audio: ${e.message}` },
       { quoted }
     );
     return;
@@ -651,7 +651,6 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   await conn.sendMessage(
     chatId,
     {
-      contextInfo: canal(),
       [asDocument ? "document" : "audio"]: fs.readFileSync(outFile),
       mimetype: "audio/mpeg",
       ptt: false,   // archivo MP3, no nota de voz

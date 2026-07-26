@@ -355,7 +355,6 @@ async function processSend(conn, job, asDocument, triggerMsg){
 
     if (asDocument) {
       await conn.sendMessage(chatId, {
-      contextInfo: canal(),
         document: { url },
         mimetype: "video/mp4",
         fileName: `tiktok-${Date.now()}.mp4`,

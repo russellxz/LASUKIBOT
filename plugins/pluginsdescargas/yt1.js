@@ -76,7 +76,6 @@ const handler = async (msg, { conn, args, command }) => {
 
     const caption = `🎵 *YouTube DL (audio)*\n• *Título:* ${title || "Sin título"}\n• *API:* SkyUltraPlus`;
     await conn.sendMessage(jid, {
-      contextInfo: canal(),
       audio: fs.readFileSync(filePath),
       mimetype: pickAudioMime(filePath),
       ptt: false
