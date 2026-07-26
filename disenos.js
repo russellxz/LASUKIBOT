@@ -428,14 +428,15 @@ export async function enviarMenu(conn, chatId, msg, menuKey, contenido) {
   // El bot principal usa sendMessage2 (ya adjunta el canal); los subbots no lo
   // tienen, así que aquí se les pone el contextInfo del canal para que también
   // les salga el botón "Ver canal".
-  const enviar = (contenido2) =>
-    typeof conn.sendMessage2 === "function"
-      ? conn.sendMessage2(chatId, contenido2, msg)
-      : conn.sendMessage(
-          chatId,
-          { ...contenido2, contextInfo: canal(contenido2.contextInfo) },
-          { quoted: msg }
-        );
+  // Se adjunta SIEMPRE el canal aquí (no se confía en que lo haga quien
+  // envía): así sale el botón "Ver canal" tanto en el bot principal como
+  // en los subbots, con o sin personalización.
+  const enviar = (contenido2) => {
+    const conCanal = { ...contenido2, contextInfo: canal(contenido2.contextInfo) };
+    return typeof conn.sendMessage2 === "function"
+      ? conn.sendMessage2(chatId, conCanal, msg)
+      : conn.sendMessage(chatId, conCanal, { quoted: msg });
+  };
 
   try {
     return await enviar({ ...media, caption });

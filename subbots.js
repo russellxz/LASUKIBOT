@@ -16,6 +16,7 @@ import path from "path";
 import { pathToFileURL } from "url";
 import pino from "pino";
 import chalk from "chalk";
+import { canal } from "./disenos.js";
 
 const SUB_ROOT = path.resolve("./subbots");
 const SESSIONS_DIR = path.join(SUB_ROOT, "sessions");
@@ -1835,12 +1836,18 @@ async function connectSubbot(num, entry) {
   sock.wa = { downloadContentFromMessage };
   global.wa = global.wa || { downloadContentFromMessage };
 
-  // Compat con plugins que usan sendMessage2 (menús del bot principal)
+  // Compat con plugins que usan sendMessage2 (menús del bot principal).
+  // Igual que en el bot principal, adjunta el canal para que salga el
+  // botón "Ver canal" debajo del mensaje.
   sock.sendMessage2 = async (chat, content, quotedMsg, options = {}) => {
     if (content?.sticker) {
       return sock.sendMessage(chat, { sticker: content.sticker }, { quoted: quotedMsg, ...options });
     }
-    return sock.sendMessage(chat, content, { quoted: quotedMsg, ...options });
+    return sock.sendMessage(
+      chat,
+      { ...content, contextInfo: canal(content?.contextInfo) },
+      { quoted: quotedMsg, ...options }
+    );
   };
 
   sock.lidParser = function (participants = []) {
