@@ -1,3 +1,4 @@
+import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -272,31 +273,17 @@ const handler = async (msg, { conn, args, command }) => {
 
   const caption = usarBotones
     ? `
-╭━━━━━━━━━━━━━━━╮
-   ⚡ 𝗬𝗼𝘂𝗧𝘂𝗯𝗲 𝗠𝗣𝟯 ⚡
-╰━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟢 *OPCIÓN 1 — Botones*
 Toca un botón abajo del mensaje:
    🎵 *Audio*
    📄 *Audio Documento*
 
-━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
-━━━━━━━━━━━━━━━━
+${pieDescarga(conn)}
 `.trim()
     : `
-╭━━━━━━━━━━━━━━━━╮
-   ⚡ 𝗬𝗼𝘂𝗧𝘂𝗯𝗲 𝗠𝗣𝟯 ⚡
-╰━━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟡 *OPCIÓN 1 — Reaccionar*
 Reacciona con un emoji:
@@ -308,9 +295,7 @@ Cita este mensaje y escribe:
    *1* o *audio*      →  Audio MP3
    *2* o *audiodoc*   →  Audio como documento
 
-━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
-━━━━━━━━━━━━━━━
+${pieDescarga(conn)}
 `.trim();
 
   const nativeFlowButtons = [
@@ -333,7 +318,7 @@ Cita este mensaje y escribe:
         {
           image: thumbnail ? { url: thumbnail } : undefined,
           caption,
-          footer: "❦ Suki Subbots — Selecciona una opción ❦",
+          footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons: nativeFlowButtons,
           headerType: 4
         },
@@ -653,7 +638,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
 💾 *Tamaño:* ${sizeMB.toFixed(2)} MB
 
 ━━━━━━━━━━━━━━━━━
-🤖 *Bot:* Suki Subbots
+🤖 *Bot:* ${getMarca(conn)}
 🔗 *API:* Neoxr API
 ━━━━━━━━━━━━━━━━━`;
 

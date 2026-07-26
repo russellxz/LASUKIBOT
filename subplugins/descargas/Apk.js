@@ -1,3 +1,4 @@
+import { getMarca } from "../../disenos.js";
 import fetch from 'node-fetch';
 
 const handler = async (msg, { conn, args, command }) => {
@@ -48,7 +49,7 @@ const handler = async (msg, { conn, args, command }) => {
       `𖠁 *Versión:* ${apkInfo.version}\n` +
       `𖠁 *Actualizado:* ${apkInfo.updated}\n` +
       `𖠁 *Requisitos:* ${apkInfo.requirements}\n` +
-      `𖠁 *ID:* ${apkInfo.id}\n\n────────────\n🤖 _Suki Subbots_`;
+      `𖠁 *ID:* ${apkInfo.id}\n\n────────────\n🤖 _${getMarca(conn)}_`;
 
     // Enviar imagen con info
     await conn.sendMessage(chatId, {

@@ -1,3 +1,4 @@
+import { getMarca } from "../../disenos.js";
 import fetch from 'node-fetch';
 
 const handler = async (msg, { conn, args, command }) => {
@@ -40,7 +41,7 @@ const handler = async (msg, { conn, args, command }) => {
       `𖠁 *Nombre:* ${fileInfo.title}\n` +
       `𖠁 *Tamaño:* ${fileInfo.size}\n` +
       `𖠁 *Tipo:* ${fileInfo.mime}\n` +
-      `𖠁 *Extensión:* ${fileInfo.extension}\n\n────────────\n𖠁 _Suki Subbots_`;
+      `𖠁 *Extensión:* ${fileInfo.extension}\n\n────────────\n𖠁 _${getMarca(conn)}_`;
 
     await conn.sendMessage(chatId, {
       text: caption

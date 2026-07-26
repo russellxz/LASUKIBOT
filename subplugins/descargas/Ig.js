@@ -7,6 +7,7 @@
 
 "use strict";
 
+import { getMarca } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -395,13 +396,13 @@ async function sendPreview(conn, chatId, msg, thumb, caption, usarBotones, pref)
       ? {
           image: { url: thumb },
           caption,
-          footer: "❦ Suki Subbots — Selecciona una opción ❦",
+          footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons,
           headerType: 4
         }
       : {
           text: caption,
-          footer: "❦ Suki Subbots — Selecciona una opción ❦",
+          footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons,
           headerType: 1
         };
@@ -423,13 +424,13 @@ async function sendPreview(conn, chatId, msg, thumb, caption, usarBotones, pref)
         ? {
             image: { url: thumb },
             caption,
-            footer: "❦ Suki Subbots — Selecciona una opción ❦",
+            footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
             buttons: simpleButtons,
             headerType: 4
           }
         : {
             text: caption,
-            footer: "❦ Suki Subbots — Selecciona una opción ❦",
+            footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
             buttons: simpleButtons,
             headerType: 1
           },
@@ -535,7 +536,7 @@ Toca un botón abajo del mensaje:
 📄 *Documento*
 
 ━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
+🤖 *${getMarca(conn)}*
 🔗 *API:* ${NEOXR_BASE}
 ━━━━━━━━━━━━━━━━
 `.trim()
@@ -561,7 +562,7 @@ Cita este mensaje y escribe:
 *2* → Documento
 
 ━━━━━━━━━━━━━━━━
-🤖 *Suki Subbots*
+🤖 *${getMarca(conn)}*
 🔗 *API:* ${NEOXR_BASE}
 ━━━━━━━━━━━━━━━━
 `.trim();
@@ -748,7 +749,7 @@ async function processSend(conn, job, asDocument, triggerMsg) {
 📄 *Archivo:* ${i + 1}/${items.length}
 💾 *Tamaño:* ${sizeMB.toFixed(2)} MB
 
-🤖 *Bot:* Suki Subbots
+🤖 *Bot:* ${getMarca(conn)}
 🔗 *API:* ${NEOXR_BASE}`;
 
       if (asDocument) {

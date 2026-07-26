@@ -1,45 +1,37 @@
+// plugins/Menufree.js — Menú Free Fire.
+// El diseño, la imagen/video y el nombre salen de la personalización (setmenu).
+import { enviarMenu } from "../disenos.js";
+
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
-  const pref = global.prefixes?.[0] || ".";
+  const p = global.prefixes?.[0] || ".";
 
-  await conn.sendMessage2(chatId, { react: { text: "📋", key: msg.key } }, msg);
+  try { await conn.sendMessage2(chatId, { react: { text: "📋", key: msg.key } }, msg); } catch {}
 
-  const texto = `𖠺𝐿𝑎 𝑆𝑢𝑘𝑖 𝐵𝑜𝑡𖠺
-
-𖠁𝗠𝗘𝗡𝗨 𝗙𝗥𝗘𝗘 𝗙𝗜𝗥𝗘𖠁
-𖠁𝗣𝗿𝗲𝗳𝗶𝗷𝗼 𝗔𝗰𝘁𝘂𝗮𝗹: 『 ${pref} 』
-𖠁𝗨𝘀𝗮 𝗲𝗻 𝗰𝗮𝗱𝗮 𝗰𝗼𝗺𝗮𝗻𝗱𝗼
-
-🍉 *MAPAS*
-╭─────◆
-│๛ ${pref}mapas
-╰─────◆
-
-📃 *REGLAS*
-╭─────◆
-│๛ ${pref}reglas
-│๛ ${pref}setreglas
-╰─────◆
-
-🛡️ *LISTA DE VERSUS*
-╭─────◆
-│๛ ${pref}4vs4
-│๛ ${pref}6vs6
-│๛ ${pref}12vs12
-│๛ ${pref}16vs16
-│๛ ${pref}20vs20
-│๛ ${pref}24vs24
-│๛ ${pref}guerr
-╰─────◆
-
-🎮 *Sistema personalizado para clanes FF*
-
-🤖 *La Suki Bot*`.trim();
-
-  await conn.sendMessage2(chatId, {
-    image: { url: 'https://cdn.russellxz.click/bdd4fca0.jpeg' },
-    caption: texto
-  }, msg);
+  return enviarMenu(conn, chatId, msg, "menufree", {
+    titulo: "MENÚ FREE FIRE",
+    info: [
+      ["Prefijo actual", p],
+      ["Úsalo", "en cada comando"]
+    ],
+    secciones: [
+      { titulo: "🍉 MAPAS", items: [`${p}mapas`] },
+      { titulo: "📃 REGLAS", items: [`${p}reglas`, `${p}setreglas`] },
+      {
+        titulo: "🛡️ LISTA DE VERSUS",
+        items: [
+          `${p}4vs4`,
+          `${p}6vs6`,
+          `${p}12vs12`,
+          `${p}16vs16`,
+          `${p}20vs20`,
+          `${p}24vs24`,
+          `${p}guerr`
+        ]
+      }
+    ],
+    nota: "Sistema personalizado para clanes FF 🎮"
+  });
 };
 
 handler.command = ['menufree'];

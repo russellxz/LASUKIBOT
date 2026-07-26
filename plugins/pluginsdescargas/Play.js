@@ -1,3 +1,4 @@
+import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -356,29 +357,15 @@ const handler = async (msg, { conn, text }) => {
 
   const caption = usarBotones
     ? `
-╭━━━━━━━━━━━━━━━━╮
-   ❦ 𝑳𝑨 𝑺𝑼𝑲𝑰 𝑩𝑶𝑻 ❦
-╰━━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟢 *OPCIÓN 1 — Menú de Botones*
 Toca el botón *📥 Menú de descarga* abajo del mensaje. Se abrirá una lista con todas las opciones de audio y video en distintas calidades.
 
-━━━━━━━━━━━━━━━━━
-🤖 *La Suki Bot*
-━━━━━━━━━━━━━━━━━
+${pieDescarga(conn)}
 `.trim()
     : `
-╭━━━━━━━━━━━━━━━━╮
-   ❦ 𝑳𝑨 𝑺𝑼𝑲𝑰 𝑩𝑶𝑻 ❦
-╰━━━━━━━━━━━━━━━━╯
-
-━━━━━━━━━━━━━━━━━
- *📥 CÓMO DESCARGAR*
-━━━━━━━━━━━━━━━━━
+${cabeceraDescarga(conn, "📥 CÓMO DESCARGAR")}
 
 🟡 *OPCIÓN 1 — Reaccionar*
 Reacciona con un emoji:
@@ -397,9 +384,7 @@ Cita este mensaje y escribe:
 💡 *Tip:* Puedes cambiar la calidad escribiendo:
    _"video 720"_   o   _"2 1080"_   o   _"videodoc 4k"_
 
-━━━━━━━━━━━━━━━
-🤖 *La Suki Bot*
-━━━━━━━━━━━━━━━
+${pieDescarga(conn)}
 `.trim();
 
   const nativeFlowButtons = [
@@ -934,22 +919,6 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     return;
   }
 
-  const finalCaption =
-`╭━━━━━━━━━━━━━━━━━━╮
-   🎵 𝗔𝗨𝗗𝗜𝗢 𝗗𝗘𝗦𝗖𝗔𝗥𝗚𝗔𝗗𝗢
-╰━━━━━━━━━━━━━━━━━━╯
-
-📝 *Título:* ${title}
-👤 *Autor:* ${authorName}
-⏱️ *Duración:* ${duration}
-👁️ *Vistas:* ${viewsFmt}
-📦 *Formato:* ${asDocument ? "Documento MP3" : "Audio MP3"}
-💾 *Tamaño:* ${sizeMB.toFixed(2)} MB
-
-━━━━━━━━━━━━━━━━━━━━
-🤖 *Bot:* La Suki Bot
-🔗 *API:* Neoxr API
-━━━━━━━━━━━━━━━━━━━━`;
 
   await conn.sendMessage(
     chatId,
@@ -957,20 +926,10 @@ async function downloadAudio(conn, job, asDocument, quoted) {
       [asDocument ? "document" : "audio"]: fs.readFileSync(outFile),
       mimetype: "audio/mpeg",
       fileName: `${base}.mp3`,
-      caption: asDocument ? finalCaption : undefined
     },
     { quoted }
   );
 
-  if (!asDocument) {
-    await conn.sendMessage(
-      chatId,
-      {
-        text: finalCaption
-      },
-      { quoted }
-    );
-  }
 
   try {
     fs.unlinkSync(outFile);
@@ -1037,25 +996,7 @@ async function downloadVideo(conn, job, asDocument, quoted) {
     return;
   }
 
-  const qualityLabel = q === "4k" ? "4K" : `${q}p`;
 
-  const finalCaption =
-`╭━━━━━━━━━━━━━━╮
-   🎬 𝗩𝗜𝗗𝗘𝗢 𝗗𝗘𝗦𝗖𝗔𝗥𝗚𝗔𝗗𝗢
-╰━━━━━━━━━━━━━━━╯
-
-📝 *Título:* ${title}
-👤 *Autor:* ${authorName}
-⏱️ *Duración:* ${duration}
-👁️ *Vistas:* ${viewsFmt}
-⚡ *Calidad:* ${qualityLabel}
-📦 *Formato:* ${asDocument ? "Documento MP4" : "Video MP4"}
-💾 *Tamaño:* ${sizeMB.toFixed(2)} MB
-
-━━━━━━━━━━━━━━━━━━
-🤖 *Bot:* La Suki Bot
-🔗 *API:* ${API_BASE}
-━━━━━━━━━━━━━━━━━━`;
 
   await conn.sendMessage(
     chatId,
@@ -1063,7 +1004,6 @@ async function downloadVideo(conn, job, asDocument, quoted) {
       [asDocument ? "document" : "video"]: fs.readFileSync(file),
       mimetype: "video/mp4",
       fileName: `${base}_${tag}.mp4`,
-      caption: finalCaption
     },
     { quoted }
   );
