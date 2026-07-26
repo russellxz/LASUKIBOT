@@ -9,6 +9,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import webp from 'node-webpmux';
 
 // === Carpeta temporal ===
+import { canal } from "../disenos.js";
 const tempFolder = path.join(__dirname, "../tmp/");
 if (!fs.existsSync(tempFolder)) fs.mkdirSync(tempFolder, { recursive: true });
 
@@ -57,6 +58,7 @@ const handler = async (msg, { conn, wa }) => {
     return conn.sendMessage(
       chatId,
       {
+        contextInfo: canal(),
         text: `⚠️ *Responde a una imagen o video para crear un sticker.*\n\n✳️ Ejemplo:\n${pref}s (respondiendo a una imagen)`,
       },
       { quoted: msg }
@@ -100,7 +102,7 @@ const handler = async (msg, { conn, wa }) => {
     console.error("[sticker] Error:", err);
     await conn.sendMessage(
       chatId,
-      { text: "❌ *Hubo un error al crear el sticker.*" },
+      { contextInfo: canal(), text: "❌ *Hubo un error al crear el sticker.*" },
       { quoted: msg }
     );
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
