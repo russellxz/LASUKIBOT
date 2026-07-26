@@ -1,4 +1,4 @@
-import { cabeceraDescarga, camposDescarga, pieDescarga, getMarca } from "../../disenos.js";
+import { cabeceraDescarga, camposDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -185,7 +185,8 @@ const handler = async (msg, { conn, text }) => {
   if (!query) {
     return conn.sendMessage(
       msg.key.remoteJid,
-      { text: `✳️ Usa:\n${pref}play2 <término> [calidad]\nEj: *${pref}play2* bad bunny diles 720` },
+      {
+      contextInfo: canal(), text: `✳️ Usa:\n${pref}play2 <término> [calidad]\nEj: *${pref}play2* bad bunny diles 720` },
       { quoted: msg }
     );
   }
@@ -195,7 +196,8 @@ const handler = async (msg, { conn, text }) => {
   const res = await yts(query);
   const video = res.videos?.[0];
   if (!video) {
-    return conn.sendMessage(msg.key.remoteJid, { text: "❌ Sin resultados." }, { quoted: msg });
+    return conn.sendMessage(msg.key.remoteJid, {
+      contextInfo: canal(), text: "❌ Sin resultados." }, { quoted: msg });
   }
 
   const { url: videoUrl, title, timestamp: duration, views, author, thumbnail, ago } = video;
@@ -303,6 +305,7 @@ ${pieDescarga(conn)}
       preview = await conn.sendMessage(
         msg.key.remoteJid,
         {
+      contextInfo: canal(),
           image: { url: thumbnail },
           caption,
           footer: "❦ Selecciona una opción del menú ❦",
@@ -315,14 +318,16 @@ ${pieDescarga(conn)}
       console.log("[play] menú nativo falló, usando fallback:", e.message);
       preview = await conn.sendMessage(
         msg.key.remoteJid,
-        { image: { url: thumbnail }, caption },
+        {
+      contextInfo: canal(), image: { url: thumbnail }, caption },
         { quoted: msg }
       );
     }
   } else {
     preview = await conn.sendMessage(
       msg.key.remoteJid,
-      { image: { url: thumbnail }, caption },
+      {
+      contextInfo: canal(), image: { url: thumbnail }, caption },
       { quoted: msg }
     );
   }
@@ -427,7 +432,8 @@ ${pieDescarga(conn)}
             if (["1", "audio", "4", "audiodoc"].includes(firstWord)) {
               const docMode = firstWord === "4" || firstWord === "audiodoc";
               await conn.sendMessage(chatId, { react: { text: docMode ? "📄" : "🎵", key: m.key } });
-              await conn.sendMessage(chatId, { text: `🎶 Descargando audio (mp3)...` }, { quoted: m });
+              await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎶 Descargando audio (mp3)...` }, { quoted: m });
               await downloadAudio(conn, job, docMode, m);
             }
             else if (["2", "video", "3", "videodoc"].includes(firstWord)) {
@@ -435,10 +441,12 @@ ${pieDescarga(conn)}
               const useQuality = VALID_QUALITIES.has(qFromReply) ? qFromReply : (job.videoQuality || DEFAULT_VIDEO_QUALITY);
 
               await conn.sendMessage(chatId, { react: { text: docMode ? "📁" : "🎬", key: m.key } });
-              await conn.sendMessage(chatId, { text: `🎥 Descargando video (${useQuality === "4k" ? "4K" : useQuality + "p"})...` }, { quoted: m });
+              await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video (${useQuality === "4k" ? "4K" : useQuality + "p"})...` }, { quoted: m });
               await downloadVideo(conn, { ...job, videoQuality: useQuality }, docMode, m);
             } else {
               await conn.sendMessage(chatId, {
+      contextInfo: canal(),
                 text:
 `⚠️ *Opciones válidas:*
    • *1* o *audio* → audio mp3
@@ -468,13 +476,15 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
 
   if (id === `${pref}play_audio` || id.endsWith("play_audio")) {
     await conn.sendMessage(chatId, { react: { text: "🎵", key: m.key } });
-    await conn.sendMessage(chatId, { text: `🎶 Descargando audio (mp3)...` }, { quoted: m });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎶 Descargando audio (mp3)...` }, { quoted: m });
     return downloadAudio(conn, job, false, m);
   }
 
   if (id === `${pref}play_audiodoc` || id.endsWith("play_audiodoc")) {
     await conn.sendMessage(chatId, { react: { text: "📄", key: m.key } });
-    await conn.sendMessage(chatId, { text: `🎶 Descargando audio como documento...` }, { quoted: m });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎶 Descargando audio como documento...` }, { quoted: m });
     return downloadAudio(conn, job, true, m);
   }
 
@@ -484,7 +494,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     if (VALID_QUALITIES.has(q)) {
       const label = q === "4k" ? "4K" : `${q}p`;
       await conn.sendMessage(chatId, { react: { text: "📁", key: m.key } });
-      await conn.sendMessage(chatId, { text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
+      await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
       return downloadVideo(conn, { ...job, videoQuality: q }, true, m);
     }
   }
@@ -495,7 +506,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     if (VALID_QUALITIES.has(q)) {
       const label = q === "4k" ? "4K" : `${q}p`;
       await conn.sendMessage(chatId, { react: { text: "🎬", key: m.key } });
-      await conn.sendMessage(chatId, { text: `🎥 Descargando video (${label})...` }, { quoted: m });
+      await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video (${label})...` }, { quoted: m });
       return downloadVideo(conn, { ...job, videoQuality: q }, false, m);
     }
   }
@@ -504,7 +516,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     const q = job.videoQuality || DEFAULT_VIDEO_QUALITY;
     const label = q === "4k" ? "4K" : `${q}p`;
     await conn.sendMessage(chatId, { react: { text: "🎬", key: m.key } });
-    await conn.sendMessage(chatId, { text: `🎥 Descargando video (${label})...` }, { quoted: m });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video (${label})...` }, { quoted: m });
     return downloadVideo(conn, job, false, m);
   }
 
@@ -512,7 +525,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     const q = job.videoQuality || DEFAULT_VIDEO_QUALITY;
     const label = q === "4k" ? "4K" : `${q}p`;
     await conn.sendMessage(chatId, { react: { text: "📁", key: m.key } });
-    await conn.sendMessage(chatId, { text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
     return downloadVideo(conn, job, true, m);
   }
 }
@@ -526,12 +540,14 @@ async function handleDownload(conn, job, choice, quoted) {
   const isDoc = key.endsWith("Doc");
 
   if (key.startsWith("audio")) {
-    await conn.sendMessage(job.chatId, { text: `⏳ Descargando audio (mp3)...` }, { quoted: quoted || job.commandMsg });
+    await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), text: `⏳ Descargando audio (mp3)...` }, { quoted: quoted || job.commandMsg });
     return downloadAudio(conn, job, isDoc, quoted || job.commandMsg);
   }
 
   const useQuality = job.videoQuality || DEFAULT_VIDEO_QUALITY;
-  await conn.sendMessage(job.chatId, { text: `⏳ Descargando video (${useQuality === "4k" ? "4K" : useQuality + "p"})...` }, { quoted: quoted || job.commandMsg });
+  await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), text: `⏳ Descargando video (${useQuality === "4k" ? "4K" : useQuality + "p"})...` }, { quoted: quoted || job.commandMsg });
   return downloadVideo(conn, job, isDoc, quoted || job.commandMsg);
 }
 
@@ -542,13 +558,15 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   try {
     resolved = await callYoutubeResolve(videoUrl, { type: "audio", format: DEFAULT_AUDIO_FORMAT });
   } catch (e) {
-    await conn.sendMessage(chatId, { text: `❌ Error API (audio): ${e.message}` }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error API (audio): ${e.message}` }, { quoted });
     return;
   }
 
   const mediaUrl = resolved.dl_download || resolved.direct;
   if (!mediaUrl) {
-    await conn.sendMessage(chatId, { text: "❌ No se pudo obtener audio." }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ No se pudo obtener audio." }, { quoted });
     return;
   }
 
@@ -573,7 +591,8 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   const sizeMB = fileSizeMB(outFile);
   if (sizeMB > MAX_MB) {
     try { fs.unlinkSync(outFile); } catch {}
-    await conn.sendMessage(chatId, { text: `❌ Audio > ${MAX_MB}MB.` }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Audio > ${MAX_MB}MB.` }, { quoted });
     return;
   }
 
@@ -602,13 +621,15 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   try {
     resolved = await callYoutubeResolve(videoUrl, { type: "video", quality: q });
   } catch (e) {
-    await conn.sendMessage(chatId, { text: `❌ Error API (video): ${e.message}` }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error API (video): ${e.message}` }, { quoted });
     return;
   }
 
   const mediaUrl = resolved.dl_download || resolved.direct;
   if (!mediaUrl) {
-    await conn.sendMessage(chatId, { text: "❌ No se pudo obtener video." }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ No se pudo obtener video." }, { quoted });
     return;
   }
 
@@ -622,7 +643,8 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   const sizeMB = fileSizeMB(file);
   if (sizeMB > MAX_MB) {
     try { fs.unlinkSync(file); } catch {}
-    await conn.sendMessage(chatId, { text: `❌ Video > ${MAX_MB}MB.` }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Video > ${MAX_MB}MB.` }, { quoted });
     return;
   }
 

@@ -1,6 +1,7 @@
 // commands/ytmp3.js — YouTube MP3 simple
 "use strict";
 
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 
 const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
@@ -46,7 +47,8 @@ const handler = async (msg, { conn, args, command }) => {
   if (!text) {
     return conn.sendMessage(
       chatId,
-      { text: `✳️ Usa:\n\( {pref} \){command} <URL YouTube>\nEj: \( {pref} \){command} https://www.youtube.com/watch?v=123` },
+      {
+      contextInfo: canal(), text: `✳️ Usa:\n\( {pref} \){command} <URL YouTube>\nEj: \( {pref} \){command} https://www.youtube.com/watch?v=123` },
       { quoted: msg }
     );
   }
@@ -54,7 +56,8 @@ const handler = async (msg, { conn, args, command }) => {
   if (!/youtube\.com|youtu\.be/i.test(text)) {
     return conn.sendMessage(
       chatId,
-      { text: `❌ Enlace inválido. Usa URL de YouTube.` },
+      {
+      contextInfo: canal(), text: `❌ Enlace inválido. Usa URL de YouTube.` },
       { quoted: msg }
     );
   }
@@ -67,6 +70,7 @@ const handler = async (msg, { conn, args, command }) => {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         audio: { url: mp3Url },
         mimetype: "audio/mpeg",
       },
@@ -76,7 +80,8 @@ const handler = async (msg, { conn, args, command }) => {
     await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } });
   } catch (err) {
     console.error("❌ Error ytmp3:", err?.message || err);
-    await conn.sendMessage(chatId, { text: `❌ Error: ${err?.message || "No se pudo descargar el MP3."}` }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error: ${err?.message || "No se pudo descargar el MP3."}` }, { quoted: msg });
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
   }
 };

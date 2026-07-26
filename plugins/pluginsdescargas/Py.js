@@ -1,3 +1,4 @@
+import { canal } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -51,7 +52,8 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   if (!args[0]) {
     return conn.sendMessage(
       jid,
-      { text: `*[⛅]* Envía el enlace del video de YouTube.\n*Ejemplo:* ${prefix + command} https://youtu.be/KHgllosZ3kA` },
+      {
+      contextInfo: canal(), text: `*[⛅]* Envía el enlace del video de YouTube.\n*Ejemplo:* ${prefix + command} https://youtu.be/KHgllosZ3kA` },
       { quoted: msg }
     );
   }
@@ -61,7 +63,8 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   if (!/youtu\.?be/i.test(videoUrl)) {
     return conn.sendMessage(
       jid,
-      { text: '*[❌]* Por favor envía una URL válida de YouTube.' },
+      {
+      contextInfo: canal(), text: '*[❌]* Por favor envía una URL válida de YouTube.' },
       { quoted: msg }
     );
   }
@@ -71,7 +74,8 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
   try {
     await react(conn, msg, '🕓');
-    await conn.sendMessage(jid, { text: '*[⏳]* Descargando video, espera un momento...' }, { quoted: msg });
+    await conn.sendMessage(jid, {
+      contextInfo: canal(), text: '*[⏳]* Descargando video, espera un momento...' }, { quoted: msg });
 
     const result = await ytVideoDownload(videoUrl);
 
@@ -79,7 +83,8 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       await react(conn, msg, '❌');
       return conn.sendMessage(
         jid,
-        { text: `*[❌]* Error: ${result?.error || result?.message || 'No se pudo obtener el video'}` },
+        {
+      contextInfo: canal(), text: `*[❌]* Error: ${result?.error || result?.message || 'No se pudo obtener el video'}` },
         { quoted: msg }
       );
     }
@@ -91,7 +96,8 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       await react(conn, msg, '❌');
       return conn.sendMessage(
         jid,
-        { text: '*[❌]* No se pudo obtener el enlace de descarga.' },
+        {
+      contextInfo: canal(), text: '*[❌]* No se pudo obtener el enlace de descarga.' },
         { quoted: msg }
       );
     }
@@ -105,7 +111,8 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
     if (!fs.existsSync(videoPath)) {
       await react(conn, msg, '❌');
-      return conn.sendMessage(jid, { text: '*[❌]* Error al procesar el video.' }, { quoted: msg });
+      return conn.sendMessage(jid, {
+      contextInfo: canal(), text: '*[❌]* Error al procesar el video.' }, { quoted: msg });
     }
 
     const size = fs.statSync(videoPath).size;
@@ -116,7 +123,8 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       await react(conn, msg, '❌');
       return conn.sendMessage(
         jid,
-        { text: `*[❌]* El video es demasiado grande (${sizeMB} MB).\n⚠️ WhatsApp tiene un límite de ~100 MB.` },
+        {
+      contextInfo: canal(), text: `*[❌]* El video es demasiado grande (${sizeMB} MB).\n⚠️ WhatsApp tiene un límite de ~100 MB.` },
         { quoted: msg }
       );
     }
@@ -124,6 +132,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     await conn.sendMessage(
       jid,
       {
+      contextInfo: canal(),
         video: fs.readFileSync(videoPath),
         mimetype: 'video/mp4',
         caption: `📹 *${title}*\n💾 Tamaño: ${sizeMB} MB\n⏱️ Descarga: ${took}s`
@@ -136,7 +145,8 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   } catch (error) {
     console.error('Error en py:', error);
     await react(conn, msg, '❌');
-    await conn.sendMessage(jid, { text: `*[❌]* Ocurrió un error: ${error.message}` }, { quoted: msg });
+    await conn.sendMessage(jid, {
+      contextInfo: canal(), text: `*[❌]* Ocurrió un error: ${error.message}` }, { quoted: msg });
   }
 };
 

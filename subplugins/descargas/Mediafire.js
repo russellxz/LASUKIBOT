@@ -1,4 +1,4 @@
-import { getMarca } from "../../disenos.js";
+import { getMarca, canal } from "../../disenos.js";
 import fetch from 'node-fetch';
 
 const handler = async (msg, { conn, args, command }) => {
@@ -8,12 +8,14 @@ const handler = async (msg, { conn, args, command }) => {
 
   if (!text) {
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `⚠️ *Uso incorrecto.*\n📌 Ejemplo:\n${pref}${command} https://www.mediafire.com/file/ejemplo/file.zip`
     }, { quoted: msg });
   }
 
   if (!/^https?:\/\/(www\.)?mediafire\.com/.test(text)) {
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `⚠️ *Enlace no válido.*\n📌 Asegúrate de ingresar una URL de MediaFire válida.\n\nEjemplo:\n${pref}${command} https://www.mediafire.com/file/ejemplo/file.zip`
     }, { quoted: msg });
   }
@@ -44,10 +46,12 @@ const handler = async (msg, { conn, args, command }) => {
       `𖠁 *Extensión:* ${fileInfo.extension}\n\n────────────\n𖠁 _${getMarca(conn)}_`;
 
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: caption
     }, { quoted: msg });
 
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       document: fileBuffer,
       mimetype: fileInfo.mime,
       fileName: fileInfo.title
@@ -60,6 +64,7 @@ const handler = async (msg, { conn, args, command }) => {
   } catch (err) {
     console.error("❌ Error en .mediafire:", err);
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `❌ *Error al procesar MediaFire:*\n_${err.message}_`
     }, { quoted: msg });
 

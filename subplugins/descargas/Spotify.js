@@ -4,6 +4,7 @@
 // commands/spotify.js — Spotify interactivo (👍 audio normal / ❤️ documento o 1/2)
 "use strict";
 
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 
 // === Config API ===
@@ -94,7 +95,8 @@ async function sendAudio(conn, job, asDocument, triggerMsg) {
     await react(conn, chatId, triggerMsg.key, "❌");
     await conn.sendMessage(
       chatId,
-      { text: `❌ Error enviando: ${e?.message || "unknown"}` },
+      {
+      contextInfo: canal(), text: `❌ Error enviando: ${e?.message || "unknown"}` },
       { quoted: quotedBase || triggerMsg }
     );
   }
@@ -112,7 +114,8 @@ const handler = async (msg, { conn, args, command }) => {
   if (!text) {
     return conn.sendMessage(
       chatId,
-      { 
+      {
+      contextInfo: canal(), 
         text: `✳️ Usa:\n\ .sp <canción o URL>\n\nEjemplo:\n${pref}sp bad bunny tití me preguntó` 
       },
       { quoted: msg }
@@ -134,7 +137,8 @@ const handler = async (msg, { conn, args, command }) => {
 ✦ ${title}
 ✦ por ${artist}`;
 
-    const preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+    const preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
 
     pendingSPOTIFY[preview.key.id] = {
     __own: __owner(conn),
@@ -220,7 +224,8 @@ const handler = async (msg, { conn, args, command }) => {
     if (/api key|unauthorized|forbidden|401/i.test(s)) msgTxt = "🔐 API Key inválida o ausente.";
     else if (/timeout|timed out|502|upstream/i.test(s)) msgTxt = "⚠️ Timeout o error del servidor.";
 
-    await conn.sendMessage(chatId, { text: msgTxt }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: msgTxt }, { quoted: msg });
     await react(conn, chatId, msg.key, "❌");
   }
 };

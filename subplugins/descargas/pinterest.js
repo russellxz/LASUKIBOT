@@ -1,3 +1,4 @@
+import { canal } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -104,13 +105,15 @@ const handler = async (msg, { conn, text }) => {
   if (!url) {
     return conn.sendMessage(
       chatId,
-      { text: `📌 Usa:\n${pref}pinterestvideo <link>\nEj: ${pref}pinterestvideo https://pin.it/xxxxx` },
+      {
+      contextInfo: canal(), text: `📌 Usa:\n${pref}pinterestvideo <link>\nEj: ${pref}pinterestvideo https://pin.it/xxxxx` },
       { quoted: msg }
     );
   }
 
   if (!isPinterestUrl(url)) {
-    return conn.sendMessage(chatId, { text: "❌ Eso no parece un link de Pinterest." }, { quoted: msg });
+    return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ Eso no parece un link de Pinterest." }, { quoted: msg });
   }
 
   // reacción: arrancando
@@ -132,7 +135,8 @@ const handler = async (msg, { conn, text }) => {
 
     if (!mp4) {
       await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
-      return conn.sendMessage(chatId, { text: "❌ No encontré MP4 para este pin (puede ser solo HLS .m3u8)." }, { quoted: msg });
+      return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ No encontré MP4 para este pin (puede ser solo HLS .m3u8)." }, { quoted: msg });
     }
 
     // reacción: descargando
@@ -148,7 +152,8 @@ const handler = async (msg, { conn, text }) => {
       await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
       return conn.sendMessage(
         chatId,
-        { text: `❌ El video pesa ${sizeMB.toFixed(2)}MB (>${MAX_MB}MB).` },
+        {
+      contextInfo: canal(), text: `❌ El video pesa ${sizeMB.toFixed(2)}MB (>${MAX_MB}MB).` },
         { quoted: msg }
       );
     }
@@ -163,6 +168,7 @@ const handler = async (msg, { conn, text }) => {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         video: fs.readFileSync(outFile),
         mimetype: "video/mp4",
         fileName: `${base}.mp4`,
@@ -176,7 +182,8 @@ const handler = async (msg, { conn, text }) => {
     await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } });
   } catch (e) {
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
-    await conn.sendMessage(chatId, { text: `❌ Error: ${e?.message || "unknown"}` }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error: ${e?.message || "unknown"}` }, { quoted: msg });
   }
 };
 

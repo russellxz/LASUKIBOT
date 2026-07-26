@@ -5,7 +5,7 @@
 
 "use strict";
 
-import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
+import { cabeceraDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -95,6 +95,7 @@ const handler = async (msg, { conn, args, command }) => {
 
   if (!text) {
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text:
 `✳️ 𝙐𝙨𝙖:
 ${pref}${command} <enlace>
@@ -104,7 +105,8 @@ Ej: ${pref}${command} https://vm.tiktok.com/xxxxxx/`
 
   const url = args[0];
   if (!/^https?:\/\//i.test(url) || !/tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com/i.test(url)) {
-    return conn.sendMessage(chatId, { text: "❌ 𝙀𝙣𝙡𝙖𝙘𝙚 𝙙𝙚 𝙏𝙞𝙠𝙏𝙤𝙠 𝙞𝙣𝙫𝙖́𝙡𝙞𝙙𝙤." }, { quoted: msg });
+    return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ 𝙀𝙣𝙡𝙖𝙘𝙚 𝙙𝙚 𝙏𝙞𝙠𝙏𝙤𝙠 𝙞𝙣𝙫𝙖́𝙡𝙞𝙙𝙤." }, { quoted: msg });
   }
 
   try {
@@ -158,6 +160,7 @@ ${pieDescarga(conn)}`.trim();
     if (usarBotones && d.cover) {
       try {
         preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(),
           image: { url: d.cover },
           caption,
           footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
@@ -166,24 +169,29 @@ ${pieDescarga(conn)}`.trim();
         }, { quoted: msg });
       } catch (e) {
         console.log("[tt] botones fallaron, fallback:", e.message);
-        preview = await conn.sendMessage(chatId, { image: { url: d.cover }, caption }, { quoted: msg });
+        preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), image: { url: d.cover }, caption }, { quoted: msg });
       }
     } else if (usarBotones) {
       try {
         preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(),
           text: caption,
           footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons: nativeFlowButtons,
         }, { quoted: msg });
       } catch (e) {
         console.log("[tt] botones fallaron, fallback:", e.message);
-        preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+        preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
       }
     } else {
       if (d.cover) {
-        preview = await conn.sendMessage(chatId, { image: { url: d.cover }, caption }, { quoted: msg });
+        preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), image: { url: d.cover }, caption }, { quoted: msg });
       } else {
-        preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+        preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
       }
     }
 
@@ -305,6 +313,7 @@ ${pieDescarga(conn)}`.trim();
   } catch (err) {
     console.error("❌ Error en tt:", err?.message || err);
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `❌ *Error:* ${err?.message || "Fallo al procesar el TikTok."}`
     }, { quoted: msg });
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
@@ -318,6 +327,7 @@ async function processSend(conn, job, asDocument, triggerMsg){
   try {
     await conn.sendMessage(chatId, { react: { text: asDocument ? "📁" : "🎬", key: triggerMsg.key } });
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `⏳ Espere, descargando video${asDocument ? " en documento" : ""}...`
     }, { quoted: quotedBase });
 
@@ -340,6 +350,7 @@ async function processSend(conn, job, asDocument, triggerMsg){
 
     if (asDocument) {
       await conn.sendMessage(chatId, {
+      contextInfo: canal(),
         document: { url },
         mimetype: "video/mp4",
         fileName: `tiktok-${Date.now()}.mp4`,
@@ -347,6 +358,7 @@ async function processSend(conn, job, asDocument, triggerMsg){
       }, { quoted: quotedBase });
     } else {
       await conn.sendMessage(chatId, {
+      contextInfo: canal(),
         video: { url },
         mimetype: "video/mp4",
         caption: finalCaption

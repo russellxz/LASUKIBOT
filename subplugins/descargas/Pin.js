@@ -1,6 +1,7 @@
 
 "use strict";
 
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 
 // ==== CONFIG API ====
@@ -100,7 +101,8 @@ const handler = async (msg, { conn, text }) => {
   if (!input) {
     return conn.sendMessage(
       chatId,
-      { text: `🖼️ Usa:\n${pref}pinterestimg <búsqueda>\nEj: ${pref}pinterestimg gatos anime` },
+      {
+      contextInfo: canal(), text: `🖼️ Usa:\n${pref}pinterestimg <búsqueda>\nEj: ${pref}pinterestimg gatos anime` },
       { quoted: msg }
     );
   }
@@ -109,7 +111,8 @@ const handler = async (msg, { conn, text }) => {
   if (looksLikeUrl(input)) {
     return conn.sendMessage(
       chatId,
-      { text: `⚠️ Este comando ahora es SOLO búsqueda por texto.\nEj: ${pref}pinterestimg gatos anime` },
+      {
+      contextInfo: canal(), text: `⚠️ Este comando ahora es SOLO búsqueda por texto.\nEj: ${pref}pinterestimg gatos anime` },
       { quoted: msg }
     );
   }
@@ -126,12 +129,14 @@ const handler = async (msg, { conn, text }) => {
 
     if (!images.length) {
       await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
-      return conn.sendMessage(chatId, { text: "❌ No encontré imágenes." }, { quoted: msg });
+      return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ No encontré imágenes." }, { quoted: msg });
     }
 
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text:
           `📌 Pinterest resultados: *${images.length}*\n` +
           `🔎 Búsqueda: *${input}*\n` +
@@ -151,14 +156,16 @@ const handler = async (msg, { conn, text }) => {
         const buf = await downloadImageBuffer(url);
         await conn.sendMessage(
           chatId,
-          { image: buf, caption: `(${i + 1}/${images.length}) ${it.title || "Pinterest"}` },
+          {
+      contextInfo: canal(), image: buf, caption: `(${i + 1}/${images.length}) ${it.title || "Pinterest"}` },
           { quoted: msg }
         );
       } catch (e) {
         // fallback: manda URL si falla buffer
         await conn.sendMessage(
           chatId,
-          { text: `(${i + 1}/${images.length}) ${it.title || "Pinterest"}\n${url}` },
+          {
+      contextInfo: canal(), text: `(${i + 1}/${images.length}) ${it.title || "Pinterest"}\n${url}` },
           { quoted: msg }
         );
       }
@@ -167,7 +174,8 @@ const handler = async (msg, { conn, text }) => {
     await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } });
   } catch (e) {
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
-    await conn.sendMessage(chatId, { text: `❌ Error: ${e?.message || "unknown"}` }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error: ${e?.message || "unknown"}` }, { quoted: msg });
   }
 };
 

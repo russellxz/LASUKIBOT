@@ -6,6 +6,7 @@
 // ✅ DESCARGA REAL (direct url) y ENVÍA el MP4 por WhatsApp
 "use strict";
 
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -230,7 +231,8 @@ async function sendPorn(conn, job, asDocument, triggerMsg) {
     if (!chosen?.direct) throw new Error("No hay URL directa para esa calidad.");
 
     await react(conn, chatId, triggerMsg.key, asDocument ? "📁" : "🎬");
-    await conn.sendMessage(chatId, { text: "⏳ Espere, descargando su video..." }, { quoted: quotedBase });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "⏳ Espere, descargando su video..." }, { quoted: quotedBase });
 
     const { filePath, fileName } = await downloadToTmpDirect(chosen.direct, title, q);
 
@@ -256,7 +258,8 @@ async function sendPorn(conn, job, asDocument, triggerMsg) {
       `Motivo: ${e?.message || e}\n\n` +
       `Calidad pedida: ${q}p`;
 
-    await conn.sendMessage(chatId, { text: fallback }, { quoted: quotedBase });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: fallback }, { quoted: quotedBase });
     await react(conn, chatId, triggerMsg.key, "❌");
   } finally {
     job.isBusy = false;
@@ -277,6 +280,7 @@ const handler = async (msg, { conn, args, command }) => {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text:
           `✳️ *Uso:*\n` +
           `${pref}${command || "porn"} https://es.pornhub.com/view_video.php?viewkey=XXXX\n` +
@@ -294,7 +298,8 @@ const handler = async (msg, { conn, args, command }) => {
   try {
     result = await getPhfansInfo(url);
   } catch (e) {
-    await conn.sendMessage(chatId, { text: `❌ Error consultando API:\n${e.message || e}` }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error consultando API:\n${e.message || e}` }, { quoted: msg });
     try { await react(conn, chatId, msg.key, "❌"); } catch {}
     return;
   }
@@ -307,7 +312,8 @@ const handler = async (msg, { conn, args, command }) => {
   const chosenNow = selectVideoFromList(videos, wantQ);
 
   if (!chosenNow?.direct) {
-    await conn.sendMessage(chatId, { text: "❌ No encontré link directo de video en la respuesta de la API." }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ No encontré link directo de video en la respuesta de la API." }, { quoted: msg });
     try { await react(conn, chatId, msg.key, "❌"); } catch {}
     return;
   }
@@ -326,10 +332,13 @@ const handler = async (msg, { conn, args, command }) => {
 
   let preview;
   try {
-    if (thumb && isUrl(thumb)) preview = await conn.sendMessage(chatId, { image: { url: thumb }, caption }, { quoted: msg });
-    else preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+    if (thumb && isUrl(thumb)) preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), image: { url: thumb }, caption }, { quoted: msg });
+    else preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
   } catch {
-    preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+    preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
   }
 
   pendingPORN[preview.key.id] = {
@@ -383,9 +392,11 @@ const handler = async (msg, { conn, args, command }) => {
               job.wantQ = q;
               const exists = selectVideoFromList(job.videos, q);
               if (!exists?.direct) {
-                await conn.sendMessage(job.chatId, { text: `⚠️ Esa calidad (${q}p) no está disponible.`, quoted: job.quotedBase });
+                await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), text: `⚠️ Esa calidad (${q}p) no está disponible.`, quoted: job.quotedBase });
               } else {
-                await conn.sendMessage(job.chatId, { text: `✅ Calidad cambiada a ${q}p.\nAhora reacciona 👍/❤️ o responde 1/2 para enviarlo.`, quoted: job.quotedBase });
+                await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), text: `✅ Calidad cambiada a ${q}p.\nAhora reacciona 👍/❤️ o responde 1/2 para enviarlo.`, quoted: job.quotedBase });
               }
               continue;
             }
