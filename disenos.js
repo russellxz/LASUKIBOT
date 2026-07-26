@@ -426,6 +426,17 @@ export function cabeceraDescarga(conn, titulo = "") {
   return bloque(dd.cabecera, { titulo: titulo || marca, marca }).join("\n");
 }
 
+/** Lista de campos (clave/valor) con el estilo del diseño activo */
+export function camposDescarga(conn, campos = []) {
+  const d = getDisenoActivo(conn);
+  const marca = getMarca(conn);
+  const plantilla = d?.descarga?.campo || "{clave}: *{valor}*";
+  return (campos || [])
+    .filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== "")
+    .map(([clave, valor]) => aplicar(plantilla, { clave, valor, marca }))
+    .join("\n");
+}
+
 /** Pie con el diseño activo y el nombre personalizado */
 export function pieDescarga(conn) {
   const d = getDisenoActivo(conn);

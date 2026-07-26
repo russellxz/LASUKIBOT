@@ -281,10 +281,29 @@ un usuario para que el subbot le responda en
 ━━━━━━━━━━━━━━━━━━
 🔧 *${p}setprefix* → cambia tu prefijo.
    Ej: ${p}setprefix 🐱  o  ${p}setprefix [ "." , "#" ]
+♻️ *${p}reprefix* → vuelve a los prefijos . # /
 📖 *${p}menu* → ver todos los comandos disponibles.
+👑 *${p}menuowner* → tus comandos de dueño.
 🤖 *${p}bots* → ver subbots conectados y su tiempo activo.
 🔗 *${p}code +507xxxxxxx* → conecta a otra persona
    como subbot desde tu propio subbot.
+
+━━━━━━━━━━━━━━━━━━
+🎨 *PERSONALIZA TU SUBBOT*
+━━━━━━━━━━━━━━━━━━
+Tu subbot puede tener tu propia cara y tu propio nombre:
+
+✨ *${p}setmenu* → abre el menú de personalización y elige:
+• 🎨 Uno de los *7 diseños* para todos tus menús
+   y para los comandos de descarga.
+• 🖼️ Tu *imagen o video* (se usa como GIF) para todos
+   los menús, o una distinta para cada menú.
+• ✏️ El *nombre de tu bot* (reemplaza la marca Suki
+   en los menús y en las descargas).
+• 📸 Tu *foto de perfil*.
+
+🧹 *${p}delmenu* → borra la personalización y deja
+   todo de fábrica (te pide confirmar antes).
 
 🎉 *Bienvenidas y despedidas en tus grupos:*
 • *${p}welcome on/off* → activa/desactiva bienvenidas.
@@ -2266,6 +2285,12 @@ vincular desde WhatsApp → *Dispositivos vinculados*.
 
 Ahí te dejé un mensaje con las *instrucciones* de cómo
 usar *addgrupo*, *addlista*, *setprefix* y todo tu subbot 🤖
+
+🎨 *¡Tu subbot es tuyo, ponle tu estilo!*
+Escríbele *setmenu* a tu propio número para elegir uno de
+los *7 diseños*, poner tu *imagen o video* en los menús,
+tu *nombre* (quita la marca Suki de menús y descargas) y
+tu *foto de perfil*. Con *delmenu* lo dejas de fábrica.
 
 🤖 ${botName}`.trim(),
               mentions: [`${digits}@s.whatsapp.net`]
