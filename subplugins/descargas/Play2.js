@@ -45,6 +45,11 @@ const __mio = (conn, id) => {
 // usuarios no se les mandan botones, se les da la versión de reacciones/números.
 const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
 
+// 🚫 Botones SOLO en privado: en grupos, cuando alguien toca un botón su
+// teléfono manda la respuesta y a los demás les sale "mensaje no compatible".
+// En grupos se usa la versión de reacciones/números, que todos ven bien.
+const esGrupo = (m) => String(m?.key?.remoteJid || "").endsWith("@g.us");
+
 // ---------- utils ----------
 function safeName(name = "file") {
   return (
@@ -214,7 +219,7 @@ const handler = async (msg, { conn, text }) => {
   const chosenQuality = VALID_QUALITIES.has(quality) ? quality : DEFAULT_VIDEO_QUALITY;
   const qualityLabel = chosenQuality === "4k" ? "4K" : `${chosenQuality}p`;
 
-  const usarBotones = botonesActivos() && !esIphone(msg);
+  const usarBotones = botonesActivos() && !esIphone(msg) && !esGrupo(msg);
 
   // Ficha con la info del resultado (va UNA sola vez, aquí)
   const fichaInfo = camposDescarga(conn, [

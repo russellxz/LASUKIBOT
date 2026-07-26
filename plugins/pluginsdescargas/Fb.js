@@ -24,6 +24,11 @@ const mb = (n) => n / (1024 * 1024);
 // usuarios no les salen los botones, se les manda la versión de reacciones/números.
 const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
 
+// 🚫 Botones SOLO en privado: en grupos, cuando alguien toca un botón su
+// teléfono manda la respuesta y a los demás les sale "mensaje no compatible".
+// En grupos se usa la versión de reacciones/números, que todos ven bien.
+const esGrupo = (m) => String(m?.key?.remoteJid || "").endsWith("@g.us");
+
 function botonesActivos() {
   const defaultCfg = { botones: true, updatedAt: null, updatedBy: null };
   if (!fs.existsSync(ACTIVOSS_FILE)) {
@@ -145,7 +150,7 @@ const handler = async (msg, { conn, args, command }) => {
     const title = result?.title || "Facebook Video";
     const thumb = result?.thumbnail || result?.image || "";
 
-    const usarBotones = botonesActivos() && !esIphone(msg);
+    const usarBotones = botonesActivos() && !esIphone(msg) && !esGrupo(msg);
 
     // 🎨 Caption LIMPIO — solo explicación + marca de agua
     const caption = usarBotones

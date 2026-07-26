@@ -36,6 +36,11 @@ const __mio = (conn, id) => {
 // usuarios no se les mandan botones, se les da la versión de reacciones/números.
 const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
 
+// 🚫 Botones SOLO en privado: en grupos, cuando alguien toca un botón su
+// teléfono manda la respuesta y a los demás les sale "mensaje no compatible".
+// En grupos se usa la versión de reacciones/números, que todos ven bien.
+const esGrupo = (m) => String(m?.key?.remoteJid || "").endsWith("@g.us");
+
 function mb(n) {
   return n / (1024 * 1024);
 }
@@ -508,7 +513,7 @@ ${pref}${command} https://www.instagram.com/reel/XXXX/`
 
     const title = getTitle(apiData);
     const thumb = getThumbnail(apiData, items);
-    const usarBotones = botonesActivos() && !esIphone(msg);
+    const usarBotones = botonesActivos() && !esIphone(msg) && !esGrupo(msg);
 
     const totalVideos = items.filter(x => x.type === "video").length;
     const totalImages = items.filter(x => x.type === "image").length;

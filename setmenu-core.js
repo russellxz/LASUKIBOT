@@ -86,6 +86,15 @@ function limpiarViejos() {
 // Los mensajes de iPhone tienen ID "3A" + 18 caracteres: ahí no salen botones
 const esIphone = (m) => /^3A.{18}$/.test(String(m?.key?.id || ""));
 
+// 🚫 Botones SOLO en privado: en grupos, cuando alguien toca un botón su
+// teléfono manda la respuesta y a los demás usuarios les sale el aviso
+// "mensaje no compatible con tu versión de WhatsApp". En grupos se usa la
+// versión con opciones numeradas, que todos ven como texto normal.
+const esGrupo = (m) => String(m?.key?.remoteJid || "").endsWith("@g.us");
+
+// ¿Podemos usar botones con este mensaje?
+const conBotones = (m) => !esIphone(m) && !esGrupo(m);
+
 function desenvolver(m) {
   let n = m;
   while (
@@ -753,8 +762,8 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
   // mensaje del menú, solo actúa el bot que realmente lo abrió aquí.
   setPendiente(conn, msg, { paso: "menu" });
 
-  // iPhone: sin botones, con opciones numeradas
-  if (esIphone(msg)) {
+  // Sin botones en grupos ni en iPhone: opciones numeradas (las ve todo el mundo)
+  if (!conBotones(msg)) {
     return recordarPropio(conn, await conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg }));
   }
 
@@ -800,7 +809,7 @@ export async function abrirDelmenu(msg, conn, { puedeUsar } = {}) {
     `Todo volverá de fábrica. *Esto no se puede deshacer.*\n\n` +
     `Responde *confirmar* para borrar o *cancelar* para dejarlo así.`;
 
-  if (esIphone(msg)) {
+  if (!conBotones(msg)) {
     return recordarPropio(conn, await conn.sendMessage(chatId, { text: aviso }, { quoted: msg }));
   }
 
