@@ -640,7 +640,12 @@ Cita este mensaje y escribe:
 
               if (!selectedId || !selectedId.includes("ig_")) continue;
 
-              const ctxQuoted = m.message?.extendedTextMessage?.contextInfo?.stanzaId;
+              const ctxQuoted =
+              m.message?.buttonsResponseMessage?.contextInfo?.stanzaId ||
+              m.message?.listResponseMessage?.contextInfo?.stanzaId ||
+              m.message?.templateButtonReplyMessage?.contextInfo?.stanzaId ||
+              m.message?.interactiveResponseMessage?.contextInfo?.stanzaId ||
+              m.message?.extendedTextMessage?.contextInfo?.stanzaId;
               let job = null;
 
               if (ctxQuoted) {

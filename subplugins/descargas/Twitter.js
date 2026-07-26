@@ -386,7 +386,12 @@ ${pieDescarga(conn)}`.trim();
               if (!selectedId) continue;
               const id = String(selectedId).trim();
 
-              const ctxQuoted = m.message?.extendedTextMessage?.contextInfo?.stanzaId;
+              const ctxQuoted =
+              m.message?.buttonsResponseMessage?.contextInfo?.stanzaId ||
+              m.message?.listResponseMessage?.contextInfo?.stanzaId ||
+              m.message?.templateButtonReplyMessage?.contextInfo?.stanzaId ||
+              m.message?.interactiveResponseMessage?.contextInfo?.stanzaId ||
+              m.message?.extendedTextMessage?.contextInfo?.stanzaId;
               let job = null;
               if (ctxQuoted) {
               // La selección cita una tarjeta concreta: si no es NUESTRA, no es
