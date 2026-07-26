@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "nota": "7 diseños para los menús y los comandos de descarga. Se eligen con el comando setmenu. Placeholders: {marca} {titulo} {seccion} {item} {clave} {valor} {texto}",
+  "nota": "7 diseños para los menús y los comandos de descarga. Se eligen con el comando setmenu. Placeholders: {marca} {titulo} {seccion} {item} {clave} {valor} {texto} El campo fuente cambia el tipo de letra de los TÍTULOS (no de los comandos).",
   "disenos": [
     {
       "id": 1,
@@ -233,6 +233,183 @@
         "campo": "{clave}: *{valor}*",
         "pie": [
           "_{marca}_"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "nombre": "Cyberpunk",
+      "emoji": "🌐",
+      "descripcion": "Neón futurista con letra ancha y circuitos",
+      "muestra": "╔═[SYS]═╗\n▸ item\n╚═══════╝",
+      "fuente": "ancha",
+      "cabecera": [
+        "┏━━━━━━━━━━━━━━━━━┓",
+        "  ⟦ {marca} ⟧",
+        "┗━━━━━━━━━━━━━━━━━┛",
+        "  ▰▰▰ ⓘ SYSTEM ONLINE ▰▰▰"
+      ],
+      "titulo": "╔═◤ {titulo} ◢═╗",
+      "info": "▸ ⟨{clave}⟩ *{valor}*",
+      "seccionAbre": "┌─◤ {seccion} ◢",
+      "seccionItem": "│▸ {item}",
+      "seccionCierra": "└──────────◢",
+      "nota": "⟦ {texto} ⟧",
+      "pie": [
+        "┏━━━━━━━━━━━━━━━━━┓",
+        "  ⟦ {marca} ⟧ ⚡",
+        "┗━━━━━━━━━━━━━━━━━┛"
+      ],
+      "descarga": {
+        "cabecera": [
+          "┏━━━━━━━━━━━━━━━━━┓",
+          "  ⟦ {titulo} ⟧",
+          "┗━━━━━━━━━━━━━━━━━┛"
+        ],
+        "campo": "▸ ⟨{clave}⟩ *{valor}*",
+        "pie": [
+          "┗━━━━━━━━━━━━━━━━━┛",
+          "  ⟦ {marca} ⟧ ⚡"
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "nombre": "Matrix",
+      "emoji": "🟩",
+      "descripcion": "Código verde cayendo, letra monoespaciada",
+      "muestra": "01010101\n> item\n01010101",
+      "fuente": "mono",
+      "cabecera": [
+        "010110100101101001011010",
+        "  ⟪ {marca} ⟫",
+        "010110100101101001011010"
+      ],
+      "titulo": "⟪ {titulo} ⟫",
+      "info": "01▸ {clave}: *{valor}*",
+      "seccionAbre": "╓─⟪ {seccion} ⟫",
+      "seccionItem": "║ ⇥ {item}",
+      "seccionCierra": "╙────────────⟫",
+      "nota": "⟪ {texto} ⟫",
+      "pie": [
+        "010110100101101001011010",
+        "  ⟪ {marca} ⟫ 🟩"
+      ],
+      "descarga": {
+        "cabecera": [
+          "010110100101101001011010",
+          "  ⟪ {titulo} ⟫",
+          "010110100101101001011010"
+        ],
+        "campo": "01▸ {clave}: *{valor}*",
+        "pie": [
+          "010110100101101001011010",
+          "  ⟪ {marca} ⟫ 🟩"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "nombre": "Galaxia",
+      "emoji": "🌌",
+      "descripcion": "Estrellas y planetas, letra doble",
+      "muestra": "✦･ﾟ✧✦･ﾟ✧\n✧ item\n✦･ﾟ✧✦･ﾟ✧",
+      "fuente": "doble",
+      "cabecera": [
+        "✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦",
+        "   🌌 {marca} 🌌",
+        "✧ ･ ✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦ ･ ✧"
+      ],
+      "titulo": "⋆｡°✩ {titulo} ✩°｡⋆",
+      "info": "✧ *{clave}:* {valor}",
+      "seccionAbre": "╭─✦ {seccion} ✦",
+      "seccionItem": "│ ✧ {item}",
+      "seccionCierra": "╰──────────✦",
+      "nota": "⋆ {texto} ⋆",
+      "pie": [
+        "✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦",
+        "   🌌 {marca} 🌌"
+      ],
+      "descarga": {
+        "cabecera": [
+          "✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦",
+          "   🌌 {titulo} 🌌",
+          "✧ ･ ✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦ ･ ✧"
+        ],
+        "campo": "✧ *{clave}:* {valor}",
+        "pie": [
+          "✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦ ･ ✧ ･ ✦",
+          "   🌌 {marca} 🌌"
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "nombre": "Infierno",
+      "emoji": "🔥",
+      "descripcion": "Llamas y letra gótica, puro fuego",
+      "muestra": "🔥🔥🔥🔥🔥\n♦ item\n🔥🔥🔥🔥🔥",
+      "fuente": "gotica",
+      "cabecera": [
+        "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥",
+        "   ♦ {marca} ♦",
+        "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥"
+      ],
+      "titulo": "🔥 {titulo} 🔥",
+      "info": "♦ *{clave}:* {valor}",
+      "seccionAbre": "▛▀▀ {seccion} ▀▀▜",
+      "seccionItem": "▌ ♦ {item}",
+      "seccionCierra": "▙▄▄▄▄▄▄▄▄▄▄▟",
+      "nota": "🔥 {texto} 🔥",
+      "pie": [
+        "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥",
+        "   ♦ {marca} ♦"
+      ],
+      "descarga": {
+        "cabecera": [
+          "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥",
+          "   ♦ {titulo} ♦",
+          "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥"
+        ],
+        "campo": "♦ *{clave}:* {valor}",
+        "pie": [
+          "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥",
+          "   ♦ {marca} ♦"
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "nombre": "Retro",
+      "emoji": "📼",
+      "descripcion": "Vaporwave de los 80, letra ancha",
+      "muestra": "▓▒░ TITULO ░▒▓\n◆ item",
+      "fuente": "ancha",
+      "cabecera": [
+        "▓▒░░▒▓▒░░▒▓▒░░▒▓",
+        "   ⟢ {marca} ⟣",
+        "▓▒░░▒▓▒░░▒▓▒░░▒▓"
+      ],
+      "titulo": "░▒▓ {titulo} ▓▒░",
+      "info": "◆ *{clave}:* {valor}",
+      "seccionAbre": "▓▒░ {seccion} ░▒▓",
+      "seccionItem": "◆ {item}",
+      "seccionCierra": "░▒▓▒░▒▓▒░▒▓▒░▒▓",
+      "nota": "⟢ {texto} ⟣",
+      "pie": [
+        "▓▒░░▒▓▒░░▒▓▒░░▒▓",
+        "   ⟢ {marca} ⟣ 📼"
+      ],
+      "descarga": {
+        "cabecera": [
+          "▓▒░░▒▓▒░░▒▓▒░░▒▓",
+          "   ⟢ {titulo} ⟣",
+          "▓▒░░▒▓▒░░▒▓▒░░▒▓"
+        ],
+        "campo": "◆ *{clave}:* {valor}",
+        "pie": [
+          "▓▒░░▒▓▒░░▒▓▒░░▒▓",
+          "   ⟢ {marca} ⟣ 📼"
         ]
       }
     }

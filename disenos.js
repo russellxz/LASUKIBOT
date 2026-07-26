@@ -316,6 +316,73 @@ export function getMediaMenu(conn, menuKey) {
 // ------------------------------------------------------------
 // Renderizado
 // ------------------------------------------------------------
+// ------------------------------------------------------------
+// Fuentes: un diseño puede pedir que los TÍTULOS salgan con otro tipo de
+// letra. Solo se aplica a títulos y nombres de sección, nunca a los
+// comandos (esos tienen que poder copiarse y escribirse tal cual).
+// ------------------------------------------------------------
+const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const abc = "abcdefghijklmnopqrstuvwxyz";
+const NUM = "0123456789";
+
+const FUENTES = {
+  negrita: {
+    A: "𝗔𝗕𝗖𝗗𝗘𝗙𝗚𝗛𝗜𝗝𝗞𝗟𝗠𝗡𝗢𝗣𝗤𝗥𝗦𝗧𝗨𝗩𝗪𝗫𝗬𝗭",
+    a: "𝗮𝗯𝗰𝗱𝗲𝗳𝗴𝗵𝗶𝗷𝗸𝗹𝗺𝗻𝗼𝗽𝗾𝗿𝘀𝘁𝘂𝘃𝘄𝘅𝘆𝘇",
+    n: "𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵"
+  },
+  cursiva: {
+    A: "𝘈𝘉𝘊𝘋𝘌𝘍𝘎𝘏𝘐𝘑𝘒𝘓𝘔𝘕𝘖𝘗𝘘𝘙𝘚𝘛𝘜𝘝𝘞𝘟𝘠𝘡",
+    a: "𝘢𝘣𝘤𝘥𝘦𝘧𝘨𝘩𝘪𝘫𝘬𝘭𝘮𝘯𝘰𝘱𝘲𝘳𝘴𝘵𝘶𝘷𝘸𝘹𝘺𝘻",
+    n: NUM
+  },
+  doble: {
+    A: "𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ",
+    a: "𝕒𝕓𝕔𝕕𝕖𝕗𝕘𝕙𝕚𝕛𝕜𝕝𝕞𝕟𝕠𝕡𝕢𝕣𝕤𝕥𝕦𝕧𝕨𝕩𝕪𝕫",
+    n: "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡"
+  },
+  mono: {
+    A: "𝙰𝙱𝙲𝙳𝙴𝙵𝙶𝙷𝙸𝙹𝙺𝙻𝙼𝙽𝙾𝙿𝚀𝚁𝚂𝚃𝚄𝚅𝚆𝚇𝚈𝚉",
+    a: "𝚊𝚋𝚌𝚍𝚎𝚏𝚐𝚑𝚒𝚓𝚔𝚕𝚖𝚗𝚘𝚙𝚚𝚛𝚜𝚝𝚞𝚟𝚠𝚡𝚢𝚣",
+    n: "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿"
+  },
+  ancha: {
+    A: "ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ",
+    a: "ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ",
+    n: "０１２３４５６７８９"
+  },
+  pequena: {
+    A: "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘQʀꜱᴛᴜᴠᴡxʏᴢ",
+    a: "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘQʀꜱᴛᴜᴠᴡxʏᴢ",
+    n: NUM
+  },
+  gotica: {
+    A: "𝔄𝔅ℭ𝔇𝔈𝔉𝔊ℌℑ𝔍𝔎𝔏𝔐𝔑𝔒𝔓𝔔ℜ𝔖𝔗𝔘𝔙𝔚𝔛𝔜ℨ",
+    a: "𝔞𝔟𝔠𝔡𝔢𝔣𝔤𝔥𝔦𝔧𝔨𝔩𝔪𝔫𝔬𝔭𝔮𝔯𝔰𝔱𝔲𝔳𝔴𝔵𝔶𝔷",
+    n: NUM
+  }
+};
+
+// Convierte un texto a la fuente pedida (deja intactos emojis y símbolos)
+export function aFuente(texto, fuente) {
+  const f = FUENTES[fuente];
+  if (!f) return String(texto ?? "");
+  const may = [...f.A];
+  const min = [...f.a];
+  const dig = [...f.n];
+  let out = "";
+  for (const ch of String(texto ?? "")) {
+    const iA = ABC.indexOf(ch);
+    if (iA >= 0) { out += may[iA] ?? ch; continue; }
+    const ia = abc.indexOf(ch);
+    if (ia >= 0) { out += min[ia] ?? ch; continue; }
+    const iN = NUM.indexOf(ch);
+    if (iN >= 0) { out += dig[iN] ?? ch; continue; }
+    out += ch;
+  }
+  return out;
+}
+
 function aplicar(plantilla, vars) {
   let out = String(plantilla ?? "");
   for (const [k, v] of Object.entries(vars || {})) {
@@ -359,7 +426,7 @@ export function renderMenu(conn, contenido = {}) {
 
   if (contenido.titulo) {
     out.push("");
-    out.push(aplicar(d.titulo, { titulo: contenido.titulo, marca }));
+    out.push(aplicar(d.titulo, { titulo: aFuente(contenido.titulo, d.fuente), marca }));
   }
 
   const info = Array.isArray(contenido.info) ? contenido.info : [];
@@ -374,7 +441,7 @@ export function renderMenu(conn, contenido = {}) {
     const items = (sec?.items || []).filter(Boolean);
     if (!items.length) continue;
     out.push("");
-    const abre = aplicar(d.seccionAbre, { seccion: sec.titulo || "", marca });
+    const abre = aplicar(d.seccionAbre, { seccion: aFuente(sec.titulo || "", d.fuente), marca });
     if (abre) out.push(abre);
     for (const it of items) out.push(aplicar(d.seccionItem, { item: it, marca }));
     const cierra = aplicar(d.seccionCierra, { seccion: sec.titulo || "", marca });
@@ -417,7 +484,7 @@ export function renderDescarga(conn, contenido = {}) {
     return out.join("\n").trim();
   }
 
-  out.push(...bloque(dd.cabecera, { titulo: contenido.titulo || "", marca }));
+  out.push(...bloque(dd.cabecera, { titulo: aFuente(contenido.titulo || "", d.fuente), marca }));
 
   const campos = Array.isArray(contenido.campos) ? contenido.campos : [];
   if (campos.length) {
@@ -479,7 +546,7 @@ export function cabeceraDescarga(conn, titulo = "") {
   const marca = getMarca(conn);
   const dd = d?.descarga;
   if (!dd) return `*${titulo || marca}*`;
-  return bloque(dd.cabecera, { titulo: titulo || marca, marca }).join("\n");
+  return bloque(dd.cabecera, { titulo: aFuente(titulo || marca, d.fuente), marca }).join("\n");
 }
 
 /** Lista de campos (clave/valor) con el estilo del diseño activo */
