@@ -5,7 +5,7 @@
 
 "use strict";
 
-import { getMarca } from "../../disenos.js";
+import { getMarca, canal } from "../../disenos.js";
 import axios from 'axios';
 
 const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
@@ -53,6 +53,7 @@ const handler = async (msg, { conn, args, command }) => {
     return conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text:
 `✳️ 𝙐𝙨𝙖:
 ${pref}${command || "letra"} <canción y artista>
@@ -89,15 +90,18 @@ Ej: ${pref}${command || "letra"} yemil difícil amarte`,
 
     const fullText = header + lyrics;
     if (fullText.length <= MAX_CHUNK) {
-      await conn.sendMessage(chatId, { text: fullText }, { quoted: msg });
+      await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: fullText }, { quoted: msg });
     } else {
       // 1) Header primero
-      await conn.sendMessage(chatId, { text: header }, { quoted: msg });
+      await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: header }, { quoted: msg });
 
       // 2) Lyrics en chunks
       for (let i = 0; i < lyrics.length; i += MAX_CHUNK) {
         const part = lyrics.slice(i, i + MAX_CHUNK);
-        await conn.sendMessage(chatId, { text: part }, { quoted: msg });
+        await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: part }, { quoted: msg });
       }
     }
 
@@ -106,7 +110,8 @@ Ej: ${pref}${command || "letra"} yemil difícil amarte`,
     console.error("❌ Error en letra:", err?.message || err);
     await conn.sendMessage(
       chatId,
-      { text: `❌ *Error:* ${err?.message || "No pude obtener la letra."}` },
+      {
+      contextInfo: canal(), text: `❌ *Error:* ${err?.message || "No pude obtener la letra."}` },
       { quoted: msg }
     );
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });

@@ -1,4 +1,5 @@
 // yt2.js — YouTube -> VIDEO
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -17,11 +18,13 @@ const handler = async (msg, { conn, args, command }) => {
 
   if (!url) {
     return conn.sendMessage(jid, {
+      contextInfo: canal(),
       text: `✳️ *Usa:*\n${pref}${command} <url>\nEj: ${pref}${command} https://youtu.be/xxxxxx`
     }, { quoted: msg });
   }
   if (!isYouTube(url)) {
-    return conn.sendMessage(jid, { text: "❌ *URL de YouTube inválida.*" }, { quoted: msg });
+    return conn.sendMessage(jid, {
+      contextInfo: canal(), text: "❌ *URL de YouTube inválida.*" }, { quoted: msg });
   }
 
   try {
@@ -57,13 +60,15 @@ const handler = async (msg, { conn, args, command }) => {
     const sizeMB = fs.statSync(filePath).size / (1024 * 1024);
     if (sizeMB > 1024) {
       fs.unlinkSync(filePath);
-      await conn.sendMessage(jid, { text: `❌ Archivo de ${sizeMB.toFixed(2)}MB excede 99MB.` }, { quoted: msg });
+      await conn.sendMessage(jid, {
+      contextInfo: canal(), text: `❌ Archivo de ${sizeMB.toFixed(2)}MB excede 99MB.` }, { quoted: msg });
       await conn.sendMessage(jid, { react: { text: "❌", key: msg.key } });
       return;
     }
 
     const caption = `📺 *YouTube DL (video)*\n• *Título:* ${title || "Sin título"}\n• *API:* SkyUltraPlus`;
     await conn.sendMessage(jid, {
+      contextInfo: canal(),
       video: fs.readFileSync(filePath),
       mimetype: "video/mp4",
       caption
@@ -75,7 +80,8 @@ const handler = async (msg, { conn, args, command }) => {
   } catch (err) {
     console.error("yt2 error:", err?.message || err);
     try {
-      await conn.sendMessage(jid, { text: `❌ ${err?.message || "Error procesando el enlace."}` }, { quoted: msg });
+      await conn.sendMessage(jid, {
+      contextInfo: canal(), text: `❌ ${err?.message || "Error procesando el enlace."}` }, { quoted: msg });
       await conn.sendMessage(jid, { react: { text: "❌", key: msg.key } });
     } catch {}
   }

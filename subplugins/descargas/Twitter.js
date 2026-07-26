@@ -5,7 +5,7 @@
 
 "use strict";
 
-import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
+import { cabeceraDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -134,7 +134,8 @@ async function sendMedia(conn, job, asDocument, triggerMsg) {
 
   try {
     await react(conn, chatId, triggerMsg.key, asDocument ? "📁" : "🎬");
-    await conn.sendMessage(chatId, { text: "⏳ Espere, descargando su archivo..." }, { quoted: quotedBase });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "⏳ Espere, descargando su archivo..." }, { quoted: quotedBase });
 
     // 🎨 Caption final con TODA la info + marca de agua
     const finalCaption =
@@ -158,14 +159,17 @@ ${date ? `📅 *Fecha:* ${date}\n` : ""}📦 *Formato:* ${asDocument ? "Document
         if (asDocument) {
           await conn.sendMessage(
             chatId,
-            { document: { url: urlTry }, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
+            {
+      contextInfo: canal(), document: { url: urlTry }, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
             { quoted: quotedBase || triggerMsg }
           );
         } else {
           if (isVideo) {
-            await conn.sendMessage(chatId, { video: { url: urlTry }, mimetype: "video/mp4", caption: finalCaption }, { quoted: quotedBase || triggerMsg });
+            await conn.sendMessage(chatId, {
+      contextInfo: canal(), video: { url: urlTry }, mimetype: "video/mp4", caption: finalCaption }, { quoted: quotedBase || triggerMsg });
           } else {
-            await conn.sendMessage(chatId, { image: { url: urlTry }, caption: finalCaption }, { quoted: quotedBase || triggerMsg });
+            await conn.sendMessage(chatId, {
+      contextInfo: canal(), image: { url: urlTry }, caption: finalCaption }, { quoted: quotedBase || triggerMsg });
           }
         }
         await react(conn, chatId, triggerMsg.key, "✅");
@@ -191,14 +195,17 @@ ${date ? `📅 *Fecha:* ${date}\n` : ""}📦 *Formato:* ${asDocument ? "Document
     if (asDocument) {
       await conn.sendMessage(
         chatId,
-        { document: mediaBuffer, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
+        {
+      contextInfo: canal(), document: mediaBuffer, mimetype, fileName: `twitter-${Date.now()}.${ext}`, caption: finalCaption },
         { quoted: quotedBase || triggerMsg }
       );
     } else {
       if (isVideo) {
-        await conn.sendMessage(chatId, { video: mediaBuffer, mimetype: "video/mp4", caption: finalCaption }, { quoted: quotedBase || triggerMsg });
+        await conn.sendMessage(chatId, {
+      contextInfo: canal(), video: mediaBuffer, mimetype: "video/mp4", caption: finalCaption }, { quoted: quotedBase || triggerMsg });
       } else {
-        await conn.sendMessage(chatId, { image: mediaBuffer, caption: finalCaption }, { quoted: quotedBase || triggerMsg });
+        await conn.sendMessage(chatId, {
+      contextInfo: canal(), image: mediaBuffer, caption: finalCaption }, { quoted: quotedBase || triggerMsg });
       }
     }
 
@@ -209,7 +216,8 @@ ${date ? `📅 *Fecha:* ${date}\n` : ""}📦 *Formato:* ${asDocument ? "Document
     await react(conn, chatId, triggerMsg.key, "❌");
     await conn.sendMessage(
       chatId,
-      { text: `❌ Error enviando: ${e?.message || "unknown"}` },
+      {
+      contextInfo: canal(), text: `❌ Error enviando: ${e?.message || "unknown"}` },
       { quoted: quotedBase || triggerMsg }
     );
   } finally {
@@ -225,7 +233,8 @@ const handler = async (msg, { conn, args }) => {
   if (!text) {
     return conn.sendMessage(
       chatId,
-      { text: `✳️ Usa:\n${pref}tw <enlace>\nEj: ${pref}tw https://x.com/user/status/123` },
+      {
+      contextInfo: canal(), text: `✳️ Usa:\n${pref}tw <enlace>\nEj: ${pref}tw https://x.com/user/status/123` },
       { quoted: msg }
     );
   }
@@ -233,7 +242,8 @@ const handler = async (msg, { conn, args }) => {
   if (!isValidX(text)) {
     return conn.sendMessage(
       chatId,
-      { text: `❌ Enlace inválido.\nUsa un link tipo:\nhttps://x.com/usuario/status/123` },
+      {
+      contextInfo: canal(), text: `❌ Enlace inválido.\nUsa un link tipo:\nhttps://x.com/usuario/status/123` },
       { quoted: msg }
     );
   }
@@ -286,16 +296,19 @@ ${pieDescarga(conn)}`.trim();
     if (usarBotones) {
       try {
         preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(),
           text: caption,
           footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons: nativeFlowButtons,
         }, { quoted: msg });
       } catch (e) {
         console.log("[tw] botones fallaron, fallback:", e.message);
-        preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+        preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
       }
     } else {
-      preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+      preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
     }
 
     // Guardar TODA la info en el job para el caption final
@@ -416,7 +429,8 @@ ${pieDescarga(conn)}`.trim();
     }
   } catch (err) {
     console.error("❌ Error Twitter:", err?.message || err);
-    await conn.sendMessage(chatId, { text: `❌ Error: ${err?.message || "unknown"}` }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error: ${err?.message || "unknown"}` }, { quoted: msg });
     await react(conn, chatId, msg.key, "❌");
   }
 };

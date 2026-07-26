@@ -1,3 +1,4 @@
+import { canal } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -63,7 +64,8 @@ const handler = async (msg, { conn, text }) => {
   if (!text || !text.trim()) {
     return conn.sendMessage(
       msg.key.remoteJid,
-      { text: `✳️ Usa:\n${pref}playtest <término>\nEj: *${pref}playtest* bad bunny diles` },
+      {
+      contextInfo: canal(), text: `✳️ Usa:\n${pref}playtest <término>\nEj: *${pref}playtest* bad bunny diles` },
       { quoted: msg }
     );
   }
@@ -79,7 +81,8 @@ const handler = async (msg, { conn, text }) => {
   if (!video) {
     return conn.sendMessage(
       msg.key.remoteJid,
-      { text: "❌ Sin resultados." },
+      {
+      contextInfo: canal(), text: "❌ Sin resultados." },
       { quoted: msg }
     );
   }
@@ -109,7 +112,8 @@ const handler = async (msg, { conn, text }) => {
   // envía preview
   const preview = await conn.sendMessage(
     msg.key.remoteJid,
-    { image: { url: thumbnail }, caption },
+    {
+      contextInfo: canal(), image: { url: thumbnail }, caption },
     { quoted: msg }
   );
 
@@ -158,19 +162,22 @@ const handler = async (msg, { conn, text }) => {
             if (["1", "audio", "4", "audiodoc"].includes(texto)) {
               const docMode = ["4", "audiodoc"].includes(texto);
               await conn.sendMessage(chatId, { react: { text: docMode ? "📄" : "🎵", key: m.key } });
-              await conn.sendMessage(chatId, { text: `🎶 Descargando audio...` }, { quoted: m });
+              await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎶 Descargando audio...` }, { quoted: m });
               await downloadAudio(conn, job, docMode, m);
             }
             // VIDEO
             else if (["2", "video", "3", "videodoc"].includes(texto)) {
               const docMode = ["3", "videodoc"].includes(texto);
               await conn.sendMessage(chatId, { react: { text: docMode ? "📁" : "🎬", key: m.key } });
-              await conn.sendMessage(chatId, { text: `🎥 Descargando video...` }, { quoted: m });
+              await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video...` }, { quoted: m });
               await downloadVideo(conn, job, docMode, m);
             }
             // AYUDA
             else {
               await conn.sendMessage(chatId, {
+      contextInfo: canal(),
                 text: `⚠️ Opciones válidas:\n1/audio, 4/audiodoc → audio\n2/video, 3/videodoc → video`
               }, { quoted: m });
             }
@@ -198,7 +205,8 @@ async function handleDownload(conn, job, choice) {
   const key = mapping[choice];
   if (key) {
     const isDoc = key.endsWith("Doc");
-    await conn.sendMessage(job.chatId, { text: `⏳ Descargando ${isDoc ? "documento" : key}…` }, { quoted: job.commandMsg });
+    await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), text: `⏳ Descargando ${isDoc ? "documento" : key}…` }, { quoted: job.commandMsg });
     if (key.startsWith("audio")) await downloadAudio(conn, job, isDoc, job.commandMsg);
     else await downloadVideo(conn, job, isDoc, job.commandMsg);
   }
@@ -252,7 +260,8 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   const sizeMB = fileSizeMB(outFile);
   if (sizeMB > 99) {
     try { fs.unlinkSync(outFile); } catch {}
-    await conn.sendMessage(chatId, { text: `❌ El archivo de audio pesa ${sizeMB.toFixed(2)}MB (>99MB).` }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ El archivo de audio pesa ${sizeMB.toFixed(2)}MB (>99MB).` }, { quoted });
     return;
   }
 
@@ -286,12 +295,14 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   const sizeMB = fileSizeMB(file);
   if (sizeMB > 99) {
     try { fs.unlinkSync(file); } catch {}
-    await conn.sendMessage(chatId, { text: `❌ El video pesa ${sizeMB.toFixed(2)}MB (>99MB).` }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ El video pesa ${sizeMB.toFixed(2)}MB (>99MB).` }, { quoted });
     return;
   }
 
   // 4) Enviar
   await conn.sendMessage(chatId, {
+      contextInfo: canal(),
     [asDocument ? "document" : "video"]: fs.readFileSync(file),
     mimetype: "video/mp4",
     fileName: `${title}.mp4`,

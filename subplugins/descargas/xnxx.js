@@ -2,6 +2,7 @@
 // commands/xnxx.js — XNXX/TXNHH interactivo (👍 normal / ❤️ documento o 1/2) usando tu API
 "use strict";
 
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 
 // === Config API ===
@@ -125,6 +126,7 @@ async function sendVideo(conn, job, asDocument, triggerMsg) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         [asDocument ? "document" : "video"]: { url },
         mimetype: "video/mp4",
         fileName: asDocument ? `${fileBase}-${Date.now()}.mp4` : undefined,
@@ -140,7 +142,8 @@ async function sendVideo(conn, job, asDocument, triggerMsg) {
     await react(conn, chatId, triggerMsg.key, "❌");
     await conn.sendMessage(
       chatId,
-      { text: `❌ Error enviando: ${e?.message || "unknown"}` },
+      {
+      contextInfo: canal(), text: `❌ Error enviando: ${e?.message || "unknown"}` },
       { quoted: quotedBase || triggerMsg }
     );
   }
@@ -153,7 +156,8 @@ const handler = async (msg, { conn, args }) => {
   if (!text) {
     return conn.sendMessage(
       chatId,
-      { 
+      {
+      contextInfo: canal(), 
         text:
 `✳️ Usa:
 .xnxx <enlace> o .x <enlace>
@@ -169,7 +173,8 @@ const handler = async (msg, { conn, args }) => {
   if (!isSupportedUrl(text)) {
     return conn.sendMessage(
       chatId,
-      { text: `❌ Enlace inválido.\nUsa un link de XNXX (cualquier país) o TXNHH.` },
+      {
+      contextInfo: canal(), text: `❌ Enlace inválido.\nUsa un link de XNXX (cualquier país) o TXNHH.` },
       { quoted: msg }
     );
   }
@@ -192,7 +197,8 @@ const handler = async (msg, { conn, args }) => {
 ✦ 𝗧𝗶́𝘁𝘂𝗹𝗼: ${title}
 ✦ 𝗗𝘂𝗿𝗮𝗰𝗶𝗼́𝗻: ${durTxt}`;
 
-    const preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+    const preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
 
     const fileBase = safeFileBase(title, "xnxx");
 
@@ -286,7 +292,8 @@ const handler = async (msg, { conn, args }) => {
     if (/api key|unauthorized|forbidden|401/i.test(s)) msgTxt = "🔐 API Key inválida o ausente.";
     else if (/timeout|timed out|502|upstream/i.test(s)) msgTxt = "⚠️ Timeout o error del servidor.";
 
-    await conn.sendMessage(chatId, { text: msgTxt }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: msgTxt }, { quoted: msg });
     await react(conn, chatId, msg.key, "❌");
   }
 };

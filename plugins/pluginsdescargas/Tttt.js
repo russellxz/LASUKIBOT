@@ -1,6 +1,7 @@
 
 "use strict";
 
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 
 const ENDPOINT = "https://api-sky.ultraplus.click/tiktok";
@@ -14,13 +15,15 @@ const handler = async (msg, { conn, args }) => {
   if (!url) {
     return conn.sendMessage(
       chatId,
-      { text: "✳️ Usa: .tt <url>\nEj: .tt https://www.tiktok.com/t/XXXX" },
+      {
+      contextInfo: canal(), text: "✳️ Usa: .tt <url>\nEj: .tt https://www.tiktok.com/t/XXXX" },
       { quoted: msg }
     );
   }
 
   if (!/^https?:\/\//i.test(url) || !/tiktok\.com|vm\.tiktok\.com/i.test(url)) {
-    return conn.sendMessage(chatId, { text: "❌ Link inválido de TikTok." }, { quoted: msg });
+    return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ Link inválido de TikTok." }, { quoted: msg });
   }
 
   try {
@@ -55,6 +58,7 @@ const handler = async (msg, { conn, args }) => {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         video: { url: video },
         mimetype: "video/mp4",
         caption: `🎬 TikTok: ${title}${author}\n🔗 ${url}`,
@@ -65,7 +69,8 @@ const handler = async (msg, { conn, args }) => {
     await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } });
   } catch (e) {
     const err = e?.message || "unknown";
-    await conn.sendMessage(chatId, { text: `❌ Error: ${err}` }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error: ${err}` }, { quoted: msg });
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
   }
 };

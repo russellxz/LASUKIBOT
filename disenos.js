@@ -68,6 +68,30 @@ export const MARCA_FABRICA_MAIN = "La Suki Bot";
 export const MARCA_FABRICA_SUB = "Suki Subbots";
 
 // ------------------------------------------------------------
+// Canal oficial: es lo que hace salir el botón "Ver canal" debajo
+// del mensaje. El bot principal ya lo pone con sendMessage2; con esto
+// los subbots y los comandos de descarga también lo llevan.
+// ------------------------------------------------------------
+export const CANAL = {
+  id: "120363266665814365@newsletter",
+  nombre: "👑 LA SUKI BOT 👑"
+};
+
+/** contextInfo con el canal (botón "Ver canal"), conservando lo que ya hubiera */
+export function canal(extra = {}) {
+  return {
+    ...extra,
+    forwardedNewsletterMessageInfo: {
+      newsletterJid: CANAL.id,
+      serverMessageId: "",
+      newsletterName: CANAL.nombre
+    },
+    forwardingScore: 9999999,
+    isForwarded: true
+  };
+}
+
+// ------------------------------------------------------------
 // Carga de diseño.json (con caché, se recarga si cambia el archivo)
 // ------------------------------------------------------------
 let cacheDisenos = null;
@@ -401,11 +425,17 @@ export async function enviarMenu(conn, chatId, msg, menuKey, contenido) {
   const caption = renderMenu(conn, contenido);
   const media = getMediaMenu(conn, menuKey);
 
-  // El bot principal usa sendMessage2 (adjunta su canal); los subbots no lo tienen
+  // El bot principal usa sendMessage2 (ya adjunta el canal); los subbots no lo
+  // tienen, así que aquí se les pone el contextInfo del canal para que también
+  // les salga el botón "Ver canal".
   const enviar = (contenido2) =>
     typeof conn.sendMessage2 === "function"
       ? conn.sendMessage2(chatId, contenido2, msg)
-      : conn.sendMessage(chatId, contenido2, { quoted: msg });
+      : conn.sendMessage(
+          chatId,
+          { ...contenido2, contextInfo: canal(contenido2.contextInfo) },
+          { quoted: msg }
+        );
 
   try {
     return await enviar({ ...media, caption });

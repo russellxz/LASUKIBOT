@@ -1,4 +1,4 @@
-import { cabeceraDescarga, camposDescarga, pieDescarga, getMarca } from "../../disenos.js";
+import { cabeceraDescarga, camposDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -323,6 +323,7 @@ const handler = async (msg, { conn, text }) => {
     return conn.sendMessage(
       msg.key.remoteJid,
       {
+      contextInfo: canal(),
         text: `✳️ Usa:\n${pref}play <término> [calidad]\nEj: *${pref}play* bad bunny diles 720`
       },
       { quoted: msg }
@@ -342,7 +343,8 @@ const handler = async (msg, { conn, text }) => {
   if (!video) {
     return conn.sendMessage(
       msg.key.remoteJid,
-      { text: "❌ Sin resultados." },
+      {
+      contextInfo: canal(), text: "❌ Sin resultados." },
       { quoted: msg }
     );
   }
@@ -460,6 +462,7 @@ ${pieDescarga(conn)}
       preview = await conn.sendMessage(
         msg.key.remoteJid,
         {
+      contextInfo: canal(),
           image: { url: thumbnail },
           caption,
           footer: "❦ Selecciona una opción del menú ❦",
@@ -474,6 +477,7 @@ ${pieDescarga(conn)}
       preview = await conn.sendMessage(
         msg.key.remoteJid,
         {
+      contextInfo: canal(),
           image: { url: thumbnail },
           caption
         },
@@ -484,6 +488,7 @@ ${pieDescarga(conn)}
     preview = await conn.sendMessage(
       msg.key.remoteJid,
       {
+      contextInfo: canal(),
         image: { url: thumbnail },
         caption
       },
@@ -606,6 +611,7 @@ ${pieDescarga(conn)}
               await conn.sendMessage(
                 chatId,
                 {
+      contextInfo: canal(),
                   text: `🎶 Descargando audio (mp3)...`
                 },
                 { quoted: m }
@@ -628,6 +634,7 @@ ${pieDescarga(conn)}
               await conn.sendMessage(
                 chatId,
                 {
+      contextInfo: canal(),
                   text: `🎥 Descargando video (${useQuality === "4k" ? "4K" : useQuality + "p"})...`
                 },
                 { quoted: m }
@@ -638,6 +645,7 @@ ${pieDescarga(conn)}
               await conn.sendMessage(
                 chatId,
                 {
+      contextInfo: canal(),
                   text:
 `⚠️ *Opciones válidas:*
    • *1* o *audio* → audio mp3
@@ -680,6 +688,7 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: `🎶 Descargando audio (mp3)...`
       },
       { quoted: m }
@@ -699,6 +708,7 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: `🎶 Descargando audio como documento...`
       },
       { quoted: m }
@@ -725,6 +735,7 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
       await conn.sendMessage(
         chatId,
         {
+      contextInfo: canal(),
           text: `🎥 Descargando video como documento (${label})...`
         },
         { quoted: m }
@@ -752,6 +763,7 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
       await conn.sendMessage(
         chatId,
         {
+      contextInfo: canal(),
           text: `🎥 Descargando video (${label})...`
         },
         { quoted: m }
@@ -775,6 +787,7 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: `🎥 Descargando video (${label})...`
       },
       { quoted: m }
@@ -797,6 +810,7 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: `🎥 Descargando video como documento (${label})...`
       },
       { quoted: m }
@@ -824,6 +838,7 @@ async function handleDownload(conn, job, choice, quoted) {
     await conn.sendMessage(
       job.chatId,
       {
+      contextInfo: canal(),
         text: `⏳ Descargando audio (mp3)...`
       },
       { quoted: quoted || job.commandMsg }
@@ -837,6 +852,7 @@ async function handleDownload(conn, job, choice, quoted) {
   await conn.sendMessage(
     job.chatId,
     {
+      contextInfo: canal(),
       text: `⏳ Descargando video (${useQuality === "4k" ? "4K" : useQuality + "p"})...`
     },
     { quoted: quoted || job.commandMsg }
@@ -856,6 +872,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: `❌ Error Neoxr API (audio): ${e.message}`
       },
       { quoted }
@@ -869,6 +886,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: "❌ No se pudo obtener audio."
       },
       { quoted }
@@ -886,6 +904,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: `❌ Error descargando audio: ${e.message}`
       },
       { quoted }
@@ -925,6 +944,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: `❌ Audio > ${MAX_MB}MB.`
       },
       { quoted }
@@ -965,6 +985,7 @@ async function downloadVideo(conn, job, asDocument, quoted) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: `❌ Error API (video): ${e.message}`
       },
       { quoted }
@@ -978,6 +999,7 @@ async function downloadVideo(conn, job, asDocument, quoted) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: "❌ No se pudo obtener video."
       },
       { quoted }
@@ -1002,6 +1024,7 @@ async function downloadVideo(conn, job, asDocument, quoted) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: `❌ Video > ${MAX_MB}MB.`
       },
       { quoted }

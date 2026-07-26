@@ -5,7 +5,7 @@
 
 "use strict";
 
-import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
+import { cabeceraDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -125,7 +125,8 @@ const handler = async (msg, { conn, args, command }) => {
   if (!text) {
     return conn.sendMessage(
       chatId,
-      { text: `✳️ Usa:\n${pref}${command} <enlace>\nEj: ${pref}${command} https://fb.watch/xxxxxx/` },
+      {
+      contextInfo: canal(), text: `✳️ Usa:\n${pref}${command} <enlace>\nEj: ${pref}${command} https://fb.watch/xxxxxx/` },
       { quoted: msg }
     );
   }
@@ -133,7 +134,8 @@ const handler = async (msg, { conn, args, command }) => {
   text = normalizeUrl(text);
 
   if (!isUrl(text) || !isFB(text)) {
-    return conn.sendMessage(chatId, { text: `❌ Enlace inválido. Solo Facebook.` }, { quoted: msg });
+    return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Enlace inválido. Solo Facebook.` }, { quoted: msg });
   }
 
   try {
@@ -144,7 +146,8 @@ const handler = async (msg, { conn, args, command }) => {
 
     if (!videoUrl) {
       await react(conn, chatId, msg.key, "❌");
-      return conn.sendMessage(chatId, { text: "🚫 No se encontró video (puede ser privado o reel protegido)." }, { quoted: msg });
+      return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "🚫 No se encontró video (puede ser privado o reel protegido)." }, { quoted: msg });
     }
 
     const title = result?.title || "Facebook Video";
@@ -187,6 +190,7 @@ ${pieDescarga(conn)}`.trim();
     if (usarBotones && thumb && isUrl(thumb)) {
       try {
         preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(),
           image: { url: thumb },
           caption,
           footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
@@ -195,24 +199,29 @@ ${pieDescarga(conn)}`.trim();
         }, { quoted: msg });
       } catch (e) {
         console.log("[fb] botones fallaron, fallback:", e.message);
-        preview = await conn.sendMessage(chatId, { image: { url: thumb }, caption }, { quoted: msg });
+        preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), image: { url: thumb }, caption }, { quoted: msg });
       }
     } else if (usarBotones) {
       try {
         preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(),
           text: caption,
           footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
           buttons: nativeFlowButtons,
         }, { quoted: msg });
       } catch (e) {
         console.log("[fb] botones fallaron, fallback:", e.message);
-        preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+        preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
       }
     } else {
       if (thumb && isUrl(thumb)) {
-        preview = await conn.sendMessage(chatId, { image: { url: thumb }, caption }, { quoted: msg });
+        preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), image: { url: thumb }, caption }, { quoted: msg });
       } else {
-        preview = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+        preview = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
       }
     }
 
@@ -325,7 +334,8 @@ ${pieDescarga(conn)}`.trim();
 
   } catch (err) {
     console.error("Error FB:", err);
-    await conn.sendMessage(chatId, { text: `❌ Error: ${err.message}` }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error: ${err.message}` }, { quoted: msg });
     await react(conn, chatId, msg.key, "❌");
   }
 };
@@ -336,14 +346,16 @@ async function sendVideo(conn, job, asDocument, triggerMsg) {
 
   try {
     await react(conn, chatId, triggerMsg.key, asDocument ? "📁" : "🎬");
-    await conn.sendMessage(chatId, { text: "⏳ Espere, descargando su video..." }, { quoted: quotedBase });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "⏳ Espere, descargando su video..." }, { quoted: quotedBase });
 
     const filePath = await downloadVideoToTmp(url, title);
     const sizeMB = mb(fs.statSync(filePath).size);
 
     if (sizeMB > MAX_MB) {
       try { fs.unlinkSync(filePath); } catch {}
-      return conn.sendMessage(chatId, { text: `❌ El video pesa ${sizeMB.toFixed(2)} MB, excede el límite de ${MAX_MB} MB.` }, { quoted: quotedBase });
+      return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ El video pesa ${sizeMB.toFixed(2)} MB, excede el límite de ${MAX_MB} MB.` }, { quoted: quotedBase });
     }
 
     // 🎨 Caption final con TODA la info del video + marca de agua
@@ -366,6 +378,7 @@ async function sendVideo(conn, job, asDocument, triggerMsg) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         [asDocument ? "document" : "video"]: buf,
         mimetype: "video/mp4",
         fileName: `${safeFileName(title)}.mp4`,
@@ -379,7 +392,8 @@ async function sendVideo(conn, job, asDocument, triggerMsg) {
 
   } catch (e) {
     console.error("Error enviando FB:", e);
-    await conn.sendMessage(chatId, { text: `❌ Falló el envío: ${e.message}` }, { quoted: quotedBase });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Falló el envío: ${e.message}` }, { quoted: quotedBase });
     await react(conn, chatId, triggerMsg.key, "❌");
   } finally {
     job.isBusy = false;

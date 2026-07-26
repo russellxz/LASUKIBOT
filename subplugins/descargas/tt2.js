@@ -1,4 +1,5 @@
 // comandos/tiktok2.js
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 
 const API_BASE = process.env.API_BASE || "https://api-sky.ultraplus.click";
@@ -11,13 +12,15 @@ const handler = async (msg, { conn, args, command }) => {
 
   if (!text) {
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `✳️ *Usa:*\n${pref}${command} <enlace>\nEj: *${pref}${command}* https://vm.tiktok.com/xxxxxx/`
     }, { quoted: msg });
   }
 
   const url = args[0];
   if (!/^https?:\/\//i.test(url) || !/tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com/i.test(url)) {
-    return conn.sendMessage(chatId, { text: "❌ *Enlace de TikTok inválido.*" }, { quoted: msg });
+    return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ *Enlace de TikTok inválido.*" }, { quoted: msg });
   }
 
   try {
@@ -50,6 +53,7 @@ const handler = async (msg, { conn, args, command }) => {
 — SkyUltraPlus API`;
 
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       video: { url: d.video },
       mimetype: "video/mp4",
       caption
@@ -65,6 +69,7 @@ const handler = async (msg, { conn, args, command }) => {
   } catch (err) {
     console.error("❌ Error en tiktok2:", err?.message || err);
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `❌ *Error:* ${err?.message || "Fallo al procesar el TikTok."}`
     }, { quoted: msg });
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });

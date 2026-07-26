@@ -1,6 +1,7 @@
 
 "use strict";
 
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -119,7 +120,8 @@ const handler = async (msg, { conn, text, usedPrefix, command }) => {
   const chosenQ = VALID_QUALITIES.has(quality) ? quality : DEFAULT_QUALITY;
 
   if (!url) {
-    return conn.sendMessage(chatId, { text: `✳️ Usa: ${usedPrefix + command} <url> [calidad]\nEj: ${usedPrefix + command} https://youtu.be/xxx 720` }, { quoted: msg });
+    return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `✳️ Usa: ${usedPrefix + command} <url> [calidad]\nEj: ${usedPrefix + command} https://youtu.be/xxx 720` }, { quoted: msg });
   }
 
   try {
@@ -132,7 +134,8 @@ const handler = async (msg, { conn, text, usedPrefix, command }) => {
 
 O responde 1 (Video) / 2 (Doc)`;
 
-    const sentMsg = await conn.sendMessage(chatId, { text: caption }, { quoted: msg });
+    const sentMsg = await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: caption }, { quoted: msg });
 
     // Guardamos la tarea pendiente
     pendingYTV[sentMsg.key.id] = {
@@ -181,7 +184,8 @@ O responde 1 (Video) / 2 (Doc)`;
 
   } catch (err) {
     console.error(err);
-    conn.sendMessage(chatId, { text: `❌ Error: ${err.message}` }, { quoted: msg });
+    conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error: ${err.message}` }, { quoted: msg });
   }
 };
 
@@ -204,14 +208,16 @@ async function processSend(conn, job, asDocument) {
     const caption = `🎥 *${data.title}*\n⚡ Calidad: ${job.quality}p\n🤖 SkyUltraPlus API`;
     
     if (asDocument) {
-        await conn.sendMessage(job.chatId, { 
+        await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), 
             document: { url: filePath }, 
             mimetype: 'video/mp4', 
             fileName: fileName,
             caption 
         }, { quoted: job.baseMsg });
     } else {
-        await conn.sendMessage(job.chatId, { 
+        await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), 
             video: { url: filePath }, 
             caption 
         }, { quoted: job.baseMsg });
@@ -223,7 +229,8 @@ async function processSend(conn, job, asDocument) {
 
   } catch (e) {
     console.error("Error enviando video:", e);
-    await conn.sendMessage(job.chatId, { text: `❌ Falló la descarga: ${e.message}` }, { quoted: job.baseMsg });
+    await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), text: `❌ Falló la descarga: ${e.message}` }, { quoted: job.baseMsg });
   }
 }
 

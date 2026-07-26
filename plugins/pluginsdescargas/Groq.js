@@ -8,6 +8,7 @@
 
 "use strict";
 
+import { canal } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -180,7 +181,8 @@ function ensureGroqAutoListener(conn) {
           // enviar SOLO texto (sin branding)
           const parts = chunkText(reply, 3500);
           for (const p of parts) {
-            await conn.sendMessage(chatId, { text: p }, { quoted: m });
+            await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: p }, { quoted: m });
           }
 
           // liberar busy
@@ -210,7 +212,8 @@ const handler = async (msg, { conn, args, command }) => {
   ensureGroqAutoListener(conn);
 
   if (!isGroupJid(chatId)) {
-    return conn.sendMessage(chatId, { text: "❌ Este modo solo funciona en grupos." }, { quoted: msg });
+    return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ Este modo solo funciona en grupos." }, { quoted: msg });
   }
 
   const sub = String(args?.[0] || "").toLowerCase().trim();
@@ -224,6 +227,7 @@ const handler = async (msg, { conn, args, command }) => {
     const mins = active ? Math.ceil(left / 60000) : 0;
 
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text:
 `🤖 *GROQ AI — AutoChat*
 ✳️ Usa:
@@ -244,6 +248,7 @@ Estado: ${active ? `✅ ACTIVO (${mins} min aprox)` : "⛔ APAGADO"}`
     saveState(state);
 
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: "✅ Groq AutoChat *ACTIVADO* por 10 minutos.\n(Responderé a los mensajes del grupo automáticamente.)"
     }, { quoted: msg });
   }
@@ -254,7 +259,8 @@ Estado: ${active ? `✅ ACTIVO (${mins} min aprox)` : "⛔ APAGADO"}`
     saveState(state);
   }
 
-  return conn.sendMessage(chatId, { text: "⛔ Groq AutoChat *DESACTIVADO*." }, { quoted: msg });
+  return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "⛔ Groq AutoChat *DESACTIVADO*." }, { quoted: msg });
 };
 
 handler.command = ["groq"];

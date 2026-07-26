@@ -8,6 +8,7 @@
 
 "use strict";
 
+import { canal } from "../../disenos.js";
 import fs from 'fs';
 import path from 'path';
 
@@ -57,6 +58,7 @@ const handler = async (msg, { conn, args }) => {
 
   if (!isOwner && !isFromMe) {
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: "⛔ Este comando es solo para el *Owner*."
     }, { quoted: msg });
     return;
@@ -69,6 +71,7 @@ const handler = async (msg, { conn, args }) => {
   if (!accion) {
     const estado = cfg.botones ? "🟢 *ACTIVADOS*" : "🔴 *DESACTIVADOS*";
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text:
 `╭━━━━━━━━━━━━━━━━━━━━╮
    ⚙️ ESTADO DE BOTONES
@@ -87,6 +90,7 @@ const handler = async (msg, { conn, args }) => {
   if (!["on", "off"].includes(accion)) {
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `⚠️ Opción inválida.\n\nUsa:\n   • *${pref}botones on*\n   • *${pref}botones off*`,
     }, { quoted: msg });
   }
@@ -99,6 +103,7 @@ const handler = async (msg, { conn, args }) => {
     const txt = nuevoEstado ? "ya están *ACTIVADOS*" : "ya están *DESACTIVADOS*";
     await conn.sendMessage(chatId, { react: { text: "ℹ️", key: msg.key } });
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `${emoji} Los botones ${txt}. No se hicieron cambios.`,
     }, { quoted: msg });
   }
@@ -114,6 +119,7 @@ const handler = async (msg, { conn, args }) => {
     console.error("[botones] error guardando activoss.json:", e);
     await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } });
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `❌ Error al guardar los cambios: \`${e.message}\``,
     }, { quoted: msg });
   }
@@ -127,6 +133,7 @@ const handler = async (msg, { conn, args }) => {
     : "📄 Los comandos mostrarán solo el texto tradicional (sin botones).";
 
   return conn.sendMessage(chatId, {
+      contextInfo: canal(),
     text:
 `╭━━━━━━━━━━━━━━━━━━━━╮
    ⚙️ BOTONES ACTUALIZADOS

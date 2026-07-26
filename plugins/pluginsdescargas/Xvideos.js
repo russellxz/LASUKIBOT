@@ -6,7 +6,7 @@
 
 "use strict";
 
-import { getMarca } from "../../disenos.js";
+import { getMarca, canal } from "../../disenos.js";
 import axios from 'axios';
 
 // === Config API ===
@@ -161,6 +161,7 @@ async function sendMediaWithFallback(conn, chatId, quoted, caption, asDocument, 
       await conn.sendMessage(
         chatId,
         {
+      contextInfo: canal(),
           document: { url: urls.proxy },
           mimetype: "video/mp4",
           fileName: `${safeFileBase("xvideos")}-${Date.now()}.mp4`,
@@ -171,7 +172,8 @@ async function sendMediaWithFallback(conn, chatId, quoted, caption, asDocument, 
     } else {
       await conn.sendMessage(
         chatId,
-        { video: { url: urls.proxy }, mimetype: "video/mp4", caption },
+        {
+      contextInfo: canal(), video: { url: urls.proxy }, mimetype: "video/mp4", caption },
         { quoted }
       );
     }
@@ -183,6 +185,7 @@ async function sendMediaWithFallback(conn, chatId, quoted, caption, asDocument, 
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         document: { url: urls.direct },
         mimetype: "video/mp4",
         fileName: `${safeFileBase("xvideos")}-${Date.now()}.mp4`,
@@ -193,7 +196,8 @@ async function sendMediaWithFallback(conn, chatId, quoted, caption, asDocument, 
   } else {
     await conn.sendMessage(
       chatId,
-      { video: { url: urls.direct }, mimetype: "video/mp4", caption },
+      {
+      contextInfo: canal(), video: { url: urls.direct }, mimetype: "video/mp4", caption },
       { quoted }
     );
   }
@@ -211,7 +215,8 @@ async function processSend(conn, job, asDocument, triggerMsg) {
 
     await conn.sendMessage(
       chatId,
-      { text: `⏳ Espere, descargando video${asDocument ? " en documento" : ""}...` },
+      {
+      contextInfo: canal(), text: `⏳ Espere, descargando video${asDocument ? " en documento" : ""}...` },
       { quoted: quotedBase }
     );
 
@@ -235,6 +240,7 @@ const handler = async (msg, { conn, args, command }) => {
     return conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text:
 `🔞 *XVideos Downloader*
 
@@ -252,7 +258,8 @@ ${pref}${command} https://www.xvideos.com/videoXXXX hd`,
   }
 
   if (!/xvideos\.com/i.test(url)) {
-    return conn.sendMessage(chatId, { text: "❌ Enlace inválido de XVideos." }, { quoted: msg });
+    return conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ Enlace inválido de XVideos." }, { quoted: msg });
   }
 
   try {
@@ -276,8 +283,10 @@ Elige cómo enviarlo:
 
     // Puedes mandar con thumb si quieres:
     const preview = d.thumb
-      ? await conn.sendMessage(chatId, { image: { url: d.thumb }, caption: optionsText }, { quoted: msg })
-      : await conn.sendMessage(chatId, { text: optionsText }, { quoted: msg });
+      ? await conn.sendMessage(chatId, {
+      contextInfo: canal(), image: { url: d.thumb }, caption: optionsText }, { quoted: msg })
+      : await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: optionsText }, { quoted: msg });
 
     // Guardar job
     pendingXV[preview.key.id] = {
@@ -360,7 +369,8 @@ Elige cómo enviarlo:
     else if (/404/i.test(em)) txt = "❌ Endpoint no existe (404). Revisa /tools/xvideos y /tools/xvideos/dl.";
     else if (em) txt = `❌ Error: ${em}`;
 
-    await conn.sendMessage(chatId, { text: txt }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: txt }, { quoted: msg });
     await react(conn, chatId, msg.key, "❌");
   }
 };

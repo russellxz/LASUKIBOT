@@ -1,4 +1,4 @@
-import { getMarca } from "../../disenos.js";
+import { getMarca, canal } from "../../disenos.js";
 import fetch from 'node-fetch';
 
 const handler = async (msg, { conn, args, command }) => {
@@ -8,6 +8,7 @@ const handler = async (msg, { conn, args, command }) => {
 
   if (!text) {
     return conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `⚠️ *Uso incorrecto.*\n✳️ *Ejemplo:* \`${pref}${command} whatsapp\``
     }, { quoted: msg });
   }
@@ -53,6 +54,7 @@ const handler = async (msg, { conn, args, command }) => {
 
     // Enviar imagen con info
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       image: { url: apkInfo.thumbnail },
       caption,
       mimetype: "image/jpeg"
@@ -60,6 +62,7 @@ const handler = async (msg, { conn, args, command }) => {
 
     // Enviar el APK
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       document: fileBuffer,
       mimetype: "application/vnd.android.package-archive",
       fileName: apkFile.filename
@@ -72,6 +75,7 @@ const handler = async (msg, { conn, args, command }) => {
   } catch (err) {
     console.error("❌ Error en comando APK:", err.message);
     await conn.sendMessage(chatId, {
+      contextInfo: canal(),
       text: `❌ *Error al procesar la solicitud:*\n_${err.message}_\n\n🔹 Inténtalo más tarde.`
     }, { quoted: msg });
 

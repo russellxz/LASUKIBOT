@@ -1,4 +1,4 @@
-import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
+import { cabeceraDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -227,7 +227,8 @@ const handler = async (msg, { conn, args, command }) => {
   if (!url) {
     return conn.sendMessage(
       msg.key.remoteJid,
-      { text: `✳️ Usa:\n${pref}${command} <URL de YouTube>` },
+      {
+      contextInfo: canal(), text: `✳️ Usa:\n${pref}${command} <URL de YouTube>` },
       { quoted: msg }
     );
   }
@@ -235,7 +236,8 @@ const handler = async (msg, { conn, args, command }) => {
   if (!isYouTube(url)) {
     return conn.sendMessage(
       msg.key.remoteJid,
-      { text: "❌ Enlace inválido." },
+      {
+      contextInfo: canal(), text: "❌ Enlace inválido." },
       { quoted: msg }
     );
   }
@@ -316,6 +318,7 @@ ${pieDescarga(conn)}
       preview = await conn.sendMessage(
         msg.key.remoteJid,
         {
+      contextInfo: canal(),
           image: thumbnail ? { url: thumbnail } : undefined,
           caption,
           footer: `❦ ${getMarca(conn)} — Selecciona una opción ❦`,
@@ -454,7 +457,8 @@ ${pieDescarga(conn)}
 
               await conn.sendMessage(
                 chatId,
-                { text: `🎶 Descargando audio (mp3)...` },
+                {
+      contextInfo: canal(), text: `🎶 Descargando audio (mp3)...` },
                 { quoted: m }
               );
 
@@ -469,7 +473,8 @@ ${pieDescarga(conn)}
 
               await conn.sendMessage(
                 chatId,
-                { text: `🎶 Descargando audio como documento...` },
+                {
+      contextInfo: canal(), text: `🎶 Descargando audio como documento...` },
                 { quoted: m }
               );
 
@@ -497,7 +502,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
 
     await conn.sendMessage(
       chatId,
-      { text: `🎶 Descargando audio (mp3)...` },
+      {
+      contextInfo: canal(), text: `🎶 Descargando audio (mp3)...` },
       { quoted: m }
     );
 
@@ -514,7 +520,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
 
     await conn.sendMessage(
       chatId,
-      { text: `🎶 Descargando audio como documento...` },
+      {
+      contextInfo: canal(), text: `🎶 Descargando audio como documento...` },
       { quoted: m }
     );
 
@@ -527,7 +534,8 @@ async function handleReaction(conn, job, emoji, quoted) {
   if (emoji === "👍") {
     await conn.sendMessage(
       job.chatId,
-      { text: `⏳ Descargando audio (mp3)...` },
+      {
+      contextInfo: canal(), text: `⏳ Descargando audio (mp3)...` },
       { quoted }
     );
 
@@ -537,7 +545,8 @@ async function handleReaction(conn, job, emoji, quoted) {
   if (emoji === "📄" || emoji === "❤️") {
     await conn.sendMessage(
       job.chatId,
-      { text: `⏳ Descargando audio como documento...` },
+      {
+      contextInfo: canal(), text: `⏳ Descargando audio como documento...` },
       { quoted }
     );
 
@@ -555,7 +564,8 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   } catch (e) {
     await conn.sendMessage(
       chatId,
-      { text: `❌ Error Neoxr API (audio): ${e.message}` },
+      {
+      contextInfo: canal(), text: `❌ Error Neoxr API (audio): ${e.message}` },
       { quoted }
     );
     return;
@@ -566,7 +576,8 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   if (!mediaUrl) {
     await conn.sendMessage(
       chatId,
-      { text: "❌ No se pudo obtener audio." },
+      {
+      contextInfo: canal(), text: "❌ No se pudo obtener audio." },
       { quoted }
     );
     return;
@@ -581,7 +592,8 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   } catch (e) {
     await conn.sendMessage(
       chatId,
-      { text: `❌ Error descargando audio: ${e.message}` },
+      {
+      contextInfo: canal(), text: `❌ Error descargando audio: ${e.message}` },
       { quoted }
     );
     return;
@@ -618,7 +630,8 @@ async function downloadAudio(conn, job, asDocument, quoted) {
 
     await conn.sendMessage(
       chatId,
-      { text: `❌ Audio > ${MAX_MB}MB.` },
+      {
+      contextInfo: canal(), text: `❌ Audio > ${MAX_MB}MB.` },
       { quoted }
     );
 
@@ -645,6 +658,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   await conn.sendMessage(
     chatId,
     {
+      contextInfo: canal(),
       [asDocument ? "document" : "audio"]: fs.readFileSync(outFile),
       mimetype: "audio/mpeg",
       fileName: `${base}.mp3`,
@@ -656,7 +670,8 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   if (!asDocument) {
     await conn.sendMessage(
       chatId,
-      { text: finalCaption },
+      {
+      contextInfo: canal(), text: finalCaption },
       { quoted }
     );
   }

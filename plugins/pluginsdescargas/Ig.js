@@ -7,7 +7,7 @@
 
 "use strict";
 
-import { getMarca } from "../../disenos.js";
+import { getMarca, canal } from "../../disenos.js";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -459,6 +459,7 @@ const handler = async (msg, { conn, args, command }) => {
     return conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text:
 `✳️ Usa:
 ${pref}${command} <enlace IG>
@@ -475,7 +476,8 @@ ${pref}${command} https://www.instagram.com/reel/XXXX/`
   if (!isUrl(text) || !isIG(text)) {
     return conn.sendMessage(
       chatId,
-      { text: `❌ Enlace inválido.\nUsa: ${pref}${command} <url de Instagram>` },
+      {
+      contextInfo: canal(), text: `❌ Enlace inválido.\nUsa: ${pref}${command} <url de Instagram>` },
       { quoted: msg }
     );
   }
@@ -490,7 +492,8 @@ ${pref}${command} https://www.instagram.com/reel/XXXX/`
       await react(conn, chatId, msg.key, "❌");
       return conn.sendMessage(
         chatId,
-        { text: "🚫 No encontré imagen o video descargable en ese enlace." },
+        {
+      contextInfo: canal(), text: "🚫 No encontré imagen o video descargable en ese enlace." },
         { quoted: msg }
       );
     }
@@ -685,7 +688,8 @@ Cita este mensaje y escribe:
   } catch (err) {
     const s = String(err?.message || "");
     console.error("❌ IG error:", s);
-    await conn.sendMessage(chatId, { text: `❌ Error: ${s}` }, { quoted: msg });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error: ${s}` }, { quoted: msg });
     await react(conn, chatId, msg.key, "❌");
   }
 };
@@ -702,6 +706,7 @@ async function processSend(conn, job, asDocument, triggerMsg) {
     await conn.sendMessage(
       chatId,
       {
+      contextInfo: canal(),
         text: asDocument
           ? "⏳ Espere, descargando como documento..."
           : "⏳ Espere, descargando su contenido..."
@@ -723,6 +728,7 @@ async function processSend(conn, job, asDocument, triggerMsg) {
         await conn.sendMessage(
           chatId,
           {
+      contextInfo: canal(),
             text: `❌ Archivo muy pesado (${sizeMB.toFixed(2)} MB). Límite ${MAX_MB} MB.`
           },
           { quoted: quotedBase }
@@ -747,6 +753,7 @@ async function processSend(conn, job, asDocument, triggerMsg) {
         await conn.sendMessage(
           chatId,
           {
+      contextInfo: canal(),
             document: buf,
             mimetype: fileData.mime,
             fileName: fileData.fileName,
@@ -759,6 +766,7 @@ async function processSend(conn, job, asDocument, triggerMsg) {
           await conn.sendMessage(
             chatId,
             {
+      contextInfo: canal(),
               image: buf,
               mimetype: fileData.mime,
               caption: finalCaption
@@ -769,6 +777,7 @@ async function processSend(conn, job, asDocument, triggerMsg) {
           await conn.sendMessage(
             chatId,
             {
+      contextInfo: canal(),
               video: buf,
               mimetype: fileData.mime,
               fileName: fileData.fileName,
@@ -787,7 +796,8 @@ async function processSend(conn, job, asDocument, triggerMsg) {
     if (!sent) {
       await conn.sendMessage(
         chatId,
-        { text: "❌ No se pudo enviar ningún archivo." },
+        {
+      contextInfo: canal(), text: "❌ No se pudo enviar ningún archivo." },
         { quoted: quotedBase }
       );
     } else {
@@ -798,7 +808,8 @@ async function processSend(conn, job, asDocument, triggerMsg) {
 
     await conn.sendMessage(
       chatId,
-      { text: `❌ Error enviando: ${e?.message || "unknown"}` },
+      {
+      contextInfo: canal(), text: `❌ Error enviando: ${e?.message || "unknown"}` },
       { quoted: quotedBase }
     );
   } finally {

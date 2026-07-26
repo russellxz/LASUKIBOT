@@ -1,4 +1,4 @@
-import { cabeceraDescarga, pieDescarga, getMarca } from "../../disenos.js";
+import { cabeceraDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -164,12 +164,14 @@ const handler = async (msg, { conn, args, command }) => {
   if (!url) {
     return conn.sendMessage(
       msg.key.remoteJid,
-      { text: `✳️ Usa:\n${pref}${command} <URL de YouTube>` },
+      {
+      contextInfo: canal(), text: `✳️ Usa:\n${pref}${command} <URL de YouTube>` },
       { quoted: msg }
     );
   }
   if (!isYouTube(url)) {
-    return conn.sendMessage(msg.key.remoteJid, { text: "❌ Enlace inválido." }, { quoted: msg });
+    return conn.sendMessage(msg.key.remoteJid, {
+      contextInfo: canal(), text: "❌ Enlace inválido." }, { quoted: msg });
   }
 
   await conn.sendMessage(msg.key.remoteJid, { react: { text: "⏳", key: msg.key } });
@@ -271,6 +273,7 @@ ${pieDescarga(conn)}
       preview = await conn.sendMessage(
         msg.key.remoteJid,
         {
+      contextInfo: canal(),
           image: thumbnail ? { url: thumbnail } : undefined,
           caption,
           footer: "❦ Selecciona una opción del menú ❦",
@@ -397,7 +400,8 @@ ${pieDescarga(conn)}
               const lbl = useQuality === "4k" ? "4K" : `${useQuality}p`;
 
               await conn.sendMessage(chatId, { react: { text: docMode ? "📁" : "🎬", key: m.key } });
-              await conn.sendMessage(chatId, { text: `🎥 Descargando video (${lbl})${docMode ? " como documento" : ""}...` }, { quoted: m });
+              await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video (${lbl})${docMode ? " como documento" : ""}...` }, { quoted: m });
               await downloadVideo(conn, { ...job, videoQuality: useQuality }, docMode, m);
             }
           }
@@ -419,7 +423,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     if (VALID_QUALITIES.has(q)) {
       const label = q === "4k" ? "4K" : `${q}p`;
       await conn.sendMessage(chatId, { react: { text: "📁", key: m.key } });
-      await conn.sendMessage(chatId, { text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
+      await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
       return downloadVideo(conn, { ...job, videoQuality: q }, true, m);
     }
   }
@@ -431,7 +436,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     if (VALID_QUALITIES.has(q)) {
       const label = q === "4k" ? "4K" : `${q}p`;
       await conn.sendMessage(chatId, { react: { text: "🎬", key: m.key } });
-      await conn.sendMessage(chatId, { text: `🎥 Descargando video (${label})...` }, { quoted: m });
+      await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video (${label})...` }, { quoted: m });
       return downloadVideo(conn, { ...job, videoQuality: q }, false, m);
     }
   }
@@ -441,7 +447,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     const q = job.videoQuality || DEFAULT_VIDEO_QUALITY;
     const label = q === "4k" ? "4K" : `${q}p`;
     await conn.sendMessage(chatId, { react: { text: "🎬", key: m.key } });
-    await conn.sendMessage(chatId, { text: `🎥 Descargando video (${label})...` }, { quoted: m });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video (${label})...` }, { quoted: m });
     return downloadVideo(conn, job, false, m);
   }
 
@@ -449,7 +456,8 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     const q = job.videoQuality || DEFAULT_VIDEO_QUALITY;
     const label = q === "4k" ? "4K" : `${q}p`;
     await conn.sendMessage(chatId, { react: { text: "📁", key: m.key } });
-    await conn.sendMessage(chatId, { text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
     return downloadVideo(conn, job, true, m);
   }
 }
@@ -460,11 +468,13 @@ async function handleReaction(conn, job, emoji, quoted) {
   const label = useQuality === "4k" ? "4K" : `${useQuality}p`;
 
   if (emoji === "👍" || emoji === "❤️") {
-    await conn.sendMessage(job.chatId, { text: `⏳ Descargando video (${label})...` }, { quoted });
+    await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), text: `⏳ Descargando video (${label})...` }, { quoted });
     return downloadVideo(conn, job, false, quoted);
   }
   if (emoji === "📁") {
-    await conn.sendMessage(job.chatId, { text: `⏳ Descargando video como documento (${label})...` }, { quoted });
+    await conn.sendMessage(job.chatId, {
+      contextInfo: canal(), text: `⏳ Descargando video como documento (${label})...` }, { quoted });
     return downloadVideo(conn, job, true, quoted);
   }
 }
@@ -477,13 +487,15 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   try {
     resolved = await callYoutubeResolveVideo(videoUrl, q);
   } catch (e) {
-    await conn.sendMessage(chatId, { text: `❌ Error API (video): ${e.message}` }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error API (video): ${e.message}` }, { quoted });
     return;
   }
 
   const mediaUrl = resolved.dl_download || resolved.direct;
   if (!mediaUrl) {
-    await conn.sendMessage(chatId, { text: "❌ No se pudo obtener video." }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "❌ No se pudo obtener video." }, { quoted });
     return;
   }
 
@@ -497,7 +509,8 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   const sizeMB = fileSizeMB(file);
   if (sizeMB > MAX_MB) {
     try { fs.unlinkSync(file); } catch {}
-    await conn.sendMessage(chatId, { text: `❌ Video > ${MAX_MB}MB. Prueba con calidad menor.` }, { quoted });
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Video > ${MAX_MB}MB. Prueba con calidad menor.` }, { quoted });
     return;
   }
 
@@ -524,6 +537,7 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   await conn.sendMessage(
     chatId,
     {
+      contextInfo: canal(),
       [asDocument ? "document" : "video"]: fs.readFileSync(file),
       mimetype: "video/mp4",
       fileName: `${base}_${tag}.mp4`,
