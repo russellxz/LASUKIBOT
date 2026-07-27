@@ -27,8 +27,7 @@ import {
   MENU_NOMBRES,
   MARCA_FABRICA_MAIN,
   MARCA_FABRICA_SUB,
-  listaSegura,
-  listaDisenosTexto
+  listaSegura
 } from "./disenos.js";
 
 // Menús que se pueden personalizar de a uno (sin "descargas", que sigue al global)
@@ -95,26 +94,41 @@ function desenvolver(m) {
     n?.viewOnceMessage?.message ||
     n?.viewOnceMessageV2?.message ||
     n?.viewOnceMessageV2Extension?.message ||
-    n?.ephemeralMessage?.message
+    n?.ephemeralMessage?.message ||
+    n?.documentWithCaptionMessage?.message
   ) {
     n =
       n.viewOnceMessage?.message ||
       n.viewOnceMessageV2?.message ||
       n.viewOnceMessageV2Extension?.message ||
-      n.ephemeralMessage?.message;
+      n.ephemeralMessage?.message ||
+      n.documentWithCaptionMessage?.message;
   }
   return n;
 }
 
-function textoDe(msg) {
-  const m = desenvolver(msg?.message) || {};
+// Texto de CUALQUIER tipo de mensaje. Los menús con botones viajan como
+// interactiveMessage/buttonsMessage, así que si solo se mira `conversation`
+// el texto sale vacío y no se reconoce lo que el usuario está citando.
+function textoDeContenido(contenido) {
+  const m = desenvolver(contenido) || {};
   return String(
     m.conversation ||
       m.extendedTextMessage?.text ||
       m.imageMessage?.caption ||
       m.videoMessage?.caption ||
+      m.documentMessage?.caption ||
+      m.interactiveMessage?.body?.text ||
+      m.buttonsMessage?.contentText ||
+      m.listMessage?.description ||
+      m.templateMessage?.hydratedTemplate?.hydratedContentText ||
+      m.templateMessage?.hydratedFourRowTemplate?.hydratedContentText ||
       ""
   ).trim();
+}
+
+function textoDe(msg) {
+  return textoDeContenido(msg?.message);
 }
 
 // Busca imagen/video en el mensaje o en el mensaje citado
@@ -186,7 +200,6 @@ function esIdPropio(conn, id) {
 // el eco llega sin ID (o lo reenvía otro dispositivo vinculado).
 const MARCAS_PROPIAS = [
   "🎨 *PERSONALIZACIÓN",
-  "🎨 *ELIGE UN DISEÑO",
   "🖼️ *Envía ahora",
   "🎯 *¿A qué menú",
   "✏️ *Escribe el nombre",
@@ -262,14 +275,14 @@ function construirOpciones() {
   opciones.push(
     {
       id: "setmenu_media_global",
-      titulo: "🖼️ Imagen/video para TODOS los menús",
-      desc: "Una sola media para todos los menús",
+      titulo: "🖼️ Imagen de todos",
+      desc: "Una sola imagen o video para todos los menús",
       accion: { tipo: "media", valor: "global" }
     },
     {
       id: "setmenu_media_menu",
-      titulo: "🎯 Imagen/video de UN menú",
-      desc: "Media distinta solo para el menú que elijas",
+      titulo: "🎯 Imagen de un menú",
+      desc: "Imagen o video distinto solo para el menú que elijas",
       accion: { tipo: "media_elegir" }
     },
     {
@@ -286,8 +299,8 @@ function construirOpciones() {
     },
     {
       id: "setmenu_ver",
-      titulo: "👀 Ver personalización actual",
-      desc: "Muestra diseño, nombre e imágenes guardadas",
+      titulo: "👀 Ver personalización",
+      desc: "Muestra el diseño, el nombre y las imágenes guardadas",
       accion: { tipo: "ver" }
     }
   );
@@ -295,45 +308,51 @@ function construirOpciones() {
   return opciones;
 }
 
-// Fila que abre el listado de diseños en un segundo paso. Los diseños no
-// caben en la lista junto al resto (WhatsApp solo admite 10 filas), así que
-// se eligen por número, que además deja ver la muestra de cada uno.
-const OPCION_DISENOS = {
-  id: "setmenu_disenos",
-  titulo: "🎨 Elegir diseño",
-  desc: "Estilos para los menús y las descargas",
-  accion: { tipo: "elegir_diseno" }
-};
-
 function opcionPorId(id) {
   const limpio = String(id || "").trim();
-  if (limpio === OPCION_DISENOS.id || limpio.endsWith(OPCION_DISENOS.id)) {
-    return OPCION_DISENOS;
-  }
   return construirOpciones().find(
     (o) => o.id === limpio || limpio.endsWith(o.id)
   );
 }
 
-// Lo que se ve en el menú de setmenu: los diseños se eligen en un segundo
-// paso, así la lista cabe en las 10 filas que admite WhatsApp y la numeración
-// del respaldo por texto es la misma que la de la lista.
-function opcionesMenu() {
-  return [
-    OPCION_DISENOS,
-    ...construirOpciones().filter((o) => !o.id.startsWith("setmenu_diseno_"))
-  ];
-}
-
 function opcionPorNumero(n) {
-  const ops = opcionesMenu();
+  const ops = construirOpciones();
   const i = Number(n);
   if (!Number.isInteger(i) || i < 1 || i > ops.length) return null;
   return ops[i - 1];
 }
 
+/**
+ * Numeración compacta de TODAS las opciones, con los mismos números que la
+ * lista desplegable. Va dentro del propio menú para que quien no pueda abrir
+ * la lista sepa qué número responder.
+ */
+function numeracionCorta() {
+  const ops = construirOpciones();
+  const disenos = [];
+  const resto = [];
+
+  ops.forEach((o, i) => {
+    const n = i + 1;
+    if (o.id.startsWith("setmenu_diseno_")) {
+      // "🦋 Diseño 1 — Clásico" → "🦋 Clásico"
+      const corto = o.titulo.replace(/\s*Diseño\s*\d+\s*—\s*/, " ").replace(/\s+/g, " ").trim();
+      disenos.push(`*${n}.* ${corto}`);
+    } else {
+      resto.push(`*${n}.* ${o.titulo}`);
+    }
+  });
+
+  const enFilas = [];
+  for (let i = 0; i < disenos.length; i += 2) {
+    enFilas.push(disenos.slice(i, i + 2).join("   "));
+  }
+
+  return `🎨 *DISEÑOS*\n${enFilas.join("\n")}\n\n⚙️ *AJUSTES*\n${resto.join("\n")}`;
+}
+
 function textoOpciones(pref) {
-  const ops = opcionesMenu();
+  const ops = construirOpciones();
   const lineas = ops.map((o, i) => `*${i + 1}.* ${o.titulo}\n     _${o.desc}_`);
   return (
     `🎨 *PERSONALIZACIÓN*\n\n` +
@@ -345,53 +364,38 @@ function textoOpciones(pref) {
 }
 
 function botonesSetmenu() {
-  const resto = construirOpciones().filter((o) => !o.id.startsWith("setmenu_diseno_"));
-  const total = getDisenos().length;
+  const ops = construirOpciones();
+  const disenos = ops.filter((o) => o.id.startsWith("setmenu_diseno_"));
+  const resto = ops.filter((o) => !o.id.startsWith("setmenu_diseno_"));
 
-  // 6 filas en total: WhatsApp no abre la lista si se pasa de 10.
-  // listaSegura() recorta además los títulos al largo que admite el cliente.
-  return listaSegura([
-    {
-      text: "🎨 Abrir personalización",
-      sections: [
-        {
-          title: "🎨 DISEÑOS",
-          highlight_label: `${total} estilos`,
-          rows: [
-            {
-              header: "",
-              title: OPCION_DISENOS.titulo,
-              description: OPCION_DISENOS.desc,
-              id: OPCION_DISENOS.id
-            }
-          ]
-        },
-        {
-          title: "🖼️ IMAGEN Y NOMBRE",
-          rows: resto.map((o) => ({
-            header: "",
-            title: o.titulo,
-            description: o.desc,
-            id: o.id
-          }))
-        }
-      ]
-    }
-  ]);
-}
+  const fila = (o) => ({
+    header: "",
+    title: o.titulo,
+    description: o.desc,
+    id: o.id
+  });
 
-/** Manda la lista de diseños numerada y espera un número del 1 al N */
-async function pedirDiseno(conn, msg) {
-  const total = getDisenos().length;
-  setPendiente(conn, msg, { paso: "diseno" });
-  return responder(
-    conn,
-    msg,
-    `🎨 *ELIGE UN DISEÑO*\n\n` +
-      `${listaDisenosTexto()}\n\n` +
-      `Responde con el *número* del diseño que quieras (del *1* al *${total}*).\n` +
-      `Se aplica a los menús y a las descargas.\n\n` +
-      `❌ Escribe *cancelar* para salir.`
+  // Los diseños van dentro de la lista para poder tocarlos directo. Se le
+  // sube el tope de filas a listaSegura(), que igual recorta los textos
+  // largos y quita filas sin id o repetidas.
+  return listaSegura(
+    [
+      {
+        text: "🎨 Abrir personalización",
+        sections: [
+          {
+            title: "🎨 DISEÑOS",
+            highlight_label: `${disenos.length} estilos`,
+            rows: disenos.map(fila)
+          },
+          {
+            title: "🖼️ IMAGEN Y NOMBRE",
+            rows: resto.map(fila)
+          }
+        ]
+      }
+    ],
+    { filas: ops.length }
   );
 }
 
@@ -505,7 +509,6 @@ async function ejecutarAccion(conn, msg, opcion) {
   if (!a) return;
 
   if (a.tipo === "diseno") return aplicarDiseno(conn, msg, a.valor);
-  if (a.tipo === "elegir_diseno") return pedirDiseno(conn, msg);
   if (a.tipo === "media") return pedirMedia(conn, msg, a.valor);
   if (a.tipo === "media_elegir") return pedirMenuParaMedia(conn, msg);
   if (a.tipo === "nombre") return pedirNombre(conn, msg);
@@ -680,11 +683,6 @@ function registrarListener(conn, puedeUsar) {
               await guardarPasoNombre(conn, m);
               continue;
             }
-          } else if (pend.paso === "diseno") {
-            if (/^\d{1,2}$/.test(texto)) {
-              await aplicarDiseno(conn, m, texto);
-              continue;
-            }
           } else if (pend.paso === "elegir_menu") {
             if (/^\d+$/.test(texto)) {
               await guardarPasoElegirMenu(conn, m);
@@ -739,25 +737,29 @@ function registrarListener(conn, puedeUsar) {
           }
         }
 
-        // Respuesta con número citando el menú en texto (iPhone / fallback)
+        // Respuesta con número citando el menú (para quien no puede abrir la
+        // lista). El menú con botones viaja como interactiveMessage, por eso
+        // hay que sacar el texto citado de cualquier tipo de mensaje.
         if (/^\d{1,2}$/.test(texto)) {
-          const ctx = m.message?.extendedTextMessage?.contextInfo;
-          // Igual que arriba: solo si citó NUESTRO menú
+          const propio = desenvolver(m.message) || {};
+          const ctx =
+            propio.extendedTextMessage?.contextInfo ||
+            propio.imageMessage?.contextInfo ||
+            propio.videoMessage?.contextInfo ||
+            propio.conversation?.contextInfo ||
+            null;
+
           const idDelCitado = ctx?.stanzaId || "";
+          // Si citó el menú de OTRO bot, no es nuestro asunto
           if (idDelCitado && !esIdPropio(conn, idDelCitado)) continue;
 
-          const citado = ctx?.quotedMessage;
-          const textoCitado = citado
-            ? String(
-                citado.conversation ||
-                  citado.extendedTextMessage?.text ||
-                  citado.imageMessage?.caption ||
-                  citado.videoMessage?.caption ||
-                  ""
-              )
-            : "";
+          // Que el id citado sea nuestro ya confirma que es nuestro menú;
+          // si no hay id, nos apoyamos en el texto del mensaje citado.
+          const esNuestro =
+            (idDelCitado && esIdPropio(conn, idDelCitado)) ||
+            textoDeContenido(ctx?.quotedMessage).includes("PERSONALIZACIÓN");
 
-          if (textoCitado.includes("PERSONALIZACIÓN")) {
+          if (esNuestro) {
             const op = opcionPorNumero(texto);
             if (op) {
               await ejecutarAccion(conn, m, op);
@@ -809,9 +811,8 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
     `🎨 Diseño actual: *${d?.emoji || ""} ${d?.nombre || "Clásico"}*\n` +
     `✏️ Nombre actual: *${marca}*\n\n` +
     `Elige qué quieres cambiar 👇\n\n` +
-    `💡 *Si no se te abre la lista*, responde a este mensaje con el número:\n` +
-    `*1* diseño · *2* imagen de todos · *3* imagen de un menú\n` +
-    `*4* nombre · *5* foto de perfil · *6* ver personalización`;
+    `💡 *¿No se te abre la lista?* Responde a este mensaje con el número:\n\n` +
+    numeracionCorta();
 
   // Sesión abierta en ESTE bot: si la selección llega sin referencia al
   // mensaje del menú, solo actúa el bot que realmente lo abrió aquí.
