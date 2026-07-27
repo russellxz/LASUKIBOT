@@ -129,18 +129,59 @@ global.isOwner = function (jid) {
 // 🤖 SISTEMA DE SUBBOTS (independiente del bot principal)
 // Corre por separado: si el bot principal se cae o entra en soporte,
 // los subbots ya conectados siguen funcionando y se auto-reconectan.
-import("./subbots.js")
-  .then((sub) => sub.initSubbots())
-  .catch((e) => console.error("❌ Error iniciando sistema de subbots:", e));
+//
+// Sus plugins se cargan AHORA (aquí es donde la consola escupe todas las
+// líneas de "Plugin cargado") y la reconexión de los subbots ya vinculados
+// se deja para el final: así ningún log tapa las instrucciones de
+// vinculación ni el código de 8 dígitos.
+let __iniciarSubbots = async () => {};
+let __subbotsArrancados = false;
+try {
+  const sub = await import("./subbots.js");
+  await sub.loadSubPlugins();
+  __iniciarSubbots = () =>
+    sub
+      .initSubbots()
+      .catch((e) => console.error("❌ Error iniciando sistema de subbots:", e));
+} catch (e) {
+  console.error("❌ Error cargando el sistema de subbots:", e);
+}
+// Se llama desde varios sitios (ya vinculado, tras mostrar el código, o al
+// conectar) pero solo corre la primera vez.
+const arrancarSubbots = () => {
+  if (__subbotsArrancados) return;
+  __subbotsArrancados = true;
+  __iniciarSubbots();
+};
 
-// 🎨 Banner y opciones
+// 🎨 Banner (ya con TODO cargado)
 console.log(chalk.cyan(figlet.textSync("Suki 3.0 Bot", { font: "Standard" })));
-console.log(chalk.green("\n✅ Iniciando conexión...\n"));
-console.log(chalk.green("  [Hola] ") + chalk.white("🔑 Ingresar Tu Numero(Ej: 54911XXXXXX)\n"));
+console.log(
+  chalk.green(`\n✅ ${global.plugins.length} plugins del bot principal y ` +
+    `${(global.subPlugins || []).length} de subbots cargados.\n`)
+);
+
+// 🧾 Bloque visual para que las instrucciones no se pierdan entre los logs
+const raya = (color = "cyan") =>
+  console.log(chalk[color]("━".repeat(52)));
+const recuadro = (color, lineas) => {
+  console.log("");
+  raya(color);
+  for (const l of lineas) console.log(l === "" ? "" : "  " + l);
+  raya(color);
+  console.log("");
+};
 
 // 📞 Entrada de usuario
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));
+
+const PASOS_WHATSAPP = [
+  chalk.white("Abre WhatsApp en ese teléfono y entra a:"),
+  chalk.gray("Ajustes ") + chalk.white("→") + chalk.gray(" Dispositivos vinculados"),
+  chalk.gray("→ Vincular un dispositivo"),
+  chalk.gray("→ Vincular con número de teléfono"),
+];
 
 let method = "1";
 let phoneNumber = "";
@@ -167,14 +208,38 @@ let phoneNumber = "";
 
   const { state, saveCreds } = await useMultiFileAuthState("./sessions");
 
-  if (!fs.existsSync("./sessions/creds.json")) {
-    method = await question(chalk.magenta("📞(VAMOS AYA😎): "));
+  const yaVinculado = fs.existsSync("./sessions/creds.json");
+
+  if (!yaVinculado) {
+    // 🔗 Instrucciones de vinculación: van de ÚLTIMO, cuando ya no queda
+    // ningún plugin por cargar, para que se vean limpias en la consola.
+    recuadro("cyan", [
+      chalk.cyan.bold("🔗  CÓMO VINCULAR TU BOT"),
+      "",
+      chalk.yellow("1)") + chalk.white(" Escribe abajo tu número CON código de país,"),
+      chalk.gray("   sin +, sin espacios y sin guiones."),
+      chalk.gray("   Ejemplo: ") + chalk.greenBright("5491112345678"),
+      "",
+      chalk.yellow("2)") + " " + PASOS_WHATSAPP[0],
+      chalk.gray("   ") + PASOS_WHATSAPP[1],
+      chalk.gray("   ") + PASOS_WHATSAPP[2],
+      chalk.gray("   ") + PASOS_WHATSAPP[3],
+      "",
+      chalk.yellow("3)") + chalk.white(" Aquí abajo saldrá un código de 8 dígitos."),
+      chalk.gray("   Escríbelo en el teléfono y listo. ✅"),
+    ]);
+
+    method = await question(chalk.magenta("📞 Tu número: "));
     phoneNumber = method.replace(/\D/g, "");
     if (!phoneNumber) {
       console.log(chalk.red("\n❌ Número inválido."));
       process.exit(1);
     }
     method = "2";
+    console.log(chalk.gray("\n⏳ Generando tu código de vinculación...\n"));
+  } else {
+    // Ya hay sesión: nada que vincular, los subbots pueden arrancar enseguida.
+    arrancarSubbots();
   }
 
   async function startBot() {
@@ -339,8 +404,28 @@ try {
       
       if (!fs.existsSync("./sessions/creds.json") && method === "2") {
         setTimeout(async () => {
-          const code = await sock.requestPairingCode(phoneNumber);
-          console.log(chalk.magenta("🔑 Código de vinculación: ") + chalk.yellow(code.match(/.{1,4}/g).join("-")));
+          try {
+            const code = await sock.requestPairingCode(phoneNumber);
+            const bonito = code.match(/.{1,4}/g).join(" - ");
+            recuadro("yellow", [
+              chalk.yellow.bold("🔑  TU CÓDIGO DE VINCULACIÓN"),
+              "",
+              chalk.greenBright.bold("      " + bonito),
+              "",
+              PASOS_WHATSAPP[0],
+              chalk.gray("   ") + PASOS_WHATSAPP[1],
+              chalk.gray("   ") + PASOS_WHATSAPP[2],
+              chalk.gray("   ") + PASOS_WHATSAPP[3],
+              "",
+              chalk.gray("Escribe ese código en tu teléfono. Dura ~60 segundos."),
+            ]);
+          } catch (e) {
+            console.log(chalk.red("❌ No se pudo generar el código: " + e.message));
+          } finally {
+            // Recién ahora arrancan los subbots ya vinculados: así sus logs
+            // no tapan el código que el usuario tiene que escribir.
+            arrancarSubbots();
+          }
         }, 2000);
       }
 
@@ -2871,6 +2956,10 @@ if (isGroup) {
 sock.ev.on("connection.update", async ({ connection }) => {
   if (connection === "open") {
     console.log(chalk.green("✅ Conectado correctamente a WhatsApp."));
+
+    // 🤖 Red de seguridad: si por lo que sea aún no arrancaron los subbots
+    // (vinculación recién terminada, reinicio raro), arrancan aquí.
+    arrancarSubbots();
 
     // ✔️ Si fue reiniciado con .carga, avisar
     const restarterFile = "./lastRestarter.json";
