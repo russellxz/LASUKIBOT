@@ -154,10 +154,14 @@ export function cortarTexto(texto, max) {
  *
  * Devuelve `null` si no queda ninguna fila utilizable, para que quien llama
  * pueda enviar la versión de texto en vez de un botón que no abre nada.
+ *
+ * `opciones.filas` sube o baja el tope de filas para una lista concreta
+ * (setmenu enseña sus diseños completos y necesita más de 10).
  */
-export function listaSegura(botones) {
+export function listaSegura(botones, opciones = {}) {
   if (!Array.isArray(botones) || !botones.length) return null;
 
+  const topeFilas = Number(opciones.filas) > 0 ? Number(opciones.filas) : LIMITES_LISTA.filas;
   const salida = [];
 
   for (const boton of botones) {
@@ -168,7 +172,7 @@ export function listaSegura(botones) {
     }
 
     const idsVistos = new Set();
-    let filasLibres = LIMITES_LISTA.filas;
+    let filasLibres = topeFilas;
     const secciones = [];
 
     for (const seccion of boton.sections) {
