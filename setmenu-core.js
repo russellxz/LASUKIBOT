@@ -26,7 +26,9 @@ import {
   MENU_KEYS,
   MENU_NOMBRES,
   MARCA_FABRICA_MAIN,
-  MARCA_FABRICA_SUB
+  MARCA_FABRICA_SUB,
+  listaSegura,
+  listaDisenosTexto
 } from "./disenos.js";
 
 // Menús que se pueden personalizar de a uno (sin "descargas", que sigue al global)
@@ -184,6 +186,7 @@ function esIdPropio(conn, id) {
 // el eco llega sin ID (o lo reenvía otro dispositivo vinculado).
 const MARCAS_PROPIAS = [
   "🎨 *PERSONALIZACIÓN",
+  "🎨 *ELIGE UN DISEÑO",
   "🖼️ *Envía ahora",
   "🎯 *¿A qué menú",
   "✏️ *Escribe el nombre",
@@ -292,22 +295,45 @@ function construirOpciones() {
   return opciones;
 }
 
+// Fila que abre el listado de diseños en un segundo paso. Los diseños no
+// caben en la lista junto al resto (WhatsApp solo admite 10 filas), así que
+// se eligen por número, que además deja ver la muestra de cada uno.
+const OPCION_DISENOS = {
+  id: "setmenu_disenos",
+  titulo: "🎨 Elegir diseño",
+  desc: "Estilos para los menús y las descargas",
+  accion: { tipo: "elegir_diseno" }
+};
+
 function opcionPorId(id) {
   const limpio = String(id || "").trim();
+  if (limpio === OPCION_DISENOS.id || limpio.endsWith(OPCION_DISENOS.id)) {
+    return OPCION_DISENOS;
+  }
   return construirOpciones().find(
     (o) => o.id === limpio || limpio.endsWith(o.id)
   );
 }
 
+// Lo que se ve en el menú de setmenu: los diseños se eligen en un segundo
+// paso, así la lista cabe en las 10 filas que admite WhatsApp y la numeración
+// del respaldo por texto es la misma que la de la lista.
+function opcionesMenu() {
+  return [
+    OPCION_DISENOS,
+    ...construirOpciones().filter((o) => !o.id.startsWith("setmenu_diseno_"))
+  ];
+}
+
 function opcionPorNumero(n) {
-  const ops = construirOpciones();
+  const ops = opcionesMenu();
   const i = Number(n);
   if (!Number.isInteger(i) || i < 1 || i > ops.length) return null;
   return ops[i - 1];
 }
 
 function textoOpciones(pref) {
-  const ops = construirOpciones();
+  const ops = opcionesMenu();
   const lineas = ops.map((o, i) => `*${i + 1}.* ${o.titulo}\n     _${o.desc}_`);
   return (
     `🎨 *PERSONALIZACIÓN*\n\n` +
@@ -319,23 +345,26 @@ function textoOpciones(pref) {
 }
 
 function botonesSetmenu() {
-  const ops = construirOpciones();
-  const disenos = ops.filter((o) => o.id.startsWith("setmenu_diseno_"));
-  const resto = ops.filter((o) => !o.id.startsWith("setmenu_diseno_"));
+  const resto = construirOpciones().filter((o) => !o.id.startsWith("setmenu_diseno_"));
+  const total = getDisenos().length;
 
-  return [
+  // 6 filas en total: WhatsApp no abre la lista si se pasa de 10.
+  // listaSegura() recorta además los títulos al largo que admite el cliente.
+  return listaSegura([
     {
       text: "🎨 Abrir personalización",
       sections: [
         {
           title: "🎨 DISEÑOS",
-          highlight_label: "7 estilos",
-          rows: disenos.map((o) => ({
-            header: "",
-            title: o.titulo,
-            description: o.desc,
-            id: o.id
-          }))
+          highlight_label: `${total} estilos`,
+          rows: [
+            {
+              header: "",
+              title: OPCION_DISENOS.titulo,
+              description: OPCION_DISENOS.desc,
+              id: OPCION_DISENOS.id
+            }
+          ]
         },
         {
           title: "🖼️ IMAGEN Y NOMBRE",
@@ -348,15 +377,40 @@ function botonesSetmenu() {
         }
       ]
     }
-  ];
+  ]);
+}
+
+/** Manda la lista de diseños numerada y espera un número del 1 al N */
+async function pedirDiseno(conn, msg) {
+  const total = getDisenos().length;
+  setPendiente(conn, msg, { paso: "diseno" });
+  return responder(
+    conn,
+    msg,
+    `🎨 *ELIGE UN DISEÑO*\n\n` +
+      `${listaDisenosTexto()}\n\n` +
+      `Responde con el *número* del diseño que quieras (del *1* al *${total}*).\n` +
+      `Se aplica a los menús y a las descargas.\n\n` +
+      `❌ Escribe *cancelar* para salir.`
+  );
 }
 
 // ------------------------------------------------------------
 // Acciones
 // ------------------------------------------------------------
 async function aplicarDiseno(conn, msg, id) {
-  const d = getDiseno(id);
-  if (!d) return responder(conn, msg, "❌ Ese diseño no existe. Elige del *1* al *7*.");
+  // getDiseno() devuelve el primero si no encuentra el id, así que aquí
+  // comprobamos de verdad que el número exista antes de aplicarlo.
+  const lista = getDisenos();
+  const n = Number(String(id).replace(/\D/g, ""));
+  const d = lista.find((x) => Number(x.id) === n);
+  if (!d) {
+    return responder(
+      conn,
+      msg,
+      `❌ Ese diseño no existe. Elige del *1* al *${lista.length}*.`
+    );
+  }
 
   const perso = getPerso(conn);
   perso.diseno = Number(d.id);
@@ -451,6 +505,7 @@ async function ejecutarAccion(conn, msg, opcion) {
   if (!a) return;
 
   if (a.tipo === "diseno") return aplicarDiseno(conn, msg, a.valor);
+  if (a.tipo === "elegir_diseno") return pedirDiseno(conn, msg);
   if (a.tipo === "media") return pedirMedia(conn, msg, a.valor);
   if (a.tipo === "media_elegir") return pedirMenuParaMedia(conn, msg);
   if (a.tipo === "nombre") return pedirNombre(conn, msg);
@@ -625,6 +680,11 @@ function registrarListener(conn, puedeUsar) {
               await guardarPasoNombre(conn, m);
               continue;
             }
+          } else if (pend.paso === "diseno") {
+            if (/^\d{1,2}$/.test(texto)) {
+              await aplicarDiseno(conn, m, texto);
+              continue;
+            }
           } else if (pend.paso === "elegir_menu") {
             if (/^\d+$/.test(texto)) {
               await guardarPasoElegirMenu(conn, m);
@@ -748,7 +808,10 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
     `🎨 *PERSONALIZACIÓN DE ${marca.toUpperCase()}*\n\n` +
     `🎨 Diseño actual: *${d?.emoji || ""} ${d?.nombre || "Clásico"}*\n` +
     `✏️ Nombre actual: *${marca}*\n\n` +
-    `Elige qué quieres cambiar 👇`;
+    `Elige qué quieres cambiar 👇\n\n` +
+    `💡 *Si no se te abre la lista*, responde a este mensaje con el número:\n` +
+    `*1* diseño · *2* imagen de todos · *3* imagen de un menú\n` +
+    `*4* nombre · *5* foto de perfil · *6* ver personalización`;
 
   // Sesión abierta en ESTE bot: si la selección llega sin referencia al
   // mensaje del menú, solo actúa el bot que realmente lo abrió aquí.
@@ -759,13 +822,18 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
     return recordarPropio(conn, await conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg }));
   }
 
+  const lista = botonesSetmenu();
+  if (!lista) {
+    return recordarPropio(conn, await conn.sendMessage(chatId, { text: textoOpciones(pref) }, { quoted: msg }));
+  }
+
   try {
     return recordarPropio(conn, await conn.sendMessage(
       chatId,
       {
         text: cabecera,
         footer: `❦ ${marca} ❦`,
-        buttons: botonesSetmenu(),
+        buttons: lista,
         headerType: 1
       },
       { quoted: msg }
@@ -811,12 +879,12 @@ export async function abrirDelmenu(msg, conn, { puedeUsar } = {}) {
       {
         text: aviso,
         footer: "Esta acción no se puede deshacer",
-        buttons: [
+        buttons: listaSegura([
           {
             text: "⚠️ Elegir una opción",
             sections: [
               {
-                title: "¿Borrar la personalización?",
+                title: "¿Borrar todo?",
                 rows: [
                   {
                     header: "",
@@ -834,7 +902,7 @@ export async function abrirDelmenu(msg, conn, { puedeUsar } = {}) {
               }
             ]
           }
-        ],
+        ]),
         headerType: 1
       },
       { quoted: msg }

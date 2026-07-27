@@ -117,6 +117,106 @@ export function canal(extra = {}) {
 }
 
 // ------------------------------------------------------------
+// Listas desplegables de WhatsApp (nativeFlow "single_select")
+// ------------------------------------------------------------
+// WhatsApp impone límites duros a las listas. Si el payload se pasa, el
+// cliente DIBUJA el botón pero al tocarlo no abre nada: falla al interpretar
+// la lista y se queda callado. Los clientes viejos son permisivos y los
+// nuevos no, por eso el típico "a mí me funciona pero a otros no".
+export const LIMITES_LISTA = {
+  filas: 10,          // filas TOTALES sumando todas las secciones
+  secciones: 10,
+  boton: 24,
+  tituloSeccion: 24,
+  tituloFila: 24,
+  descripcion: 72
+};
+
+// Corta contando caracteres visibles (un emoji cuenta 1, no 2 ni 4)
+const segmentador =
+  typeof Intl !== "undefined" && Intl.Segmenter
+    ? new Intl.Segmenter("es", { granularity: "grapheme" })
+    : null;
+
+export function cortarTexto(texto, max) {
+  const s = String(texto ?? "").replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  if (!segmentador) return s.length <= max ? s : s.slice(0, max);
+  const letras = [...segmentador.segment(s)].map((g) => g.segment);
+  if (letras.length <= max) return s;
+  return letras.slice(0, Math.max(1, max - 1)).join("").trimEnd() + "…";
+}
+
+/**
+ * Deja una lista dentro de lo que WhatsApp acepta: recorta títulos y
+ * descripciones, quita filas sin id o repetidas, limita el total de filas y
+ * descarta secciones que quedaron vacías.
+ *
+ * Devuelve `null` si no queda ninguna fila utilizable, para que quien llama
+ * pueda enviar la versión de texto en vez de un botón que no abre nada.
+ */
+export function listaSegura(botones) {
+  if (!Array.isArray(botones) || !botones.length) return null;
+
+  const salida = [];
+
+  for (const boton of botones) {
+    // Botones que no son lista (copiar, url, etc.) pasan tal cual
+    if (!Array.isArray(boton?.sections)) {
+      salida.push(boton);
+      continue;
+    }
+
+    const idsVistos = new Set();
+    let filasLibres = LIMITES_LISTA.filas;
+    const secciones = [];
+
+    for (const seccion of boton.sections) {
+      if (secciones.length >= LIMITES_LISTA.secciones || filasLibres <= 0) break;
+
+      const filas = [];
+      for (const fila of seccion?.rows || []) {
+        if (filasLibres <= 0) break;
+
+        const id = String(fila?.id ?? fila?.rowId ?? "").trim();
+        if (!id || idsVistos.has(id)) continue;   // sin id no se puede responder
+
+        const titulo = cortarTexto(fila?.title, LIMITES_LISTA.tituloFila);
+        if (!titulo) continue;
+
+        idsVistos.add(id);
+        filas.push({
+          header: typeof fila?.header === "string" ? fila.header : "",
+          title: titulo,
+          description: cortarTexto(fila?.description, LIMITES_LISTA.descripcion),
+          id
+        });
+        filasLibres--;
+      }
+
+      if (!filas.length) continue;
+
+      const nueva = {
+        title: cortarTexto(seccion?.title, LIMITES_LISTA.tituloSeccion),
+        rows: filas
+      };
+      const etiqueta = cortarTexto(seccion?.highlight_label, LIMITES_LISTA.tituloSeccion);
+      if (etiqueta) nueva.highlight_label = etiqueta;
+      secciones.push(nueva);
+    }
+
+    if (!secciones.length) continue;
+
+    salida.push({
+      text: cortarTexto(boton?.text, LIMITES_LISTA.boton) || "Ver opciones",
+      sections: secciones
+    });
+  }
+
+  return salida.length ? salida : null;
+}
+
+// ------------------------------------------------------------
 // Carga de diseño.json (con caché, se recarga si cambia el archivo)
 // ------------------------------------------------------------
 let cacheDisenos = null;

@@ -1,4 +1,4 @@
-import { cabeceraDescarga, camposDescarga, pieDescarga, getMarca, canal } from "../../disenos.js";
+import { cabeceraDescarga, camposDescarga, pieDescarga, getMarca, canal, listaSegura } from "../../disenos.js";
 import { fileURLToPath as __fileURLToPath } from 'url';
 const __filename = __fileURLToPath(import.meta.url);
 const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
@@ -226,8 +226,18 @@ ${cabeceraDescarga(conn, "🎬 RESULTADO ENCONTRADO")}
 
 ${fichaInfo}
 
-🟢 *OPCIÓN 1 — Menú de Botones*
-Toca el botón *📥 Menú de descarga* abajo del mensaje. Se abrirá una lista con todas las opciones de audio y video en distintas calidades.
+🟢 *OPCIÓN 1 — Menú de descarga*
+Toca el botón *📥 Menú de descarga* aquí abajo y elige la calidad.
+
+🔵 *OPCIÓN 2 — Si el menú no te abre*
+Cita este mensaje y escribe:
+   *1* o *audio*      →  Audio MP3
+   *2* o *video*      →  Video (${qualityLabel})
+   *3* o *videodoc*   →  Video como documento
+   *4* o *audiodoc*   →  Audio como documento
+
+💡 *Tip:* cualquier calidad (144p a 4K) escribiendo:
+   _"video 720"_   o   _"2 1080"_   o   _"videodoc 4k"_
 
 ${pieDescarga(conn)}
 `.trim()
@@ -273,12 +283,9 @@ ${pieDescarga(conn)}
           title: "🎬 VIDEO NORMAL",
           highlight_label: qualityLabel,
           rows: [
-            { header: "", title: "🎬 Video 144p",  description: "Muy liviano · pocos MB",            id: `${pref}play_video_144`  },
-            { header: "", title: "🎬 Video 240p",  description: "Liviano · para conexiones lentas",   id: `${pref}play_video_240`  },
             { header: "", title: "🎬 Video 360p",  description: "Calidad estándar · recomendado",     id: `${pref}play_video_360`  },
             { header: "", title: "🎬 Video 720p",  description: "HD · buena calidad",                 id: `${pref}play_video_720`  },
             { header: "", title: "🎬 Video 1080p", description: "Full HD · alta calidad",             id: `${pref}play_video_1080` },
-            { header: "", title: "🎬 Video 1440p", description: "2K · muy alta calidad",              id: `${pref}play_video_1440` },
             { header: "", title: "🎬 Video 4K",    description: "Ultra HD · archivo pesado",          id: `${pref}play_video_4k`   },
           ],
         },
@@ -286,12 +293,9 @@ ${pieDescarga(conn)}
           title: "📁 VIDEO COMO DOCUMENTO",
           highlight_label: "MP4",
           rows: [
-            { header: "", title: "📁 Documento 144p",  description: "Archivo mp4 · muy liviano",  id: `${pref}play_videodoc_144`  },
-            { header: "", title: "📁 Documento 240p",  description: "Archivo mp4 · liviano",      id: `${pref}play_videodoc_240`  },
             { header: "", title: "📁 Documento 360p",  description: "Archivo mp4 · estándar",     id: `${pref}play_videodoc_360`  },
             { header: "", title: "📁 Documento 720p",  description: "Archivo mp4 · HD",           id: `${pref}play_videodoc_720`  },
             { header: "", title: "📁 Documento 1080p", description: "Archivo mp4 · Full HD",      id: `${pref}play_videodoc_1080` },
-            { header: "", title: "📁 Documento 1440p", description: "Archivo mp4 · 2K",           id: `${pref}play_videodoc_1440` },
             { header: "", title: "📁 Documento 4K",    description: "Archivo mp4 · Ultra HD",     id: `${pref}play_videodoc_4k`   },
           ],
         },
@@ -299,9 +303,12 @@ ${pieDescarga(conn)}
     },
   ];
 
+  // WhatsApp no abre la lista si se pasa de sus límites: la dejamos en regla
+  const listaDescarga = listaSegura(nativeFlowButtons);
+
   // Enviar con o sin botones
   let preview;
-  if (usarBotones) {
+  if (usarBotones && listaDescarga) {
     try {
       preview = await conn.sendMessage(
         msg.key.remoteJid,
@@ -310,7 +317,7 @@ ${pieDescarga(conn)}
           image: { url: thumbnail },
           caption,
           footer: "❦ Selecciona una opción del menú ❦",
-          buttons: nativeFlowButtons,
+          buttons: listaDescarga,
           headerType: 4,
         },
         { quoted: msg }
