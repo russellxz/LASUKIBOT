@@ -2,20 +2,19 @@ import { canal } from '../../disenos.js';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import * as cheerio from 'cheerio';
 import { promisify } from 'util';
 import { pipeline } from 'stream';
 const streamPipe = promisify(pipeline);
 
-// Generado por .crack a partir de https://screenapp.io/features/youtube-to-mp4-converter
+// Generado por .crack a partir de https://ytmp4.is/convert2
 // Revisa el endpoint y los campos antes de dejarlo en producción: si el
 // sitio cambia su web, esto deja de funcionar y hay que volver a pasarle .crack.
 
 'use strict';
 
-const SITIO = "https://screenapp.io/features/youtube-to-mp4-converter";
-const ENDPOINT = "https://screenapp.io/features/youtube-to-mp4-converter";
-const METODO = "get";
+const SITIO = "https://ytmp4.is/convert2";
+const ENDPOINT = "https://api.flvto.online/@api/search/YouTube/";
+const METODO = "post";
 const CAMPO_URL = "url";
 const MAX_MB = 200;
 
@@ -38,15 +37,21 @@ function ensureTmp() {
 function extraerEnlaces(cuerpo) {
   const encontrados = [];
 
-  try {
-    const $ = cheerio.load(cuerpo);
+  const recorrer = (valor) => {
+    if (!valor) return;
 
-    $('a[href], source[src], video[src], audio[src]').each((_, el) => {
-      const v = $(el).attr('href') || $(el).attr('src') || '';
-      const u = v ? new URL(v, SITIO).toString() : '';
-      if (u && (EXT_MEDIA.test(u) || /(download|descarg|cdn)/i.test(u))) encontrados.push(u);
-    });
-  } catch {}
+    if (typeof valor === 'string') {
+      if (/^https?:\/\//i.test(valor) && (EXT_MEDIA.test(valor) || /(download|cdn|media)/i.test(valor))) {
+        encontrados.push(valor);
+      }
+      return;
+    }
+
+    if (Array.isArray(valor)) return valor.forEach(recorrer);
+    if (typeof valor === 'object') Object.keys(valor).forEach((k) => recorrer(valor[k]));
+  };
+
+  try { recorrer(JSON.parse(cuerpo)); } catch {}
 
   return [...new Set(encontrados)];
 }
@@ -191,7 +196,7 @@ const handler = async (msg, { conn, args, command }) => {
 };
 
 handler.command = ["yt444"];
-handler.help = ["screenapp <enlace>"];
+handler.help = ["ytmp4 <enlace>"];
 handler.tags = ['descargas'];
 
 export default handler;
