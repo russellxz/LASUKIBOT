@@ -11,6 +11,9 @@ import {
   extraerEnlaces,
   pareceEnProgreso,
   verificarEnlace,
+  detectarChallenge,
+  accionesDeSegundoPaso,
+  ejecutarAccion,
   esperar
 } from "../../libs/navegador.js";
 
@@ -27,11 +30,12 @@ import {
 "use strict";
 
 const TIMEOUT_PRUEBA = 20000;
-const MAX_SCRIPTS = 6;
+const MAX_SCRIPTS = 10;
 const MAX_CANDIDATOS = 12;
 const MAX_PRUEBAS = 5;
-const MAX_INTENTOS = 20;
-const LIMITE_PRUEBAS_MS = 100000;
+const MAX_INTENTOS = 28;
+const LIMITE_PRUEBAS_MS = 180000;
+const MAX_ACCIONES_PASO2 = 6;
 
 const EXT_MEDIA = /\.(mp4|mkv|webm|m4v|mov|mp3|m4a|opus|ogg|wav|flac|jpg|jpeg|png|webp|gif|pdf|zip|apk|rar)(\?|$)/i;
 
@@ -326,6 +330,21 @@ async function pedirEsperando(sesion, url, intento, base, limite) {
   }
 }
 
+// Comprueba que el enlace sea un archivo, no una página que lo parezca.
+async function primerArchivo(enlaces, ctx, base) {
+  let motivo = "";
+
+  for (const enlace of enlaces.slice(0, 5)) {
+    const check = await verificarEnlace(enlace, ctx.sesion, base);
+
+    if (check.ok) return { url: enlace, tipo: check.tipo, tamaño: check.tamaño };
+
+    motivo = motivo || `${recortar(enlace, 55)} → ${check.motivo}`;
+  }
+
+  return { motivo };
+}
+
 async function probarCandidato(candidato, urlPrueba, base, ctx) {
   for (const intento of intentosPara(candidato, urlPrueba, ctx.formularios)) {
     if (ctx.usados >= MAX_INTENTOS || Date.now() > ctx.limite) break;
@@ -333,49 +352,91 @@ async function probarCandidato(candidato, urlPrueba, base, ctx) {
 
     try {
       const url = candidato.url + (intento.sufijo || "");
-      const { res, cuerpo, json, enlaces } = await pedirEsperando(
-        ctx.sesion,
+      const { res, cuerpo, json, enlaces } = await pedirEsperando(ctx.sesion, url, intento, base, ctx.limite);
+
+      ctx.diario.push({
+        paso: 1,
+        metodo: intento.etiqueta,
         url,
-        intento,
-        base,
-        ctx.limite
-      );
+        campos: intento.cuerpo,
+        status: res.status,
+        tipo: String(res.headers?.["content-type"] || "").split(";")[0],
+        enlaces: enlaces.length,
+        respuesta: recortar(cuerpo, 700)
+      });
 
-      if (res.status >= 400 || !enlaces.length) continue;
-
-      // Aquí estaba el fallo que hacía que .crack dijera "funciona" y luego
-      // .get2 no bajara nada: dábamos por bueno cualquier enlace que se
-      // pareciera a una descarga, sin comprobar que fuera un archivo.
-      const verificados = [];
-      let motivo = "";
-
-      for (const enlace of enlaces.slice(0, 4)) {
-        const check = await verificarEnlace(enlace, ctx.sesion, base);
-
-        if (check.ok) {
-          verificados.push({ url: enlace, tipo: check.tipo, tamaño: check.tamaño });
-          break;
-        }
-
-        motivo = motivo || `${recortar(enlace, 50)} → ${check.motivo}`;
-      }
-
-      if (!verificados.length) {
-        ctx.falsosPositivos.push(`${recortar(candidato.url, 45)} [${intento.etiqueta}] → ${motivo || "los enlaces no eran archivos"}`);
+      const bloqueo = detectarChallenge(res, cuerpo);
+      if (bloqueo) {
+        ctx.bloqueos.push(`${recortar(url, 45)} → ${bloqueo}`);
         continue;
       }
 
-      return {
-        ok: true,
-        intento,
-        status: res.status,
-        tipo: String(res.headers?.["content-type"] || "").split(";")[0],
-        esJson: !!json,
-        enlaces,
-        verificado: verificados[0],
-        muestra: recortar(cuerpo, 400)
-      };
-    } catch {}
+      if (res.status >= 400) continue;
+
+      // ---- el archivo puede estar ya aquí ----
+      if (enlaces.length) {
+        const archivo = await primerArchivo(enlaces, ctx, base);
+
+        if (archivo.url) {
+          return {
+            ok: true,
+            intento,
+            status: res.status,
+            tipo: String(res.headers?.["content-type"] || "").split(";")[0],
+            esJson: !!json,
+            enlaces,
+            verificado: archivo,
+            muestra: recortar(cuerpo, 400)
+          };
+        }
+
+        ctx.falsosPositivos.push(`${recortar(candidato.url, 40)} [${intento.etiqueta}] → ${archivo.motivo}`);
+      }
+
+      // ---- y si no, casi seguro hace falta un segundo paso ----
+      const acciones = accionesDeSegundoPaso(cuerpo, url);
+
+      for (const accion of acciones.slice(0, MAX_ACCIONES_PASO2)) {
+        if (ctx.usados >= MAX_INTENTOS || Date.now() > ctx.limite) break;
+        ctx.usados++;
+
+        try {
+          const res2 = await ejecutarAccion(ctx.sesion, accion, url);
+          const cuerpo2 = String(res2.data || "");
+          const { json: json2, enlaces: enlaces2 } = extraerEnlaces(cuerpo2, accion.url);
+
+          ctx.diario.push({
+            paso: 2,
+            metodo: `${accion.metodo.toUpperCase()} (${accion.tipo})`,
+            url: accion.url,
+            campos: accion.campos,
+            status: res2.status,
+            tipo: String(res2.headers?.["content-type"] || "").split(";")[0],
+            enlaces: enlaces2.length,
+            respuesta: recortar(cuerpo2, 700)
+          });
+
+          if (res2.status >= 400 || !enlaces2.length) continue;
+
+          const archivo2 = await primerArchivo(enlaces2, ctx, accion.url);
+          if (!archivo2.url) continue;
+
+          return {
+            ok: true,
+            intento,
+            paso2: accion,
+            status: res2.status,
+            tipo: String(res2.headers?.["content-type"] || "").split(";")[0],
+            esJson: !!json2,
+            enlaces: enlaces2,
+            verificado: archivo2,
+            muestra: recortar(cuerpo2, 400)
+          };
+        } catch {}
+      }
+    } catch (e) {
+      ctx.diario.push({ paso: 1, metodo: intento.etiqueta, url: candidato.url, error: e.message });
+    }
   }
 
   return { ok: false };
@@ -660,6 +721,98 @@ function generarPlugin({ nombre, sitio, endpoint, intento, esJson, necesitaSesio
   return { comando, codigo: lineas.join("\n") };
 }
 
+// ---------- informe de diagnóstico ----------
+// Todo lo que vio y probó, para poder mirarlo con calma cuando algo no sale.
+function armarInforme({ sitio, candidatos, formularios, fuentes, globales, protecciones, bloqueante, ctx, ganador, urlPrueba }) {
+  const l = [];
+  const sep = "=".repeat(66);
+
+  l.push(sep, `INFORME DE .crack — ${sitio}`, `Fecha: ${new Date().toISOString()}`, sep, "");
+
+  l.push("## RESULTADO", "");
+  if (ganador) {
+    l.push(`FUNCIONA con ${ganador.candidato.url}`);
+    l.push(`  metodo: ${ganador.intento.etiqueta}`);
+    l.push(`  campos: ${JSON.stringify(ganador.intento.cuerpo)}`);
+    if (ganador.paso2) {
+      l.push(`  SEGUNDO PASO: ${ganador.paso2.metodo.toUpperCase()} ${ganador.paso2.url}`);
+      l.push(`     campos: ${JSON.stringify(ganador.paso2.campos)}`);
+    }
+    l.push(`  archivo: ${ganador.verificado?.url || "?"}`);
+    l.push(`  tipo: ${ganador.verificado?.tipo || "?"}`);
+  } else {
+    l.push("NO se pudo obtener el archivo.");
+  }
+  l.push("");
+
+  if (bloqueante) l.push("## BLOQUEO PRINCIPAL", bloqueante, "");
+  if (protecciones.length) l.push("## PROTECCIONES", ...protecciones.map((x) => "  - " + x), "");
+  if (ctx.bloqueos.length) l.push("## RECHAZOS DEL SERVIDOR", ...ctx.bloqueos.map((x) => "  - " + x), "");
+  if (ctx.falsosPositivos.length) l.push("## ENLACES QUE NO ERAN ARCHIVOS", ...ctx.falsosPositivos.map((x) => "  - " + x), "");
+
+  l.push("## CANDIDATOS ENCONTRADOS", "");
+  candidatos.forEach((c, i) => {
+    l.push(`${i + 1}. [${c.via}] ${c.url}`);
+    if (c.campos?.length) {
+      l.push(`   campos: ${c.campos.map((x) => x.name + (x.valor ? `="${x.valor}"` : "")).join(", ")}`);
+    }
+    if (c.origen) l.push(`   visto en: ${c.origen}`);
+  });
+  l.push("");
+
+  l.push("## FORMULARIOS DE LA PAGINA", "");
+  formularios.forEach((f, i) => {
+    l.push(`${i + 1}. ${f.metodo.toUpperCase()} ${f.action}`);
+    f.campos.forEach((c) => l.push(`   - ${c.name} (${c.tipo})${c.valor ? ` = "${c.valor}"` : ""}`));
+  });
+  if (!formularios.length) l.push("  (ninguno)");
+  l.push("");
+
+  const vars = Object.entries(globales);
+  if (vars.length) {
+    l.push("## VARIABLES DE LA PAGINA", "");
+    vars.slice(0, 40).forEach(([k, v]) => l.push(`  ${k} = "${recortar(v, 80)}"`));
+    l.push("");
+  }
+
+  l.push("## PETICIONES QUE SE HICIERON", "");
+  if (!ctx.diario.length) l.push("  (ninguna: no se pasó enlace de prueba)");
+
+  ctx.diario.forEach((d, i) => {
+    l.push(`--- ${i + 1} (paso ${d.paso}) ---`);
+    l.push(`  ${d.metodo} ${d.url}`);
+    if (d.campos) l.push(`  campos: ${JSON.stringify(d.campos)}`);
+    if (d.error) {
+      l.push(`  ERROR: ${d.error}`);
+    } else {
+      l.push(`  -> HTTP ${d.status} ${d.tipo || ""} · ${d.enlaces} enlace(s)`);
+      l.push("  respuesta:");
+      String(d.respuesta || "").split("\n").slice(0, 14).forEach((r) => l.push("    " + r));
+    }
+    l.push("");
+  });
+
+  l.push("## CODIGO DE LA PAGINA REVISADO", "");
+  fuentes.forEach((f) => l.push(`  - ${f.origen} (${f.texto.length} caracteres)`));
+  l.push("");
+
+  l.push("## FRAGMENTOS DE LAS LLAMADAS ENCONTRADAS", "");
+  const trozos = [];
+  for (const f of fuentes) {
+    const re = /(\$\.\s*(?:post|get|ajax)|fetch\s*\(|axios\s*\.\s*(?:get|post))/g;
+    let m;
+    while ((m = re.exec(f.texto)) !== null && trozos.length < 12) {
+      trozos.push(`[${f.origen}]\n` + f.texto.slice(Math.max(0, m.index - 60), m.index + 320).trim());
+    }
+  }
+  trozos.forEach((t) => l.push(t, "-".repeat(50)));
+  if (!trozos.length) l.push("  (ninguno)");
+
+  l.push("", sep, `Enlace de prueba usado: ${urlPrueba || "(ninguno)"}`, sep);
+
+  return l.join("\n");
+}
+
 // ---------- main ----------
 const handler = async (msg, { conn, args, command }) => {
   const chatId = msg.key.remoteJid;
@@ -856,6 +1009,8 @@ ${lista}
     formularios,
     sesion,
     falsosPositivos: [],
+    bloqueos: [],
+    diario: [],
     usados: 0,
     limite: Date.now() + LIMITE_PRUEBAS_MS
   };
@@ -896,6 +1051,19 @@ ${pref}${command} ${args[0]} ${urlPrueba} <endpoint>
 
 O pruébala al vuelo con:
 ${pref}get2 <endpoint> ${urlPrueba}`
+      },
+      { quoted: msg }
+    );
+
+    await conn.sendMessage(
+      chatId,
+      {
+        document: Buffer.from(
+          armarInforme({ sitio: base, candidatos, formularios, fuentes, globales, protecciones, bloqueante, ctx, ganador: null, urlPrueba }),
+          "utf-8"
+        ),
+        mimetype: "text/plain",
+        fileName: `crack_${objetivo.host.replace(/[^\w.-]/g, "_")}.txt`
       },
       { quoted: msg }
     );
@@ -942,6 +1110,10 @@ ${pref}get2 <endpoint> ${urlPrueba}`
   const verificado = ganador.verificado || {};
   const pesoMB = verificado.tamaño ? ` · ${(verificado.tamaño / (1024 * 1024)).toFixed(1)} MB` : "";
 
+  const textoPaso2 = ganador.paso2
+    ? `\n\n🔁 *Hacen falta DOS pasos* (por eso antes fallaba):\n  1. ${ganador.intento.etiqueta} → ${recortar(ganador.candidato.url, 70)}\n  2. ${ganador.paso2.metodo.toUpperCase()} → ${recortar(ganador.paso2.url, 70)}\n     campos: ${recortar(Object.keys(ganador.paso2.campos).join(", "), 60) || "(ninguno)"}`
+    : "";
+
   await conn.sendMessage(
     chatId,
     {
@@ -955,7 +1127,7 @@ ${pref}get2 <endpoint> ${urlPrueba}`
 📦 *Responde:* ${ganador.tipo || "?"} (HTTP ${ganador.status})
 
 🔗 *Archivos que devolvió:*
-${enlacesTexto}
+${enlacesTexto}${textoPaso2}
 
 ✔️ *Comprobado:* el primero es un archivo de verdad (${verificado.tipo || "?"}${pesoMB}), no una página.
 
@@ -974,6 +1146,19 @@ queda disponible como *${pref}${comando} <enlace>*.`
       document: Buffer.from(codigo, "utf-8"),
       mimetype: "text/javascript",
       fileName: `${comando.charAt(0).toUpperCase() + comando.slice(1)}.js`
+    },
+    { quoted: msg }
+  );
+
+  await conn.sendMessage(
+    chatId,
+    {
+      document: Buffer.from(
+        armarInforme({ sitio: base, candidatos, formularios, fuentes, globales, protecciones, bloqueante, ctx, ganador, urlPrueba }),
+        "utf-8"
+      ),
+      mimetype: "text/plain",
+      fileName: `crack_${objetivo.host.replace(/[^\w.-]/g, "_")}.txt`
     },
     { quoted: msg }
   );

@@ -314,6 +314,179 @@ export function urlDeProgreso(cuerpo, base) {
   return relativo ? absoluto(relativo[1], base) : "";
 }
 
+// ---------------------------------------------------------------- defensas
+
+// Distingue "el sitio me bloqueó por no ser navegador" de "el sitio falló".
+export function detectarChallenge(res, cuerpo) {
+  const h = res?.headers || {};
+  const servidor = String(h.server || "").toLowerCase();
+  const texto = String(cuerpo || "");
+  const status = res?.status || 0;
+
+  if (String(h["cf-mitigated"] || "").toLowerCase() === "challenge") {
+    return "Cloudflare está pidiendo verificación de navegador";
+  }
+  if (/__cf_chl|challenge-platform|cf-browser-verification|just a moment|checking your browser|enable javascript and cookies/i.test(texto)) {
+    return "Cloudflare está pidiendo verificación de navegador";
+  }
+  if ((status === 403 || status === 503) && (servidor.includes("cloudflare") || h["cf-ray"])) {
+    return `Cloudflare bloqueó la petición (HTTP ${status})`;
+  }
+  if (/grecaptcha\s*\.\s*execute|g-recaptcha-response/i.test(texto)) {
+    return "El sitio exige un token de reCAPTCHA que solo genera el navegador";
+  }
+  if (/h-captcha|hcaptcha\.com/i.test(texto)) return "El sitio exige resolver un hCaptcha";
+  if (/cf-turnstile|challenges\.cloudflare\.com/i.test(texto)) return "El sitio exige resolver un Turnstile";
+  if (status === 429) return "El sitio está limitando peticiones (HTTP 429)";
+
+  return "";
+}
+
+// ---------------------------------------------------------------- segundo paso
+
+// Muchas webs van en dos pasos: la primera petición analiza el enlace y
+// devuelve las calidades con un id, y el archivo solo aparece cuando pulsas
+// "descargar", que es una segunda petición. Sin esto, el primer paso responde
+// 200, parece correcto, y nunca trae el archivo.
+export function accionesDeSegundoPaso(cuerpo, base) {
+  const acciones = [];
+  const texto = String(cuerpo || "");
+
+  let json = null;
+  try { json = JSON.parse(texto); } catch {}
+
+  // Un JSON puede traer HTML dentro de alguno de sus campos.
+  const html = json ? recogerHtmlDeJson(json) || texto : texto;
+
+  try {
+    const $ = cheerio.load(html);
+
+    // 1) formularios que vienen en la respuesta
+    $("form").each((_, el) => {
+      const $f = $(el);
+      const campos = {};
+
+      $f.find("input, select, textarea").each((__, i) => {
+        const n = $(i).attr("name");
+        if (!n) return;
+        campos[n] = $(i).attr("value") || $(i).find("option").first().attr("value") || "";
+      });
+
+      if (Object.keys(campos).length) {
+        acciones.push({
+          tipo: "formulario de la respuesta",
+          url: absoluto($f.attr("action") || "", base) || base,
+          metodo: String($f.attr("method") || "post").toLowerCase(),
+          campos
+        });
+      }
+    });
+
+    // 2) botones y enlaces de "descargar" que llevan a una segunda petición
+    $("a[href], [data-url], [data-href], [onclick]").each((_, el) => {
+      const $e = $(el);
+      const crudo =
+        $e.attr("href") ||
+        $e.attr("data-url") ||
+        $e.attr("data-href") ||
+        ($e.attr("onclick") || "").match(/['"]([^'"]+)['"]/)?.[1] ||
+        "";
+
+      if (!crudo || /^(#|javascript:)/i.test(crudo)) return;
+
+      const url = absoluto(crudo, base);
+      if (!url || NO_ES_DESCARGA.test(url)) return;
+      if (EXT_MEDIA.test(url)) return; // ese ya lo cogió extraerEnlaces
+
+      if (/(convert|download|descarg|dl|getlink|force|generate|prepare|process)/i.test(url)) {
+        acciones.push({ tipo: "enlace de la respuesta", url, metodo: "get", campos: {} });
+      }
+    });
+  } catch {}
+
+  // 3) JSON con un id/token: se lo mandamos a los endpoints hermanos típicos
+  if (json && typeof json === "object") {
+    const ids = {};
+
+    const recoger = (v, ruta = "") => {
+      if (!v || typeof v !== "object") return;
+
+      for (const k of Object.keys(v)) {
+        const valor = v[k];
+
+        if ((typeof valor === "string" || typeof valor === "number") &&
+            /^(id|key|hash|token|jobid|job_id|taskid|task_id|vid|videoid|conversion)/i.test(k) &&
+            String(valor).length <= 120) {
+          ids[k] = String(valor);
+        }
+
+        if (typeof valor === "object") recoger(valor, ruta + "." + k);
+      }
+    };
+
+    recoger(json);
+
+    if (Object.keys(ids).length) {
+      try {
+        const b = new URL(base);
+        const carpeta = b.pathname.replace(/\/[^/]*$/, "");
+
+        for (const ruta of ["convert", "download", "getlink", "process", "result"]) {
+          acciones.push({
+            tipo: `id + /${ruta}`,
+            url: `${b.origin}${carpeta}/${ruta}`,
+            metodo: "post",
+            campos: ids
+          });
+        }
+      } catch {}
+    }
+  }
+
+  // Sin duplicados, y los formularios primero.
+  const vistas = new Set();
+  return acciones.filter((a) => {
+    const firma = a.metodo + " " + a.url + " " + Object.keys(a.campos).join(",");
+    if (vistas.has(firma)) return false;
+    vistas.add(firma);
+    return true;
+  });
+}
+
+function recogerHtmlDeJson(json) {
+  let mejor = "";
+
+  const mirar = (v) => {
+    if (typeof v === "string") {
+      if (/<\s*(a|form|div|button)[\s>]/i.test(v) && v.length > mejor.length) mejor = v;
+      return;
+    }
+    if (Array.isArray(v)) return v.forEach(mirar);
+    if (v && typeof v === "object") Object.keys(v).forEach((k) => mirar(v[k]));
+  };
+
+  mirar(json);
+  return mejor;
+}
+
+export async function ejecutarAccion(sesion, accion, referer) {
+  const query = new URLSearchParams(accion.campos).toString();
+
+  const url =
+    accion.metodo === "get" && query
+      ? `${accion.url}${accion.url.includes("?") ? "&" : "?"}${query}`
+      : accion.url;
+
+  return sesion.pedir(url, {
+    metodo: accion.metodo,
+    datos: accion.metodo === "get" ? undefined : query,
+    tipo: "xhr",
+    referer,
+    timeout: 40000,
+    cabeceras: accion.metodo === "get" ? {} : { "Content-Type": "application/x-www-form-urlencoded" }
+  });
+}
+
 // ---------------------------------------------------------------- archivos
 
 // Baja solo el principio para saber si es un archivo de verdad, sin gastar
