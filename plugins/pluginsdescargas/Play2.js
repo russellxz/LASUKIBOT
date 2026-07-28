@@ -19,9 +19,10 @@ import { promisify } from 'util';
 import { pipeline } from 'stream';
 const streamPipe = promisify(pipeline);
 
-// ==== CONFIG DE TU API ====
+// ==== API SKY ULTRA PLUS ====
 const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
 const API_KEY = process.env.API_KEY || "Russellxz";
+const API_YOUTUBE = `${API_BASE}/youtube`;
 
 // Defaults
 const DEFAULT_VIDEO_QUALITY = "360";
@@ -137,44 +138,62 @@ async function downloadToFile(url, filePath) {
 }
 
 // ---------- API ----------
-async function callYoutubeResolve(videoUrl, { type, quality, format }) {
-  const endpoint = `${API_BASE}/youtube/resolve`;
+// La API responde { status, result: { title, cover, quality, media } }.
+// El enlace puede venir como string directo o dentro de un objeto: lo normalizamos.
+function pickMediaUrl(result) {
+  const media = result?.media;
+  let url = "";
 
-  const body =
-    type === "video"
-      ? { url: videoUrl, type: "video", quality: quality || DEFAULT_VIDEO_QUALITY }
-      : { url: videoUrl, type: "audio", format: format || DEFAULT_AUDIO_FORMAT };
+  if (typeof media === "string") {
+    url = media;
+  } else if (media && typeof media === "object") {
+    url = media.dl_download || media.direct || media.url || media.download || "";
+  }
 
-  const r = await axios.post(endpoint, body, {
+  if (!url || typeof url !== "string") url = result?.url || result?.download || "";
+  if (typeof url !== "string") url = "";
+  if (url.startsWith("/")) url = API_BASE + url;
+
+  return url;
+}
+
+async function callYoutubeApi(videoUrl, { type = "video", quality } = {}) {
+  const esAudio = type === "audio";
+  const body = { url: videoUrl, type: esAudio ? "audio" : "video" };
+  if (!esAudio) body.quality = quality || DEFAULT_VIDEO_QUALITY;
+
+  const r = await axios.post(API_YOUTUBE, body, {
     timeout: 120000,
     headers: {
       "Content-Type": "application/json",
       apikey: API_KEY,
-      Accept: "application/json, */*",
+      Accept: "application/json, */*"
     },
-    validateStatus: () => true,
+    validateStatus: () => true
   });
 
   const data = typeof r.data === "object" ? r.data : null;
   if (!data) throw new Error("Respuesta no JSON del servidor");
 
-  const ok = data.status === true || data.status === "true" || data.ok === true || data.success === true;
+  const ok =
+    data.status === true ||
+    data.status === "true" ||
+    data.ok === true ||
+    data.success === true;
+
   if (!ok) throw new Error(data.message || data.error || "Error en la API");
 
   const result = data.result || data.data || data;
-  if (!result?.media) throw new Error("API sin media");
+  const media = pickMediaUrl(result);
 
-  let dl = result.media.dl_download || "";
-  if (dl && typeof dl === "string" && dl.startsWith("/")) dl = API_BASE + dl;
-
-  const direct = result.media.direct || "";
+  if (!media) throw new Error("API sin media");
 
   return {
     title: result.title || "YouTube",
-    thumbnail: result.thumbnail || "",
-    picked: result.picked || {},
-    dl_download: dl,
-    direct,
+    thumbnail: result.cover || result.thumbnail || "",
+    quality: result.quality || quality || "",
+    dl_download: media,
+    direct: media
   };
 }
 
@@ -569,7 +588,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
 
   let resolved;
   try {
-    resolved = await callYoutubeResolve(videoUrl, { type: "audio", format: DEFAULT_AUDIO_FORMAT });
+    resolved = await callYoutubeApi(videoUrl, { type: "audio" });
   } catch (e) {
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `❌ Error API (audio): ${e.message}` }, { quoted });
@@ -633,7 +652,7 @@ async function downloadVideo(conn, job, asDocument, quoted) {
 
   let resolved;
   try {
-    resolved = await callYoutubeResolve(videoUrl, { type: "video", quality: q });
+    resolved = await callYoutubeApi(videoUrl, { type: "video", quality: q });
   } catch (e) {
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `❌ Error API (video): ${e.message}` }, { quoted });
