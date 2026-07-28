@@ -117,30 +117,94 @@ async function downloadToFile(url, filePath) {
 
   if (res.status >= 400) throw new Error(`HTTP_${res.status}`);
 
-  // Si llega HTML o JSON es una página de error, no el archivo: guardarlo
-  // dejaba un mp3/mp4 corrupto que WhatsApp rechazaba sin decir por qué.
+  // Si llega HTML o JSON es una página de error, no el archivo.
   const tipo = String(res.headers?.["content-type"] || "");
   if (/text\/html|application\/json/i.test(tipo)) {
     try { res.data.destroy(); } catch {}
     throw new Error(`El enlace no devolvió un archivo (${tipo.split(";")[0]})`);
   }
 
+  const esperado = Number(res.headers?.["content-length"] || 0);
+
   await streamPipe(res.data, fs.createWriteStream(filePath));
+
+  // Si la conexión se corta a media descarga no salta ningún error: el archivo
+  // queda incompleto y WhatsApp lo rechaza con "algo salió mal" al abrirlo.
+  const real = fs.statSync(filePath).size;
+  if (!real) throw new Error("El enlace devolvió un archivo vacío");
+  if (esperado && real !== esperado) {
+    throw new Error(`Descarga incompleta (${real} de ${esperado} bytes)`);
+  }
+
   return filePath;
 }
 
-// La API da varios enlaces para el mismo archivo. Si el primero falla
-// (caducó, o el servidor de descarga se cayó) seguimos con el siguiente.
-async function downloadConRespaldo(urls, filePath) {
+// ---------- formato real del archivo ----------
+function cabecera(filePath, n = 12) {
+  const fd = fs.openSync(filePath, "r");
+  const buf = Buffer.alloc(n);
+
+  try {
+    fs.readSync(fd, buf, 0, n, 0);
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  return buf;
+}
+
+// WhatsApp solo reproduce MP4. Un WebM renombrado a .mp4 se envía igual, pero
+// al abrirlo sale "algo salió mal": por eso miramos la cabecera del archivo.
+function esMp4(filePath) {
+  try {
+    return cabecera(filePath).slice(4, 8).toString("latin1") === "ftyp";
+  } catch {
+    return false;
+  }
+}
+
+function formatoDeAudio(filePath) {
+  try {
+    const b = cabecera(filePath);
+
+    if (b.slice(0, 3).toString("latin1") === "ID3") return "mp3";
+    if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return "mp3";
+    if (b.slice(4, 8).toString("latin1") === "ftyp") return "m4a";
+    if (b.slice(0, 4).toString("latin1") === "OggS") return "ogg";
+    if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "webm";
+
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+// La API da varios enlaces para el mismo archivo. Si uno falla, o trae un
+// formato que WhatsApp no reproduce, seguimos con el siguiente.
+async function descargarMedia(urls, filePath, validar) {
+  const respaldo = `${filePath}.alt`;
   let ultimoError;
 
   for (const url of urls) {
     try {
-      return await downloadToFile(url, filePath);
+      await downloadToFile(url, filePath);
+
+      if (!validar || validar(filePath)) return { formatoOk: true };
+
+      // Se descargó bien pero en otro formato: lo guardamos por si ningún
+      // otro enlace trae algo mejor.
+      ultimoError = new Error("El enlace no devolvió un MP4");
+      try { fs.unlinkSync(respaldo); } catch {}
+      fs.renameSync(filePath, respaldo);
     } catch (e) {
       ultimoError = e;
       try { fs.unlinkSync(filePath); } catch {}
     }
+  }
+
+  if (fs.existsSync(respaldo)) {
+    fs.renameSync(respaldo, filePath);
+    return { formatoOk: false };
   }
 
   throw ultimoError || new Error("Sin enlaces de descarga");
@@ -607,7 +671,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   const inFile = path.join(tmp, `${Date.now()}_audio.bin`);
 
   try {
-    await downloadConRespaldo(resolved.candidatos, inFile);
+    await descargarMedia(resolved.candidatos, inFile);
   } catch (e) {
     await conn.sendMessage(
       chatId,
@@ -621,23 +685,29 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   const outMp3 = path.join(tmp, `${Date.now()}_${base}.mp3`);
   let outFile = outMp3;
 
-  try {
-    await new Promise((resolve, reject) => {
-      ffmpeg(inFile)
-        .audioCodec("libmp3lame")
-        .audioBitrate("128k")
-        .format("mp3")
-        .save(outMp3)
-        .on("end", resolve)
-        .on("error", reject);
-    });
-
+  // La API ya entrega el audio en mp3: volver a pasarlo por ffmpeg solo añadía
+  // espera antes de enviarlo. Solo convertimos si llegó en otro formato.
+  if (formatoDeAudio(inFile) === "mp3") {
+    fs.renameSync(inFile, outMp3);
+  } else {
     try {
-      fs.unlinkSync(inFile);
-    } catch {}
-  } catch {
-    outFile = inFile;
-    asDocument = true;
+      await new Promise((resolve, reject) => {
+        ffmpeg(inFile)
+          .audioCodec("libmp3lame")
+          .audioBitrate("128k")
+          .format("mp3")
+          .save(outMp3)
+          .on("end", resolve)
+          .on("error", reject);
+      });
+
+      try {
+        fs.unlinkSync(inFile);
+      } catch {}
+    } catch {
+      outFile = inFile;
+      asDocument = true;
+    }
   }
 
   const sizeMB = fileSizeMB(outFile);
@@ -661,7 +731,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   await conn.sendMessage(
     chatId,
     {
-      [asDocument ? "document" : "audio"]: fs.readFileSync(outFile),
+      [asDocument ? "document" : "audio"]: { url: outFile },
       mimetype: "audio/mpeg",
       ptt: false,   // archivo MP3, no nota de voz
       fileName: `${base}.mp3`,
