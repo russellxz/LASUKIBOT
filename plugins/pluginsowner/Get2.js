@@ -1,43 +1,38 @@
 import { canal } from "../../disenos.js";
 import fs from "fs";
 import path from "path";
-import axios from "axios";
-import * as cheerio from "cheerio";
-import { promisify } from "util";
-import { pipeline } from "stream";
-const streamPipe = promisify(pipeline);
+import {
+  Sesion,
+  normalizarUrl,
+  esHostPublico,
+  extraerEnlaces,
+  pareceEnProgreso,
+  urlDeProgreso,
+  verificarEnlace,
+  descargarArchivo,
+  tipoDeArchivo,
+  recortar,
+  esperar
+} from "../../libs/navegador.js";
 
 // comandos/get2.js — Pide un archivo a cualquier endpoint y lo manda al chat.
 //
-// La pareja de .crack: cuando ya sabes a qué URL hay que pedirle el archivo
-// (porque te lo dijo .crack o lo viste en F12 → Red), .get2 la prueba al vuelo
-// sin tener que escribir un plugin.
-//
 // .get2 <enlace directo>                    baja el archivo y lo envía
-// .get2 <endpoint> <enlace>                 POST {url: enlace}, busca el archivo
-// .get2 <endpoint> <enlace> campo=id        el campo del enlace se llama "id"
-// .get2 <endpoint> <enlace> sid=abc lng=es  campos extra que pida el sitio
+// .get2 <endpoint> <enlace>                 POST {url: enlace}
+// .get2 <endpoint> <enlace> campo=id        si el campo se llama distinto
+// .get2 <endpoint> <enlace> campo=url sid=x campos extra que pida el sitio
 //
-// Opciones: --get  --json  --doc  --ver
+// Opciones: --get --json --doc --ver --sinsesion --espera=90
 //
 // Solo owner: hace peticiones salientes desde el servidor del bot.
 
 "use strict";
 
-const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
-
-const TIMEOUT = 90000;
-const TIMEOUT_DESCARGA = 300000;
 const MAX_MB = 200;
-const MAX_INTENTOS_ENLACE = 4;
+const MAX_ENLACES = 6;
+const ESPERA_POR_DEFECTO = 90;
+const PASO_ESPERA = 3000;
 
-const EXT_MEDIA = /\.(mp4|mkv|webm|m4v|mov|mp3|m4a|opus|ogg|wav|flac|jpg|jpeg|png|webp|gif|pdf|zip|apk|rar)(\?|$)/i;
-const EXT_VIDEO = /\.(mp4|mkv|webm|m4v|mov)(\?|$)/i;
-const EXT_AUDIO = /\.(mp3|m4a|opus|ogg|wav|flac)(\?|$)/i;
-const EXT_IMAGEN = /\.(jpg|jpeg|png|webp|gif)(\?|$)/i;
-
-// ---------- utils ----------
 function esOwner(msg) {
   if (msg.key.fromMe) return true;
 
@@ -52,44 +47,6 @@ function esOwner(msg) {
   }
 }
 
-function normalizarUrl(entrada = "") {
-  let u = String(entrada).trim();
-  if (!u) return null;
-  if (!/^https?:\/\//i.test(u)) u = "https://" + u;
-
-  try {
-    return new URL(u);
-  } catch {
-    return null;
-  }
-}
-
-// Igual que en .crack: sin esto el bot sería un puente hacia la red interna.
-function esHostPublico(u) {
-  const host = String(u.hostname || "").toLowerCase();
-
-  if (!host) return false;
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) return false;
-  if (host === "[::1]" || host === "::1") return false;
-
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (m) {
-    const [a, b] = m.slice(1).map(Number);
-    if (a === 10 || a === 127 || a === 0) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false;
-  }
-
-  return true;
-}
-
-function recortar(texto, max = 300) {
-  const t = String(texto ?? "");
-  return t.length > max ? t.slice(0, max) + "…" : t;
-}
-
 function safeName(nombre = "archivo") {
   return String(nombre).slice(0, 60).replace(/[^\w.\-]+/g, "_") || "archivo";
 }
@@ -100,116 +57,51 @@ function ensureTmp() {
   return tmp;
 }
 
-// ---------- buscar el archivo en la respuesta ----------
-function enlacesDesdeJson(valor, encontrados = []) {
-  if (!valor) return encontrados;
+// ---------- pedir al endpoint, esperando si hace falta ----------
+async function pedirConEspera(sesion, { endpoint, cuerpo, metodo, comoJson, referer, segundos, avisar }) {
+  const query = new URLSearchParams(cuerpo).toString();
+  const limite = Date.now() + segundos * 1000;
 
-  if (typeof valor === "string") {
-    if (/^https?:\/\//i.test(valor) && (EXT_MEDIA.test(valor) || /(download|cdn|media|videoplayback)/i.test(valor))) {
-      encontrados.push(valor);
-    }
-    return encontrados;
-  }
+  let vuelta = 0;
+  let ultima = null;
+  let siguiente = null;
 
-  if (Array.isArray(valor)) {
-    for (const v of valor) enlacesDesdeJson(v, encontrados);
-    return encontrados;
-  }
+  while (Date.now() < limite || vuelta === 0) {
+    const url =
+      siguiente ||
+      (metodo === "get" ? `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query}` : endpoint);
 
-  if (typeof valor === "object") {
-    for (const k of Object.keys(valor)) enlacesDesdeJson(valor[k], encontrados);
-  }
-
-  return encontrados;
-}
-
-function enlacesDesdeHtml(html, base) {
-  const encontrados = [];
-
-  try {
-    const $ = cheerio.load(html);
-
-    $("a[href], source[src], video[src], audio[src], iframe[src]").each((_, el) => {
-      const v = $(el).attr("href") || $(el).attr("src") || "";
-      if (!v) return;
-
-      try {
-        const u = new URL(v, base).toString();
-        if (EXT_MEDIA.test(u) || /(download|descarg|cdn|dl\?)/i.test(u)) encontrados.push(u);
-      } catch {}
+    const res = await sesion.pedir(url, {
+      metodo: siguiente ? "get" : metodo,
+      datos: siguiente || metodo === "get" ? undefined : comoJson ? JSON.stringify(cuerpo) : query,
+      tipo: "xhr",
+      referer,
+      cabeceras: siguiente || metodo === "get"
+        ? {}
+        : { "Content-Type": comoJson ? "application/json" : "application/x-www-form-urlencoded" }
     });
-  } catch {}
 
-  return encontrados;
-}
+    const texto = String(res.data || "");
+    const { json, enlaces } = extraerEnlaces(texto, endpoint);
 
-function buscarEnlaces(cuerpo, base) {
-  let json = null;
+    ultima = { res, texto, json, enlaces, url, vueltas: vuelta + 1 };
 
-  try {
-    json = JSON.parse(cuerpo);
-  } catch {}
+    if (enlaces.length) return ultima;
+    if (res.status >= 400) return ultima;
+    if (!pareceEnProgreso(texto, json)) return ultima;
 
-  const enlaces = json ? enlacesDesdeJson(json) : enlacesDesdeHtml(cuerpo, base);
+    // El sitio está trabajando: seguimos su URL de progreso si la da, y si no
+    // repetimos la misma petición hasta que suelte el enlace.
+    siguiente = siguiente || urlDeProgreso(texto, endpoint);
 
-  // Los que apuntan a un archivo de verdad primero.
-  return {
-    json,
-    enlaces: [...new Set(enlaces)].sort((a, b) => (EXT_MEDIA.test(b) ? 1 : 0) - (EXT_MEDIA.test(a) ? 1 : 0))
-  };
-}
+    vuelta++;
+    if (vuelta === 1 && avisar) await avisar();
+    if (Date.now() + PASO_ESPERA >= limite) break;
 
-// ---------- descarga ----------
-async function descargar(url, destino, referer) {
-  const res = await axios.get(url, {
-    responseType: "stream",
-    timeout: TIMEOUT_DESCARGA,
-    maxRedirects: 5,
-    validateStatus: () => true,
-    headers: {
-      "User-Agent": UA,
-      Accept: "*/*",
-      ...(referer ? { Referer: referer } : {})
-    }
-  });
-
-  if (res.status >= 400) throw new Error(`HTTP_${res.status}`);
-
-  const tipo = String(res.headers?.["content-type"] || "");
-  if (/text\/html|application\/json/i.test(tipo)) {
-    try { res.data.destroy(); } catch {}
-    throw new Error(`devolvió ${tipo.split(";")[0]}, no un archivo`);
+    await esperar(PASO_ESPERA);
   }
 
-  const esperado = Number(res.headers?.["content-length"] || 0);
-  await streamPipe(res.data, fs.createWriteStream(destino));
-
-  const real = fs.statSync(destino).size;
-  if (!real) throw new Error("el archivo llegó vacío");
-  if (esperado && real !== esperado) throw new Error(`descarga incompleta (${real} de ${esperado} bytes)`);
-
-  return { tamaño: real, tipo: tipo.split(";")[0] };
-}
-
-// Por la cabecera, no por la extensión: muchos enlaces no tienen extensión.
-function tipoDeArchivo(destino, url, contentType) {
-  if (EXT_VIDEO.test(url) || /video\//i.test(contentType)) return "video";
-  if (EXT_AUDIO.test(url) || /audio\//i.test(contentType)) return "audio";
-  if (EXT_IMAGEN.test(url) || /image\//i.test(contentType)) return "imagen";
-
-  try {
-    const fd = fs.openSync(destino, "r");
-    const b = Buffer.alloc(12);
-    try { fs.readSync(fd, b, 0, 12, 0); } finally { fs.closeSync(fd); }
-
-    if (b.slice(4, 8).toString("latin1") === "ftyp") return "video";
-    if (b.slice(0, 3).toString("latin1") === "ID3") return "audio";
-    if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return "audio";
-    if (b[0] === 0xff && b[1] === 0xd8) return "imagen";
-    if (b.slice(1, 4).toString("latin1") === "PNG") return "imagen";
-  } catch {}
-
-  return "documento";
+  return ultima;
 }
 
 // ---------- main ----------
@@ -232,19 +124,20 @@ const handler = async (msg, { conn, args, command }) => {
   const comoJson = opciones.includes("--json");
   const comoDoc = opciones.includes("--doc");
   const soloVer = opciones.includes("--ver");
+  const sinSesion = opciones.includes("--sinsesion");
 
-  const objetivo = normalizarUrl(sueltos[0]);
+  const opEspera = opciones.find((o) => o.startsWith("--espera="));
+  const segundos = Math.min(Math.max(Number(opEspera?.split("=")[1]) || ESPERA_POR_DEFECTO, 0), 240);
 
-  if (!objetivo) {
+  const analizado = normalizarUrl(sueltos[0]);
+
+  if (!analizado) {
     return conn.sendMessage(
       chatId,
       {
         contextInfo: canal(),
         text:
 `📥 *GET2 — pide un archivo a cualquier endpoint*
-
-La pareja de *${pref}crack*: cuando ya sabes a qué URL hay que pedirle el
-archivo, esto lo prueba al momento sin escribir ningún plugin.
 
 *1) Enlace directo a un archivo*
 ${pref}${command} https://cdn.sitio.com/video.mp4
@@ -256,17 +149,24 @@ ${pref}${command} https://sitio.com/api/dl https://youtu.be/xxxxx
 ${pref}${command} https://sitio.com/api/dl https://youtu.be/xxxxx campo=id
 
 *4) Con campos extra que pida el sitio*
-${pref}${command} https://sitio.com/ https://youtu.be/xxxxx campo=url sid=abc lngg=es
+${pref}${command} https://sitio.com/api/dl https://youtu.be/xxxxx campo=url sid=abc
+
+*5) Si la cookie la da otra página (lo normal)*
+${pref}${command} https://sitio.com/api/dl https://youtu.be/xxxxx desde=https://sitio.com/youtube/
 
 *Opciones*
-  --get    mandarlo por GET en vez de POST
-  --json   mandar el cuerpo como JSON
-  --doc    enviarlo como documento
-  --ver    solo enseñar qué responde, sin descargar`
+  --get         mandarlo por GET en vez de POST
+  --json        mandar el cuerpo como JSON
+  --doc         enviarlo como documento
+  --ver         enseñar qué responde, sin descargar
+  --espera=90   segundos a esperar si el sitio va procesando
+  --sinsesion   no cargar la portada antes (más rápido, menos compatible)`
       },
       { quoted: msg }
     );
   }
+
+  const objetivo = analizado.url;
 
   if (!esHostPublico(objetivo)) {
     return conn.sendMessage(
@@ -280,9 +180,10 @@ ${pref}${command} https://sitio.com/ https://youtu.be/xxxxx campo=url sid=abc ln
 
   const endpoint = objetivo.toString();
   const enlace = sueltos[1] || "";
+  const sesion = new Sesion();
 
-  // campo=nombre elige cómo se llama el campo del enlace; el resto van tal cual
   let campoUrl = "url";
+  let desde = "";
   const extras = {};
 
   for (const par of sueltos.slice(2)) {
@@ -293,42 +194,48 @@ ${pref}${command} https://sitio.com/ https://youtu.be/xxxxx campo=url sid=abc ln
     const valor = par.slice(i + 1);
 
     if (clave.toLowerCase() === "campo") campoUrl = valor;
+    else if (clave.toLowerCase() === "desde") desde = valor;
     else extras[clave] = valor;
+  }
+
+  // Cargar la página primero: así el bot lleva la cookie de sesión y el token
+  // que el sitio espera, igual que si hubieras entrado con el navegador.
+  //
+  // Importante cuál se carga: la cookie suele darla la página del formulario
+  // (/youtube-to-mp4/), no la raíz del dominio. Pidiéndola a la raíz el sitio
+  // contestaba 403 aunque el endpoint fuera el correcto.
+  const paginaSesion = desde || objetivo.origin + "/";
+
+  if (enlace && !sinSesion) {
+    try {
+      await sesion.abrir(paginaSesion);
+    } catch {}
   }
 
   const tmp = ensureTmp();
   const destino = path.join(tmp, `${Date.now()}_get2`);
   let candidatos = [];
-  let origen = endpoint;
+  const referer = paginaSesion;
 
-  // ---- caso 1: enlace directo, sin endpoint que consultar ----
   if (!enlace) {
     candidatos = [endpoint];
   } else {
-    // ---- caso 2: preguntar al endpoint dónde está el archivo ----
-    const cuerpo = { ...extras, [campoUrl]: enlace };
-    const query = new URLSearchParams(cuerpo).toString();
-    const metodo = forzarGet ? "get" : "post";
-
-    let res;
+    let resultado;
 
     try {
-      res = await axios({
-        method: metodo,
-        url: metodo === "get" ? `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query}` : endpoint,
-        data: metodo === "get" ? undefined : comoJson ? JSON.stringify(cuerpo) : query,
-        timeout: TIMEOUT,
-        maxRedirects: 5,
-        responseType: "text",
-        transformResponse: [(d) => d],
-        validateStatus: () => true,
-        headers: {
-          "User-Agent": UA,
-          "Content-Type": comoJson ? "application/json" : "application/x-www-form-urlencoded",
-          "X-Requested-With": "XMLHttpRequest",
-          Referer: objetivo.origin + "/",
-          Origin: objetivo.origin,
-          Accept: "*/*"
+      resultado = await pedirConEspera(sesion, {
+        endpoint,
+        cuerpo: { ...extras, [campoUrl]: enlace },
+        metodo: forzarGet ? "get" : "post",
+        comoJson,
+        referer,
+        segundos,
+        avisar: async () => {
+          await conn.sendMessage(
+            chatId,
+            { contextInfo: canal(), text: `⏳ El sitio está procesando. Esperando hasta ${segundos}s a que suelte el enlace...` },
+            { quoted: msg }
+          );
         }
       });
     } catch (e) {
@@ -339,8 +246,7 @@ ${pref}${command} https://sitio.com/ https://youtu.be/xxxxx campo=url sid=abc ln
       );
     }
 
-    const texto = String(res.data || "");
-    const { enlaces } = buscarEnlaces(texto, endpoint);
+    const { res, texto, enlaces, vueltas } = resultado;
 
     if (soloVer) {
       return conn.sendMessage(
@@ -350,8 +256,9 @@ ${pref}${command} https://sitio.com/ https://youtu.be/xxxxx campo=url sid=abc ln
           text:
 `🔬 *Respuesta de ${objetivo.host}*
 
-📮 ${metodo.toUpperCase()} · campo *${campoUrl}*${Object.keys(extras).length ? " · extras: " + Object.keys(extras).join(", ") : ""}
-📦 HTTP ${res.status} · ${String(res.headers?.["content-type"] || "?").split(";")[0]}
+📮 ${(forzarGet ? "GET" : "POST")}${comoJson ? " json" : " form"} · campo *${campoUrl}*${Object.keys(extras).length ? " · extras: " + Object.keys(extras).join(", ") : ""}
+📦 HTTP ${res.status} · ${String(res.headers?.["content-type"] || "?").split(";")[0]}${vueltas > 1 ? ` · ${vueltas} consultas` : ""}
+🍪 Cookie enviada: ${sesion.cookieDe(objetivo.host) ? "sí" : "no"}${sesion.csrf ? " · token: sí" : ""}
 🔗 Enlaces encontrados: ${enlaces.length}
 
 ${enlaces.slice(0, 5).map((e, i) => `  ${i + 1}. ${recortar(e, 110)}`).join("\n") || "  (ninguno)"}
@@ -388,37 +295,48 @@ ${recortar(texto, 300)}
         {
           contextInfo: canal(),
           text:
-`❌ El endpoint respondió (HTTP ${res.status}) pero no traía ningún enlace de descarga.
+`❌ El endpoint respondió (HTTP ${res.status}${vueltas > 1 ? `, tras ${vueltas} consultas` : ""}) pero no traía ningún enlace de descarga.
 
 📄 *Esto fue lo que devolvió:*
 ${recortar(texto, 600)}
 
-💡 Si ves ahí el enlace pero no lo detecté, pásamelo directo:
-${pref}${command} <ese enlace>
+💡 Si el sitio tarda más, sube la espera:
+${pref}${command} ${sueltos[0]} ${enlace} --espera=180
 
-O mira la respuesta completa con:
+Y para ver la respuesta entera:
 ${pref}${command} ${sueltos[0]} ${enlace} --ver`
         },
         { quoted: msg }
       );
     }
 
-    candidatos = enlaces.slice(0, MAX_INTENTOS_ENLACE);
-    origen = endpoint;
+    candidatos = enlaces.slice(0, MAX_ENLACES);
   }
 
-  // ---- descargar el primero que funcione ----
+  // ---- comprobar y descargar ----
   let usado = "";
   let info = null;
-  let ultimoError;
+  const rechazados = [];
 
   for (const url of candidatos) {
+    const check = await verificarEnlace(url, sesion, referer);
+
+    if (!check.ok) {
+      rechazados.push(`${recortar(url, 60)} → ${check.motivo}`);
+      continue;
+    }
+
+    if (check.tamaño && check.tamaño / (1024 * 1024) > MAX_MB) {
+      rechazados.push(`${recortar(url, 60)} → pesa ${(check.tamaño / (1024 * 1024)).toFixed(1)}MB`);
+      continue;
+    }
+
     try {
-      info = await descargar(url, destino, origen);
+      info = await descargarArchivo(url, destino, sesion, referer);
       usado = url;
       break;
     } catch (e) {
-      ultimoError = e;
+      rechazados.push(`${recortar(url, 60)} → ${e.message}`);
       try { fs.unlinkSync(destino); } catch {}
     }
   }
@@ -431,9 +349,10 @@ ${pref}${command} ${sueltos[0]} ${enlace} --ver`
         text:
 `❌ Encontré ${candidatos.length} enlace(s) pero ninguno se pudo descargar.
 
-Último error: ${ultimoError?.message || "desconocido"}
+${rechazados.slice(0, 4).map((r) => "  • " + r).join("\n")}
 
-🔗 ${recortar(candidatos[0] || "", 150)}`
+💡 Si el enlace bueno estaba ahí pero lo descarté, pásamelo suelto:
+${pref}${command} <ese enlace>`
       },
       { quoted: msg }
     );
@@ -455,8 +374,9 @@ ${pref}${command} ${sueltos[0]} ${enlace} --ver`
   }
 
   const clase = comoDoc ? "documento" : tipoDeArchivo(destino, usado, info.tipo);
-  const extension = (usado.split("?")[0].split(".").pop() || "").slice(0, 5);
-  const nombre = `${safeName(objetivo.host)}_${Date.now()}.${extension && extension.length <= 5 ? extension : "bin"}`;
+  const ext = (usado.split("?")[0].split(".").pop() || "").toLowerCase();
+  const extension = ext && ext.length <= 5 && /^[a-z0-9]+$/.test(ext) ? ext : "bin";
+  const nombre = `${safeName(objetivo.host)}_${Date.now()}.${extension}`;
 
   const contenido =
     clase === "video"
@@ -469,15 +389,15 @@ ${pref}${command} ${sueltos[0]} ${enlace} --ver`
 
   await conn.sendMessage(chatId, { ...contenido, contextInfo: canal() }, { quoted: msg });
 
+  const receta = enlace
+    ? `\n\n💡 Para dejarlo fijo como comando:\n${pref}crack ${objetivo.origin} ${enlace} ${endpoint}`
+    : "";
+
   await conn.sendMessage(
     chatId,
     {
       contextInfo: canal(),
-      text:
-`✅ *Descargado*
-
-📦 ${sizeMB.toFixed(2)} MB · ${info.tipo || "?"} · enviado como ${clase}
-🔗 ${recortar(usado, 180)}${enlace ? `\n\n💡 Para dejarlo fijo como comando:\n${pref}crack ${objetivo.origin} ${enlace} ${endpoint}` : ""}`
+      text: `✅ *Descargado*\n\n📦 ${sizeMB.toFixed(2)} MB · ${info.tipo || "?"} · enviado como ${clase}\n🔗 ${recortar(usado, 180)}${receta}`
     },
     { quoted: msg }
   );
@@ -488,7 +408,7 @@ ${pref}${command} ${sueltos[0]} ${enlace} --ver`
 };
 
 handler.command = ["get2"];
-handler.help = ["get2 <endpoint> [enlace] [campo=valor]"];
+handler.help = ["get2 <endpoint> [enlace] [campo=valor] [--ver]"];
 handler.tags = ["owner"];
 
 export default handler;

@@ -1,8 +1,18 @@
 import { canal } from "../../disenos.js";
 import fs from "fs";
 import path from "path";
-import axios from "axios";
 import * as cheerio from "cheerio";
+import {
+  Sesion,
+  normalizarUrl,
+  esHostPublico,
+  absoluto,
+  recortar,
+  extraerEnlaces,
+  pareceEnProgreso,
+  verificarEnlace,
+  esperar
+} from "../../libs/navegador.js";
 
 // comandos/crack.js — Analiza una web de descargas y te dice cómo pedirle
 // el archivo directamente, sin pasar por la página.
@@ -16,12 +26,7 @@ import * as cheerio from "cheerio";
 
 "use strict";
 
-const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
-
-const TIMEOUT = 45000;
 const TIMEOUT_PRUEBA = 20000;
-const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_SCRIPTS = 6;
 const MAX_CANDIDATOS = 12;
 const MAX_PRUEBAS = 5;
@@ -32,8 +37,9 @@ const EXT_MEDIA = /\.(mp4|mkv|webm|m4v|mov|mp3|m4a|opus|ogg|wav|flac|jpg|jpeg|pn
 
 // ---------- utils ----------
 function esOwner(msg) {
-  const senderId = (msg.key.participant || msg.key.remoteJid).replace(/[^0-9]/g, "");
   if (msg.key.fromMe) return true;
+
+  const senderId = (msg.key.participant || msg.key.remoteJid).replace(/[^0-9]/g, "");
 
   try {
     const ownerPath = path.resolve("owner.json");
@@ -42,80 +48,6 @@ function esOwner(msg) {
   } catch {
     return false;
   }
-}
-
-function normalizarUrl(entrada = "") {
-  let u = String(entrada).trim();
-  if (!u) return null;
-
-  // Si el esquema lo ponemos nosotros, luego probamos http por si el sitio
-  // no tiene https.
-  const inferido = !/^https?:\/\//i.test(u);
-  if (inferido) u = "https://" + u;
-
-  try {
-    return { url: new URL(u), inferido };
-  } catch {
-    return null;
-  }
-}
-
-// Sin esto, un .crack http://10.0.0.1/... convertiría al bot en un puente
-// hacia la red interna del servidor.
-function esHostPublico(u) {
-  const host = String(u.hostname || "").toLowerCase();
-
-  if (!host) return false;
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal")) return false;
-  if (host === "[::1]" || host === "::1") return false;
-
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (m) {
-    const [a, b] = m.slice(1).map(Number);
-    if (a === 10 || a === 127 || a === 0) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false;
-  }
-
-  return true;
-}
-
-function absoluto(ruta, base) {
-  try {
-    return new URL(ruta, base).toString();
-  } catch {
-    return "";
-  }
-}
-
-function recortar(texto, max = 300) {
-  const t = String(texto ?? "");
-  return t.length > max ? t.slice(0, max) + "…" : t;
-}
-
-async function pedir(url, { metodo = "get", datos, cabeceras = {}, referer, timeout = TIMEOUT } = {}) {
-  const res = await axios({
-    method: metodo,
-    url,
-    data: datos,
-    timeout,
-    maxRedirects: 5,
-    maxContentLength: MAX_BYTES,
-    responseType: "text",
-    transformResponse: [(d) => d],
-    validateStatus: () => true,
-    headers: {
-      "User-Agent": UA,
-      "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
-      Accept: "*/*",
-      ...(referer ? { Referer: referer, Origin: new URL(referer).origin } : {}),
-      ...cabeceras
-    }
-  });
-
-  return res;
 }
 
 // ---------- análisis del HTML ----------
@@ -308,56 +240,6 @@ function detectarProtecciones(texto, cabeceras) {
   return { avisos: [...new Set(avisos)], bloqueante };
 }
 
-// ---------- buscar el archivo en la respuesta ----------
-function enlacesDesdeJson(valor, encontrados = []) {
-  if (!valor) return encontrados;
-
-  if (typeof valor === "string") {
-    if (/^https?:\/\//i.test(valor) && (EXT_MEDIA.test(valor) || /(download|cdn|media|videoplayback)/i.test(valor))) {
-      encontrados.push(valor);
-    }
-    return encontrados;
-  }
-
-  if (Array.isArray(valor)) {
-    for (const v of valor) enlacesDesdeJson(v, encontrados);
-    return encontrados;
-  }
-
-  if (typeof valor === "object") {
-    for (const k of Object.keys(valor)) enlacesDesdeJson(valor[k], encontrados);
-  }
-
-  return encontrados;
-}
-
-function enlacesDesdeHtml(html, base) {
-  const encontrados = [];
-
-  try {
-    const $ = cheerio.load(html);
-
-    $("a[href], source[src], video[src], audio[src]").each((_, el) => {
-      const v = $(el).attr("href") || $(el).attr("src") || "";
-      const u = absoluto(v, base);
-      if (u && (EXT_MEDIA.test(u) || /(download|descarg|cdn)/i.test(u))) encontrados.push(u);
-    });
-  } catch {}
-
-  return encontrados;
-}
-
-function buscarArchivo(cuerpo, base) {
-  let json = null;
-
-  try {
-    json = JSON.parse(cuerpo);
-  } catch {}
-
-  const enlaces = json ? enlacesDesdeJson(json) : enlacesDesdeHtml(cuerpo, base);
-  return { json, enlaces: [...new Set(enlaces)] };
-}
-
 // ---------- probar un candidato de verdad ----------
 function campoDeUrl(campos = []) {
   const porTipo = campos.find((c) => c.tipo === "url");
@@ -418,6 +300,32 @@ function intentosPara(candidato, urlPrueba, formularios) {
   return intentos;
 }
 
+// Espera si el sitio contesta "procesando" en vez de dar el enlace.
+async function pedirEsperando(sesion, url, intento, base, limite) {
+  let vuelta = 0;
+
+  while (true) {
+    const res = await sesion.pedir(url, {
+      metodo: intento.metodo,
+      datos: intento.metodo === "get" ? undefined : intento.datos,
+      tipo: "xhr",
+      referer: base,
+      timeout: TIMEOUT_PRUEBA,
+      cabeceras: intento.cabeceras || {}
+    });
+
+    const cuerpo = String(res.data || "");
+    const { json, enlaces } = extraerEnlaces(cuerpo, base);
+
+    if (enlaces.length || res.status >= 400) return { res, cuerpo, json, enlaces };
+    if (!pareceEnProgreso(cuerpo, json)) return { res, cuerpo, json, enlaces };
+    if (vuelta >= 8 || Date.now() + 4000 > limite) return { res, cuerpo, json, enlaces };
+
+    vuelta++;
+    await esperar(4000);
+  }
+}
+
 async function probarCandidato(candidato, urlPrueba, base, ctx) {
   for (const intento of intentosPara(candidato, urlPrueba, ctx.formularios)) {
     if (ctx.usados >= MAX_INTENTOS || Date.now() > ctx.limite) break;
@@ -425,24 +333,37 @@ async function probarCandidato(candidato, urlPrueba, base, ctx) {
 
     try {
       const url = candidato.url + (intento.sufijo || "");
-      const res = await pedir(url, {
-        metodo: intento.metodo,
-        datos: intento.datos,
-        timeout: TIMEOUT_PRUEBA,
-        referer: base,
-        cabeceras: {
-          ...intento.cabeceras,
-          "X-Requested-With": "XMLHttpRequest",
-          ...(ctx.cookies ? { Cookie: ctx.cookies } : {}),
-          ...(ctx.csrf ? { "X-CSRF-TOKEN": ctx.csrf } : {})
+      const { res, cuerpo, json, enlaces } = await pedirEsperando(
+        ctx.sesion,
+        url,
+        intento,
+        base,
+        ctx.limite
+      );
+
+      if (res.status >= 400 || !enlaces.length) continue;
+
+      // Aquí estaba el fallo que hacía que .crack dijera "funciona" y luego
+      // .get2 no bajara nada: dábamos por bueno cualquier enlace que se
+      // pareciera a una descarga, sin comprobar que fuera un archivo.
+      const verificados = [];
+      let motivo = "";
+
+      for (const enlace of enlaces.slice(0, 4)) {
+        const check = await verificarEnlace(enlace, ctx.sesion, base);
+
+        if (check.ok) {
+          verificados.push({ url: enlace, tipo: check.tipo, tamaño: check.tamaño });
+          break;
         }
-      });
 
-      if (res.status >= 400) continue;
+        motivo = motivo || `${recortar(enlace, 50)} → ${check.motivo}`;
+      }
 
-      const cuerpo = String(res.data || "");
-      const { json, enlaces } = buscarArchivo(cuerpo, base);
-      if (!enlaces.length) continue;
+      if (!verificados.length) {
+        ctx.falsosPositivos.push(`${recortar(candidato.url, 45)} [${intento.etiqueta}] → ${motivo || "los enlaces no eran archivos"}`);
+        continue;
+      }
 
       return {
         ok: true,
@@ -451,6 +372,7 @@ async function probarCandidato(candidato, urlPrueba, base, ctx) {
         tipo: String(res.headers?.["content-type"] || "").split(";")[0],
         esJson: !!json,
         enlaces,
+        verificado: verificados[0],
         muestra: recortar(cuerpo, 400)
       };
     } catch {}
@@ -790,9 +712,12 @@ plugin ya escrito listo para subir a la carpeta de comandos.`
 
   await conn.sendMessage(chatId, { react: { text: "🔎", key: msg.key } });
 
-  // 1) la página
+  // 1) la página, cargada con la misma sesión que usaremos después
+  const sesion = new Sesion();
+
   let base = objetivo.toString();
   let portada = null;
+  let html = "";
   let fallo = null;
 
   const intentos = [base];
@@ -800,10 +725,11 @@ plugin ya escrito listo para subir a la carpeta de comandos.`
 
   for (const intento of intentos) {
     try {
-      const r = await pedir(intento, { cabeceras: { Accept: "text/html,*/*" } });
-      if (r.status >= 400) throw new Error("HTTP " + r.status);
+      const r = await sesion.abrir(intento);
+      if (r.res.status >= 400) throw new Error("HTTP " + r.res.status);
 
-      portada = r;
+      portada = r.res;
+      html = r.html;
       base = intento;
       break;
     } catch (e) {
@@ -819,19 +745,12 @@ plugin ya escrito listo para subir a la carpeta de comandos.`
     );
   }
 
-  const html = String(portada.data || "");
   const $ = cheerio.load(html);
 
-  // Muchos sitios solo responden si llevas su cookie de sesión y su token.
-  const cookies = (portada.headers?.["set-cookie"] || [])
-    .map((c) => String(c).split(";")[0])
-    .join("; ");
-
-  const csrf =
-    $('meta[name="csrf-token"]').attr("content") ||
-    $('input[name="_token"]').attr("value") ||
-    $('input[name="csrf_token"]').attr("value") ||
-    "";
+  // sesion.abrir ya guardó la cookie y el token: los reusa en cada petición.
+  const cookies = sesion.cookieDe(objetivo.host);
+  const csrf = sesion.csrf || $('input[name="_token"]').attr("value") || "";
+  if (csrf) sesion.csrf = csrf;
 
   // 2) formularios y scripts
   const formularios = analizarFormularios($, base);
@@ -850,7 +769,7 @@ plugin ya escrito listo para subir a la carpeta de comandos.`
 
   for (const src of externos.slice(0, MAX_SCRIPTS)) {
     try {
-      const r = await pedir(src, { referer: base });
+      const r = await sesion.pedir(src, { referer: base, tipo: "xhr" });
       if (r.status < 400) fuentes.push({ texto: String(r.data || ""), origen: src.split("/").pop() });
     } catch {}
   }
@@ -935,8 +854,8 @@ ${lista}
 
   const ctx = {
     formularios,
-    cookies,
-    csrf,
+    sesion,
+    falsosPositivos: [],
     usados: 0,
     limite: Date.now() + LIMITE_PRUEBAS_MS
   };
@@ -955,7 +874,9 @@ ${lista}
   if (!ganador) {
     const motivo = bloqueante
       ? `🛑 *Es el captcha.*\n${bloqueante}\n\nEste sitio hay que descartarlo: busca otro que no pida captcha.`
-      : `Puede ser por:
+      : ctx.falsosPositivos.length
+        ? `Algunos endpoints *sí respondieron*, pero los enlaces que daban no eran archivos descargables:\n${ctx.falsosPositivos.slice(0, 4).map((f) => "  • " + f).join("\n")}\n\nSuele significar que falta un paso: el sitio devuelve una página intermedia y el archivo aparece en una segunda petición.`
+        : `Puede ser por:
   • token o cookie que hay que sacar de la página primero
   • que el endpoint real solo aparezca al pulsar el botón
   • que la página lo arme con JavaScript en el momento`;
@@ -994,6 +915,33 @@ ${pref}get2 <endpoint> ${urlPrueba}`
 
   const enlacesTexto = ganador.enlaces.slice(0, 3).map((e, i) => `  ${i + 1}. ${recortar(e, 110)}`).join("\n");
 
+  // La orden get2 que reproduce exactamente lo que acaba de funcionar, para no
+  // tener que adivinar los campos al probarlo a mano.
+  const extrasGet2 = Object.entries(ganador.intento.cuerpo || {})
+    .filter(([k]) => k !== ganador.intento.nombre)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(" ");
+
+  const banderas = [
+    ganador.intento.metodo === "get" ? "--get" : "",
+    ganador.intento.cabeceras?.["Content-Type"] === "application/json" ? "--json" : ""
+  ].filter(Boolean).join(" ");
+
+  const necesitaPagina = !!(cookies || csrf) || base !== objetivo.origin + "/";
+
+  const ordenGet2 = [
+    `${pref}get2`,
+    ganador.candidato.url,
+    urlPrueba,
+    `campo=${ganador.intento.nombre}`,
+    extrasGet2,
+    necesitaPagina ? `desde=${base}` : "",
+    banderas
+  ].filter(Boolean).join(" ");
+
+  const verificado = ganador.verificado || {};
+  const pesoMB = verificado.tamaño ? ` · ${(verificado.tamaño / (1024 * 1024)).toFixed(1)} MB` : "";
+
   await conn.sendMessage(
     chatId,
     {
@@ -1008,6 +956,11 @@ ${pref}get2 <endpoint> ${urlPrueba}`
 
 🔗 *Archivos que devolvió:*
 ${enlacesTexto}
+
+✔️ *Comprobado:* el primero es un archivo de verdad (${verificado.tipo || "?"}${pesoMB}), no una página.
+
+▶️ *Pruébalo cuando quieras con:*
+${ordenGet2}
 
 📄 Te mando el comando ya escrito. Súbelo a *plugins/pluginsdescargas/* y
 queda disponible como *${pref}${comando} <enlace>*.`
