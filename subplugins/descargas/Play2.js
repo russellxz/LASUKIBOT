@@ -22,7 +22,13 @@ const streamPipe = promisify(pipeline);
 // ==== API SKY ULTRA PLUS ====
 const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
 const API_KEY = process.env.API_KEY || "Russellxz";
-const API_YOUTUBE = `${API_BASE}/youtube`;
+const API_RESOLVE = `${API_BASE}/youtube/resolve`;
+
+// /youtube/resolve no responde hasta que el archivo está listo: por dentro
+// sondea al servidor de descarga y, si ese falla, prueba otros. Eso puede
+// tardar minutos, así que la espera aquí tiene que ser holgada.
+const RESOLVE_TIMEOUT = 300000;
+const DOWNLOAD_TIMEOUT = 300000;
 
 // Defaults
 const DEFAULT_VIDEO_QUALITY = "360";
@@ -126,52 +132,86 @@ async function downloadToFile(url, filePath) {
   const headers = {
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    Accept: "*/*",
+    Accept: "*/*"
   };
 
   if (isApiUrl(url)) headers["apikey"] = API_KEY;
 
   const res = await axios.get(url, {
     responseType: "stream",
-    timeout: 180000,
+    timeout: DOWNLOAD_TIMEOUT,
     headers,
     maxRedirects: 5,
-    validateStatus: () => true,
+    validateStatus: () => true
   });
 
   if (res.status >= 400) throw new Error(`HTTP_${res.status}`);
+
+  // Si llega HTML o JSON es una página de error, no el archivo: guardarlo
+  // dejaba un mp3/mp4 corrupto que WhatsApp rechazaba sin decir por qué.
+  const tipo = String(res.headers?.["content-type"] || "");
+  if (/text\/html|application\/json/i.test(tipo)) {
+    try { res.data.destroy(); } catch {}
+    throw new Error(`El enlace no devolvió un archivo (${tipo.split(";")[0]})`);
+  }
 
   await streamPipe(res.data, fs.createWriteStream(filePath));
   return filePath;
 }
 
-// ---------- API ----------
-// La API responde { status, result: { title, cover, quality, media } }.
-// El enlace puede venir como string directo o dentro de un objeto: lo normalizamos.
-function pickMediaUrl(result) {
-  const media = result?.media;
-  let url = "";
+// La API da varios enlaces para el mismo archivo. Si el primero falla
+// (caducó, o el servidor de descarga se cayó) seguimos con el siguiente.
+async function downloadConRespaldo(urls, filePath) {
+  let ultimoError;
 
-  if (typeof media === "string") {
-    url = media;
-  } else if (media && typeof media === "object") {
-    url = media.dl_download || media.direct || media.url || media.download || "";
+  for (const url of urls) {
+    try {
+      return await downloadToFile(url, filePath);
+    } catch (e) {
+      ultimoError = e;
+      try { fs.unlinkSync(filePath); } catch {}
+    }
   }
 
-  if (!url || typeof url !== "string") url = result?.url || result?.download || "";
-  if (typeof url !== "string") url = "";
-  if (url.startsWith("/")) url = API_BASE + url;
-
-  return url;
+  throw ultimoError || new Error("Sin enlaces de descarga");
 }
 
-async function callYoutubeApi(videoUrl, { type = "video", quality } = {}) {
-  const esAudio = type === "audio";
-  const body = { url: videoUrl, type: esAudio ? "audio" : "video" };
-  if (!esAudio) body.quality = quality || DEFAULT_VIDEO_QUALITY;
+// ---------- API ----------
+// OJO: POST /youtube solo lista las calidades disponibles, no trae enlace.
+// El que resuelve la descarga es POST /youtube/resolve.
+function absolutizar(u) {
+  if (!u || typeof u !== "string") return "";
+  return u.startsWith("/") ? API_BASE + u : u;
+}
 
-  const r = await axios.post(API_YOUTUBE, body, {
-    timeout: 120000,
+// media llega como { direct, dl_inline, dl_download }: direct es el enlace del
+// servidor de descarga y dl_download el proxy de la propia API (ruta relativa,
+// pide apikey). Probamos el directo primero para no cargar tu servidor.
+function mediaCandidatos(result) {
+  const media = result?.media;
+
+  if (typeof media === "string") return [absolutizar(media)].filter(Boolean);
+
+  const urls = [
+    absolutizar(media?.direct),
+    absolutizar(media?.dl_download),
+    absolutizar(media?.dl_inline),
+    absolutizar(media?.url || media?.download),
+    absolutizar(result?.url || result?.download)
+  ];
+
+  return [...new Set(urls.filter(Boolean))];
+}
+
+async function callYoutubeResolve(videoUrl, { type = "video", quality, format } = {}) {
+  const esAudio = type === "audio";
+
+  const body = esAudio
+    ? { url: videoUrl, type: "audio", format: format || DEFAULT_AUDIO_FORMAT }
+    : { url: videoUrl, type: "video", quality: quality || DEFAULT_VIDEO_QUALITY };
+
+  const r = await axios.post(API_RESOLVE, body, {
+    timeout: RESOLVE_TIMEOUT,
     headers: {
       "Content-Type": "application/json",
       apikey: API_KEY,
@@ -189,19 +229,18 @@ async function callYoutubeApi(videoUrl, { type = "video", quality } = {}) {
     data.ok === true ||
     data.success === true;
 
-  if (!ok) throw new Error(data.message || data.error || "Error en la API");
+  if (!ok) throw new Error(data.message || data.error || `HTTP_${r.status}`);
 
   const result = data.result || data.data || data;
-  const media = pickMediaUrl(result);
+  const candidatos = mediaCandidatos(result);
 
-  if (!media) throw new Error("API sin media");
+  if (!candidatos.length) throw new Error("La API no devolvió enlace de descarga");
 
   return {
     title: result.title || "YouTube",
-    thumbnail: result.cover || result.thumbnail || "",
-    quality: result.quality || quality || "",
-    dl_download: media,
-    direct: media
+    thumbnail: result.thumbnail || result.cover || "",
+    picked: result.picked || {},
+    candidatos
   };
 }
 
@@ -597,14 +636,14 @@ async function downloadAudio(conn, job, asDocument, quoted) {
 
   let resolved;
   try {
-    resolved = await callYoutubeApi(videoUrl, { type: "audio" });
+    resolved = await callYoutubeResolve(videoUrl, { type: "audio", format: DEFAULT_AUDIO_FORMAT });
   } catch (e) {
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `❌ Error API (audio): ${e.message}` }, { quoted });
     return;
   }
 
-  const mediaUrl = resolved.dl_download || resolved.direct;
+  const mediaUrl = resolved.candidatos[0];
   if (!mediaUrl) {
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: "❌ No se pudo obtener audio." }, { quoted });
@@ -614,7 +653,13 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   const tmp = ensureTmp();
   const base = safeName(title);
   const inFile = path.join(tmp, `${Date.now()}_in.bin`);
-  await downloadToFile(mediaUrl, inFile);
+  try {
+    await downloadConRespaldo(resolved.candidatos, inFile);
+  } catch (e) {
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error descargando audio: ${e.message}` }, { quoted });
+    return;
+  }
 
   const outMp3 = path.join(tmp, `${Date.now()}_${base}.mp3`);
   let outFile = outMp3;
@@ -661,14 +706,14 @@ async function downloadVideo(conn, job, asDocument, quoted) {
 
   let resolved;
   try {
-    resolved = await callYoutubeApi(videoUrl, { type: "video", quality: q });
+    resolved = await callYoutubeResolve(videoUrl, { type: "video", quality: q });
   } catch (e) {
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `❌ Error API (video): ${e.message}` }, { quoted });
     return;
   }
 
-  const mediaUrl = resolved.dl_download || resolved.direct;
+  const mediaUrl = resolved.candidatos[0];
   if (!mediaUrl) {
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: "❌ No se pudo obtener video." }, { quoted });
@@ -680,7 +725,13 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   const tag = q === "4k" ? "4k" : `${q}p`;
   const file = path.join(tmp, `${Date.now()}_${base}_${tag}.mp4`);
 
-  await downloadToFile(mediaUrl, file);
+  try {
+    await downloadConRespaldo(resolved.candidatos, file);
+  } catch (e) {
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: `❌ Error descargando video: ${e.message}` }, { quoted });
+    return;
+  }
 
   const sizeMB = fileSizeMB(file);
   if (sizeMB > MAX_MB) {
