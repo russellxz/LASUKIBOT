@@ -9,6 +9,9 @@ import {
   pareceEnProgreso,
   urlDeProgreso,
   verificarEnlace,
+  detectarChallenge,
+  accionesDeSegundoPaso,
+  ejecutarAccion,
   descargarArchivo,
   tipoDeArchivo,
   recortar,
@@ -271,12 +274,14 @@ ${recortar(texto, 500)}`
     }
 
     if (res.status >= 400) {
+      const bloqueo = detectarChallenge(res, texto);
+
       return conn.sendMessage(
         chatId,
         {
           contextInfo: canal(),
           text:
-`❌ El sitio respondió HTTP ${res.status}.
+`❌ El sitio respondió HTTP ${res.status}.${bloqueo ? `\n\n🛑 *${bloqueo}*` : ""}
 
 ${recortar(texto, 300)}
 
@@ -289,13 +294,50 @@ ${recortar(texto, 300)}
       );
     }
 
+    // Muchas webs no dan el archivo en la primera respuesta: hay que pulsar
+    // "descargar", que es una segunda petición. La buscamos y la seguimos.
+    let enlacesFinales = enlaces;
+    let paso2Usado = null;
+
     if (!enlaces.length) {
+      const acciones = accionesDeSegundoPaso(texto, endpoint);
+
+      for (const accion of acciones.slice(0, 6)) {
+        try {
+          const res2 = await ejecutarAccion(sesion, accion, referer);
+          if (res2.status >= 400) continue;
+
+          const cuerpo2 = String(res2.data || "");
+          const { enlaces: e2 } = extraerEnlaces(cuerpo2, accion.url);
+          if (!e2.length) continue;
+
+          enlacesFinales = e2;
+          paso2Usado = accion;
+          break;
+        } catch {}
+      }
+
+      if (paso2Usado) {
+        await conn.sendMessage(
+          chatId,
+          {
+            contextInfo: canal(),
+            text: `🔁 El archivo no venía en la primera respuesta. Segundo paso: *${paso2Usado.metodo.toUpperCase()} ${recortar(paso2Usado.url, 70)}* → ${enlacesFinales.length} enlace(s).`
+          },
+          { quoted: msg }
+        );
+      }
+    }
+
+    if (!enlacesFinales.length) {
+      const bloqueo = detectarChallenge(res, texto);
+
       return conn.sendMessage(
         chatId,
         {
           contextInfo: canal(),
           text:
-`❌ El endpoint respondió (HTTP ${res.status}${vueltas > 1 ? `, tras ${vueltas} consultas` : ""}) pero no traía ningún enlace de descarga.
+`❌ El endpoint respondió (HTTP ${res.status}${vueltas > 1 ? `, tras ${vueltas} consultas` : ""}) pero no traía ningún enlace de descarga.${bloqueo ? `\n\n🛑 *${bloqueo}*` : ""}
 
 📄 *Esto fue lo que devolvió:*
 ${recortar(texto, 600)}
@@ -310,7 +352,7 @@ ${pref}${command} ${sueltos[0]} ${enlace} --ver`
       );
     }
 
-    candidatos = enlaces.slice(0, MAX_ENLACES);
+    candidatos = enlacesFinales.slice(0, MAX_ENLACES);
   }
 
   // ---- comprobar y descargar ----
