@@ -13,14 +13,10 @@ import { promisify } from 'util';
 import { pipeline } from 'stream';
 const streamPipe = promisify(pipeline);
 
-// ==== API VIEJA PARA VIDEO ====
+// ==== API SKY ULTRA PLUS ====
 const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
 const API_KEY = process.env.API_KEY || "Russellxz";
-
-// ==== NEOXR API SOLO PARA MP3 ====
-const NEOXR_API_BASE = "https://api.neoxr.eu/api";
-const NEOXR_API_KEY = "russellxz";
-const NEOXR_AUDIO_QUALITY = "128kbps";
+const API_YOUTUBE = `${API_BASE}/youtube`;
 
 // Defaults
 const DEFAULT_VIDEO_QUALITY = "360";
@@ -117,20 +113,10 @@ function splitQueryAndQuality(rawText = "") {
   };
 }
 
-function isSkyApiUrl(url = "") {
+function isApiUrl(url = "") {
   try {
     const u = new URL(url);
     const b = new URL(API_BASE);
-    return u.host === b.host;
-  } catch {
-    return false;
-  }
-}
-
-function isNeoxrApiUrl(url = "") {
-  try {
-    const u = new URL(url);
-    const b = new URL(NEOXR_API_BASE);
     return u.host === b.host;
   } catch {
     return false;
@@ -144,8 +130,7 @@ async function downloadToFile(url, filePath) {
     Accept: "*/*"
   };
 
-  if (isSkyApiUrl(url)) headers["apikey"] = API_KEY;
-  if (isNeoxrApiUrl(url)) headers["apikey"] = NEOXR_API_KEY;
+  if (isApiUrl(url)) headers["apikey"] = API_KEY;
 
   const res = await axios.get(url, {
     responseType: "stream",
@@ -161,55 +146,32 @@ async function downloadToFile(url, filePath) {
   return filePath;
 }
 
-function deepFindUrl(obj) {
-  const found = [];
+// ---------- API ----------
+// La API responde { status, result: { title, cover, quality, media } }.
+// El enlace puede venir como string directo o dentro de un objeto: lo normalizamos.
+function pickMediaUrl(result) {
+  const media = result?.media;
+  let url = "";
 
-  function walk(value) {
-    if (!value) return;
-
-    if (typeof value === "string") {
-      if (/^https?:\/\//i.test(value)) found.push(value);
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) walk(item);
-      return;
-    }
-
-    if (typeof value === "object") {
-      for (const key of Object.keys(value)) {
-        walk(value[key]);
-      }
-    }
+  if (typeof media === "string") {
+    url = media;
+  } else if (media && typeof media === "object") {
+    url = media.dl_download || media.direct || media.url || media.download || "";
   }
 
-  walk(obj);
+  if (!url || typeof url !== "string") url = result?.url || result?.download || "";
+  if (typeof url !== "string") url = "";
+  if (url.startsWith("/")) url = API_BASE + url;
 
-  return found.find(u =>
-    /\.(mp3|m4a|webm|opus|ogg)(\?|$)/i.test(u) ||
-    /download|audio|youtube|cdn|media/i.test(u)
-  ) || found[0] || "";
+  return url;
 }
 
-// ---------- API VIDEO VIEJA ----------
-async function callYoutubeResolve(videoUrl, { type, quality, format }) {
-  const endpoint = `${API_BASE}/youtube/resolve`;
+async function callYoutubeApi(videoUrl, { type = "video", quality } = {}) {
+  const esAudio = type === "audio";
+  const body = { url: videoUrl, type: esAudio ? "audio" : "video" };
+  if (!esAudio) body.quality = quality || DEFAULT_VIDEO_QUALITY;
 
-  const body =
-    type === "video"
-      ? {
-          url: videoUrl,
-          type: "video",
-          quality: quality || DEFAULT_VIDEO_QUALITY
-        }
-      : {
-          url: videoUrl,
-          type: "audio",
-          format: format || DEFAULT_AUDIO_FORMAT
-        };
-
-  const r = await axios.post(endpoint, body, {
+  const r = await axios.post(API_YOUTUBE, body, {
     timeout: 120000,
     headers: {
       "Content-Type": "application/json",
@@ -231,87 +193,16 @@ async function callYoutubeResolve(videoUrl, { type, quality, format }) {
   if (!ok) throw new Error(data.message || data.error || "Error en la API");
 
   const result = data.result || data.data || data;
-  if (!result?.media) throw new Error("API sin media");
+  const media = pickMediaUrl(result);
 
-  let dl = result.media.dl_download || "";
-
-  if (dl && typeof dl === "string" && dl.startsWith("/")) {
-    dl = API_BASE + dl;
-  }
-
-  const direct = result.media.direct || "";
+  if (!media) throw new Error("API sin media");
 
   return {
     title: result.title || "YouTube",
-    thumbnail: result.thumbnail || "",
-    picked: result.picked || {},
-    dl_download: dl,
-    direct
-  };
-}
-
-// ---------- NEOXR API AUDIO MP3 ----------
-async function callNeoxrAudio(videoUrl) {
-  const r = await axios.get(`${NEOXR_API_BASE}/youtube`, {
-    timeout: 120000,
-    params: {
-      url: videoUrl,
-      type: "audio",
-      quality: NEOXR_AUDIO_QUALITY,
-      apikey: NEOXR_API_KEY
-    },
-    headers: {
-      Accept: "application/json, */*"
-    },
-    validateStatus: () => true
-  });
-
-  const data = typeof r.data === "object" ? r.data : null;
-  if (!data) throw new Error("Respuesta no JSON de Neoxr");
-
-  const ok =
-    data.status === true ||
-    data.status === "true" ||
-    data.ok === true ||
-    data.success === true ||
-    data.creator ||
-    data.result ||
-    data.data;
-
-  if (!ok) {
-    throw new Error(data.message || data.error || "Error en Neoxr API");
-  }
-
-  const result = data.result || data.data || data;
-
-  let mediaUrl =
-    result.url ||
-    result.download ||
-    result.download_url ||
-    result.dl ||
-    result.audio ||
-    result.audio_url ||
-    result.link ||
-    result.media ||
-    result.file ||
-    result?.data?.url ||
-    result?.data?.download ||
-    result?.data?.audio ||
-    "";
-
-  if (!mediaUrl || typeof mediaUrl !== "string") {
-    mediaUrl = deepFindUrl(data);
-  }
-
-  if (!mediaUrl) {
-    throw new Error("Neoxr no devolvió link de audio");
-  }
-
-  return {
-    title: result.title || data.title || "YouTube",
-    thumbnail: result.thumbnail || result.thumb || data.thumbnail || "",
-    dl_download: mediaUrl,
-    direct: mediaUrl
+    thumbnail: result.cover || result.thumbnail || "",
+    quality: result.quality || quality || "",
+    dl_download: media,
+    direct: media
   };
 }
 
@@ -884,13 +775,13 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   let resolved;
 
   try {
-    resolved = await callNeoxrAudio(videoUrl);
+    resolved = await callYoutubeApi(videoUrl, { type: "audio" });
   } catch (e) {
     await conn.sendMessage(
       chatId,
       {
       contextInfo: canal(),
-        text: `❌ Error Neoxr API (audio): ${e.message}`
+        text: `❌ Error API (audio): ${e.message}`
       },
       { quoted }
     );
@@ -913,7 +804,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
 
   const tmp = ensureTmp();
   const base = safeName(title);
-  const inFile = path.join(tmp, `${Date.now()}_neoxr_audio.bin`);
+  const inFile = path.join(tmp, `${Date.now()}_audio.bin`);
 
   try {
     await downloadToFile(mediaUrl, inFile);
@@ -994,7 +885,7 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   let resolved;
 
   try {
-    resolved = await callYoutubeResolve(videoUrl, {
+    resolved = await callYoutubeApi(videoUrl, {
       type: "video",
       quality: q
     });
