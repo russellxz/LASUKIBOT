@@ -35,7 +35,7 @@ const DEFAULT_VIDEO_QUALITY = "360";
 const DEFAULT_AUDIO_FORMAT = "mp3";
 const MAX_MB = 200;
 
-const VALID_QUALITIES = new Set(["144", "240", "360", "720", "1080", "1440", "4k"]);
+const VALID_QUALITIES = new Set(["144", "240", "360", "720"]);
 const ACTIVOSS_FILE = path.resolve("./activoss.json");
 
 const pending = {};
@@ -91,8 +91,7 @@ function botonesActivos() {
 
 function extractQualityFromText(input = "") {
   const t = String(input || "").toLowerCase();
-  if (t.includes("4k")) return "4k";
-  const m = t.match(/\b(144|240|360|720|1080|1440)\s*p?\b/);
+  const m = t.match(/\b(144|240|360|720)\s*p?\b/);
   if (m && VALID_QUALITIES.has(m[1])) return m[1];
   return "";
 }
@@ -105,11 +104,8 @@ function splitQueryAndQuality(rawText = "") {
   const last = (parts[parts.length - 1] || "").toLowerCase();
 
   let q = "";
-  if (last === "4k") q = "4k";
-  else {
-    const m = last.match(/^(144|240|360|720|1080|1440)p?$/i);
-    if (m) q = m[1];
-  }
+  const m = last.match(/^(144|240|360|720)p?$/i);
+  if (m) q = m[1];
 
   if (q) {
     parts.pop();
@@ -147,30 +143,94 @@ async function downloadToFile(url, filePath) {
 
   if (res.status >= 400) throw new Error(`HTTP_${res.status}`);
 
-  // Si llega HTML o JSON es una página de error, no el archivo: guardarlo
-  // dejaba un mp3/mp4 corrupto que WhatsApp rechazaba sin decir por qué.
+  // Si llega HTML o JSON es una página de error, no el archivo.
   const tipo = String(res.headers?.["content-type"] || "");
   if (/text\/html|application\/json/i.test(tipo)) {
     try { res.data.destroy(); } catch {}
     throw new Error(`El enlace no devolvió un archivo (${tipo.split(";")[0]})`);
   }
 
+  const esperado = Number(res.headers?.["content-length"] || 0);
+
   await streamPipe(res.data, fs.createWriteStream(filePath));
+
+  // Si la conexión se corta a media descarga no salta ningún error: el archivo
+  // queda incompleto y WhatsApp lo rechaza con "algo salió mal" al abrirlo.
+  const real = fs.statSync(filePath).size;
+  if (!real) throw new Error("El enlace devolvió un archivo vacío");
+  if (esperado && real !== esperado) {
+    throw new Error(`Descarga incompleta (${real} de ${esperado} bytes)`);
+  }
+
   return filePath;
 }
 
-// La API da varios enlaces para el mismo archivo. Si el primero falla
-// (caducó, o el servidor de descarga se cayó) seguimos con el siguiente.
-async function downloadConRespaldo(urls, filePath) {
+// ---------- formato real del archivo ----------
+function cabecera(filePath, n = 12) {
+  const fd = fs.openSync(filePath, "r");
+  const buf = Buffer.alloc(n);
+
+  try {
+    fs.readSync(fd, buf, 0, n, 0);
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  return buf;
+}
+
+// WhatsApp solo reproduce MP4. Un WebM renombrado a .mp4 se envía igual, pero
+// al abrirlo sale "algo salió mal": por eso miramos la cabecera del archivo.
+function esMp4(filePath) {
+  try {
+    return cabecera(filePath).slice(4, 8).toString("latin1") === "ftyp";
+  } catch {
+    return false;
+  }
+}
+
+function formatoDeAudio(filePath) {
+  try {
+    const b = cabecera(filePath);
+
+    if (b.slice(0, 3).toString("latin1") === "ID3") return "mp3";
+    if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return "mp3";
+    if (b.slice(4, 8).toString("latin1") === "ftyp") return "m4a";
+    if (b.slice(0, 4).toString("latin1") === "OggS") return "ogg";
+    if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "webm";
+
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+// La API da varios enlaces para el mismo archivo. Si uno falla, o trae un
+// formato que WhatsApp no reproduce, seguimos con el siguiente.
+async function descargarMedia(urls, filePath, validar) {
+  const respaldo = `${filePath}.alt`;
   let ultimoError;
 
   for (const url of urls) {
     try {
-      return await downloadToFile(url, filePath);
+      await downloadToFile(url, filePath);
+
+      if (!validar || validar(filePath)) return { formatoOk: true };
+
+      // Se descargó bien pero en otro formato: lo guardamos por si ningún
+      // otro enlace trae algo mejor.
+      ultimoError = new Error("El enlace no devolvió un MP4");
+      try { fs.unlinkSync(respaldo); } catch {}
+      fs.renameSync(filePath, respaldo);
     } catch (e) {
       ultimoError = e;
       try { fs.unlinkSync(filePath); } catch {}
     }
+  }
+
+  if (fs.existsSync(respaldo)) {
+    fs.renameSync(respaldo, filePath);
+    return { formatoOk: false };
   }
 
   throw ultimoError || new Error("Sin enlaces de descarga");
@@ -271,7 +331,7 @@ const handler = async (msg, { conn, text }) => {
   const viewsFmt = (views || 0).toLocaleString();
   const authorName = author?.name || author || "Desconocido";
   const chosenQuality = VALID_QUALITIES.has(quality) ? quality : DEFAULT_VIDEO_QUALITY;
-  const qualityLabel = chosenQuality === "4k" ? "4K" : `${chosenQuality}p`;
+  const qualityLabel = `${chosenQuality}p`;
 
   const usarBotones = botonesActivos() && !esIphone(msg);
 
@@ -302,8 +362,8 @@ Cita este mensaje y escribe:
    *3* o *videodoc*   →  Video como documento
    *4* o *audiodoc*   →  Audio como documento
 
-💡 *Tip:* cualquier calidad (144p a 4K) escribiendo:
-   _"video 720"_   o   _"2 1080"_   o   _"videodoc 4k"_
+💡 *Tip:* cualquier calidad (144p a 720p) escribiendo:
+   _"video 720"_   o   _"2 360"_   o   _"videodoc 240"_
 
 ${pieDescarga(conn)}
 `.trim()
@@ -327,7 +387,7 @@ Cita este mensaje y escribe:
    *4* o *audiodoc*   →  Audio como documento
 
 💡 *Tip:* Puedes cambiar la calidad escribiendo:
-   _"video 720"_   o   _"2 1080"_   o   _"videodoc 4k"_
+   _"video 720"_   o   _"2 360"_   o   _"videodoc 240"_
 
 ${pieDescarga(conn)}
 `.trim();
@@ -349,20 +409,20 @@ ${pieDescarga(conn)}
           title: "🎬 VIDEO NORMAL",
           highlight_label: qualityLabel,
           rows: [
+            { header: "", title: "🎬 Video 144p",  description: "El más liviano · datos justos",      id: `${pref}play_video_144`  },
+            { header: "", title: "🎬 Video 240p",  description: "Liviano · para conexiones lentas",   id: `${pref}play_video_240`  },
             { header: "", title: "🎬 Video 360p",  description: "Calidad estándar · recomendado",     id: `${pref}play_video_360`  },
-            { header: "", title: "🎬 Video 720p",  description: "HD · buena calidad",                 id: `${pref}play_video_720`  },
-            { header: "", title: "🎬 Video 1080p", description: "Full HD · alta calidad",             id: `${pref}play_video_1080` },
-            { header: "", title: "🎬 Video 4K",    description: "Ultra HD · archivo pesado",          id: `${pref}play_video_4k`   },
+            { header: "", title: "🎬 Video 720p",  description: "HD · la mejor disponible",           id: `${pref}play_video_720`  },
           ],
         },
         {
           title: "📁 VIDEO COMO DOCUMENTO",
           highlight_label: "MP4",
           rows: [
+            { header: "", title: "📁 Documento 144p",  description: "Archivo mp4 · el más liviano", id: `${pref}play_videodoc_144`  },
+            { header: "", title: "📁 Documento 240p",  description: "Archivo mp4 · liviano",      id: `${pref}play_videodoc_240`  },
             { header: "", title: "📁 Documento 360p",  description: "Archivo mp4 · estándar",     id: `${pref}play_videodoc_360`  },
             { header: "", title: "📁 Documento 720p",  description: "Archivo mp4 · HD",           id: `${pref}play_videodoc_720`  },
-            { header: "", title: "📁 Documento 1080p", description: "Archivo mp4 · Full HD",      id: `${pref}play_videodoc_1080` },
-            { header: "", title: "📁 Documento 4K",    description: "Archivo mp4 · Ultra HD",     id: `${pref}play_videodoc_4k`   },
           ],
         },
       ],
@@ -522,7 +582,7 @@ ${pieDescarga(conn)}
 
               await conn.sendMessage(chatId, { react: { text: docMode ? "📁" : "🎬", key: m.key } });
               await conn.sendMessage(chatId, {
-      contextInfo: canal(), text: `🎥 Descargando video (${useQuality === "4k" ? "4K" : useQuality + "p"})...` }, { quoted: m });
+      contextInfo: canal(), text: `🎥 Descargando video (${useQuality + "p"})...` }, { quoted: m });
               await downloadVideo(conn, { ...job, videoQuality: useQuality }, docMode, m);
             } else {
               await conn.sendMessage(chatId, {
@@ -536,8 +596,8 @@ ${pieDescarga(conn)}
 
 Ejemplos:
    • video 720
-   • videodoc 1080
-   • 2 4k`
+   • videodoc 360
+   • 2 240`
               }, { quoted: m });
             }
 
@@ -568,11 +628,11 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     return downloadAudio(conn, job, true, m);
   }
 
-  const videoDocMatch = id.match(/play_videodoc_(\d+|4k)$/i);
+  const videoDocMatch = id.match(/play_videodoc_(\d+)$/i);
   if (videoDocMatch) {
     const q = videoDocMatch[1].toLowerCase();
     if (VALID_QUALITIES.has(q)) {
-      const label = q === "4k" ? "4K" : `${q}p`;
+      const label = `${q}p`;
       await conn.sendMessage(chatId, { react: { text: "📁", key: m.key } });
       await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
@@ -580,11 +640,11 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
     }
   }
 
-  const videoMatch = id.match(/play_video_(\d+|4k)$/i);
+  const videoMatch = id.match(/play_video_(\d+)$/i);
   if (videoMatch) {
     const q = videoMatch[1].toLowerCase();
     if (VALID_QUALITIES.has(q)) {
-      const label = q === "4k" ? "4K" : `${q}p`;
+      const label = `${q}p`;
       await conn.sendMessage(chatId, { react: { text: "🎬", key: m.key } });
       await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `🎥 Descargando video (${label})...` }, { quoted: m });
@@ -594,7 +654,7 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
 
   if (id === `${pref}play_video` || id.endsWith("play_video")) {
     const q = job.videoQuality || DEFAULT_VIDEO_QUALITY;
-    const label = q === "4k" ? "4K" : `${q}p`;
+    const label = `${q}p`;
     await conn.sendMessage(chatId, { react: { text: "🎬", key: m.key } });
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `🎥 Descargando video (${label})...` }, { quoted: m });
@@ -603,7 +663,7 @@ async function handleMenuSelection(conn, job, selectedId, m, pref) {
 
   if (id === `${pref}play_videodoc` || id.endsWith("play_videodoc")) {
     const q = job.videoQuality || DEFAULT_VIDEO_QUALITY;
-    const label = q === "4k" ? "4K" : `${q}p`;
+    const label = `${q}p`;
     await conn.sendMessage(chatId, { react: { text: "📁", key: m.key } });
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `🎥 Descargando video como documento (${label})...` }, { quoted: m });
@@ -627,7 +687,7 @@ async function handleDownload(conn, job, choice, quoted) {
 
   const useQuality = job.videoQuality || DEFAULT_VIDEO_QUALITY;
   await conn.sendMessage(job.chatId, {
-      contextInfo: canal(), text: `⏳ Descargando video (${useQuality === "4k" ? "4K" : useQuality + "p"})...` }, { quoted: quoted || job.commandMsg });
+      contextInfo: canal(), text: `⏳ Descargando video (${useQuality + "p"})...` }, { quoted: quoted || job.commandMsg });
   return downloadVideo(conn, job, isDoc, quoted || job.commandMsg);
 }
 
@@ -654,7 +714,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   const base = safeName(title);
   const inFile = path.join(tmp, `${Date.now()}_in.bin`);
   try {
-    await downloadConRespaldo(resolved.candidatos, inFile);
+    await descargarMedia(resolved.candidatos, inFile);
   } catch (e) {
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `❌ Error descargando audio: ${e.message}` }, { quoted });
@@ -664,14 +724,20 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   const outMp3 = path.join(tmp, `${Date.now()}_${base}.mp3`);
   let outFile = outMp3;
 
-  try {
-    await new Promise((resolve, reject) => {
-      ffmpeg(inFile).audioCodec("libmp3lame").audioBitrate("128k").format("mp3").save(outMp3).on("end", resolve).on("error", reject);
-    });
-    try { fs.unlinkSync(inFile); } catch {}
-  } catch {
-    outFile = inFile;
-    asDocument = true;
+  // La API ya entrega el audio en mp3: volver a pasarlo por ffmpeg solo añadía
+  // espera antes de enviarlo. Solo convertimos si llegó en otro formato.
+  if (formatoDeAudio(inFile) === "mp3") {
+    fs.renameSync(inFile, outMp3);
+  } else {
+    try {
+      await new Promise((resolve, reject) => {
+        ffmpeg(inFile).audioCodec("libmp3lame").audioBitrate("128k").format("mp3").save(outMp3).on("end", resolve).on("error", reject);
+      });
+      try { fs.unlinkSync(inFile); } catch {}
+    } catch {
+      outFile = inFile;
+      asDocument = true;
+    }
   }
 
   const sizeMB = fileSizeMB(outFile);
@@ -687,7 +753,7 @@ async function downloadAudio(conn, job, asDocument, quoted) {
   await conn.sendMessage(
     chatId,
     {
-      [asDocument ? "document" : "audio"]: fs.readFileSync(outFile),
+      [asDocument ? "document" : "audio"]: { url: outFile },
       mimetype: "audio/mpeg",
       ptt: false,   // archivo MP3, no nota de voz
       fileName: `${base}.mp3`,
@@ -722,15 +788,25 @@ async function downloadVideo(conn, job, asDocument, quoted) {
 
   const tmp = ensureTmp();
   const base = safeName(title);
-  const tag = q === "4k" ? "4k" : `${q}p`;
+  const tag = `${q}p`;
   const file = path.join(tmp, `${Date.now()}_${base}_${tag}.mp4`);
 
+  let estado;
+
   try {
-    await downloadConRespaldo(resolved.candidatos, file);
+    estado = await descargarMedia(resolved.candidatos, file, esMp4);
   } catch (e) {
     await conn.sendMessage(chatId, {
       contextInfo: canal(), text: `❌ Error descargando video: ${e.message}` }, { quoted });
     return;
+  }
+
+  // Ningún enlace trajo un MP4: enviarlo como video daría "algo salió mal" al
+  // abrirlo, así que va como documento.
+  if (!estado.formatoOk) {
+    asDocument = true;
+    await conn.sendMessage(chatId, {
+      contextInfo: canal(), text: "⚠️ La API no devolvió un MP4 en esta calidad, te lo mando como documento." }, { quoted });
   }
 
   const sizeMB = fileSizeMB(file);
@@ -746,7 +822,7 @@ async function downloadVideo(conn, job, asDocument, quoted) {
   await conn.sendMessage(
     chatId,
     {
-      [asDocument ? "document" : "video"]: fs.readFileSync(file),
+      [asDocument ? "document" : "video"]: { url: file },
       mimetype: "video/mp4",
       fileName: `${base}_${tag}.mp4`,
     },
