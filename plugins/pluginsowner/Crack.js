@@ -162,6 +162,80 @@ const PATRONES = [
 const RUIDO = /(google|gtag|facebook|analytics|doubleclick|adservice|jquery|bootstrap|fontawesome|cloudflare\/|\.css|\.png|\.jpg|\.svg|\.woff|sentry|hotjar|onesignal|histats)/i;
 const SEÑAL = /(download|descarg|convert|dl|api|ajax|process|server|action|media|video|audio|mp3|mp4|search)/i;
 
+// Cuando el JavaScript hace $.post("./", { url: q, sid: sid, lngg: ln }), esos
+// nombres son exactamente los campos que hay que mandar. Vale más que la URL.
+const LLAMADAS_CON_CAMPOS = [
+  /\$\.\s*(?:post|get)\s*\(\s*[`'"]([^`'"]{1,200})[`'"]\s*,\s*\{([^{}]{0,500})\}/g,
+  /axios\s*\.\s*post\s*\(\s*[`'"]([^`'"]{1,200})[`'"]\s*,\s*\{([^{}]{0,500})\}/g,
+  /\$\.\s*ajax\s*\(\s*\{\s*url\s*:\s*[`'"]([^`'"]{1,200})[`'"][^{}]{0,200}data\s*:\s*\{([^{}]{0,500})\}/g
+];
+
+// Los valores suelen ser variables (sid: sid). Si la variable está declarada en
+// la página con un valor fijo, lo aprovechamos.
+function variablesGlobales(fuentes) {
+  const vars = {};
+  const re = /(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*['"]([^'"\n]{1,200})['"]/g;
+
+  for (const { texto } of fuentes) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(texto)) !== null) vars[m[1]] = m[2];
+  }
+
+  return vars;
+}
+
+function camposDeObjeto(texto = "", globales = {}) {
+  const campos = [];
+  const re = /(?:^|[,{\s])(?:([A-Za-z_$][\w$]*)|['"]([^'"]+)['"])\s*:\s*([^,}]+)/g;
+  let m;
+
+  while ((m = re.exec(texto)) !== null) {
+    const name = m[1] || m[2];
+    if (!name) continue;
+
+    const crudo = String(m[3] || "").trim();
+    const literal = crudo.match(/^['"]([^'"]*)['"]$/);
+    const identificador = crudo.match(/^[A-Za-z_$][\w$]*$/);
+
+    let valor = "";
+    if (literal) valor = literal[1];
+    else if (identificador && globales[crudo] !== undefined) valor = globales[crudo];
+
+    campos.push({ name, tipo: "text", valor });
+  }
+
+  return campos;
+}
+
+function analizarLlamadas(fuentes, base, globales) {
+  const encontrados = new Map();
+
+  for (const { texto, origen } of fuentes) {
+    for (const re of LLAMADAS_CON_CAMPOS) {
+      re.lastIndex = 0;
+      let m;
+
+      while ((m = re.exec(texto)) !== null) {
+        const ruta = m[1];
+        const campos = camposDeObjeto(m[2], globales);
+        if (!campos.length) continue;
+
+        const url = /^https?:\/\//i.test(ruta) ? ruta : absoluto(ruta, base);
+        if (!url || RUIDO.test(url)) continue;
+
+        const clave = url + "|" + campos.map((c) => c.name).join(",");
+
+        if (!encontrados.has(clave)) {
+          encontrados.set(clave, { url, via: "ajax con campos", origen, campos, puntos: 20 });
+        }
+      }
+    }
+  }
+
+  return [...encontrados.values()];
+}
+
 function analizarScripts(fuentes, base) {
   const vistos = new Map();
 
@@ -199,20 +273,39 @@ function analizarScripts(fuentes, base) {
   return [...vistos.values()].sort((a, b) => b.puntos - a.puntos).slice(0, MAX_CANDIDATOS);
 }
 
-function detectarProtecciones(html, cabeceras) {
+function detectarProtecciones(texto, cabeceras) {
   const avisos = [];
+  let bloqueante = "";
   const servidor = String(cabeceras?.server || "").toLowerCase();
 
-  if (servidor.includes("cloudflare") || /cf-browser-verification|challenge-platform/i.test(html)) {
+  // Un token que se genera dentro del navegador en cada envío no se puede
+  // reproducir desde el bot: conviene saberlo antes de perder el tiempo.
+  if (/grecaptcha\s*\.\s*execute/i.test(texto)) {
+    bloqueante = "reCAPTCHA v3 — el sitio genera un token nuevo en el navegador con cada envío y lo manda junto al formulario. Ese token no se puede fabricar desde el bot.";
+    avisos.push(bloqueante);
+  } else if (/recaptcha/i.test(texto)) {
+    avisos.push("reCAPTCHA presente en la página");
+  }
+
+  if (/hcaptcha\.com|h-captcha/i.test(texto)) {
+    bloqueante = bloqueante || "hCaptcha — hay que resolverlo en un navegador.";
+    avisos.push("hCaptcha");
+  }
+  if (/turnstile/i.test(texto)) {
+    bloqueante = bloqueante || "Cloudflare Turnstile — hay que resolverlo en un navegador.";
+    avisos.push("Cloudflare Turnstile");
+  }
+  if (servidor.includes("cloudflare") || /cf-browser-verification|challenge-platform/i.test(texto)) {
     avisos.push("Cloudflare — puede pedir verificación de navegador");
   }
-  if (/recaptcha/i.test(html)) avisos.push("reCAPTCHA");
-  if (/hcaptcha/i.test(html)) avisos.push("hCaptcha");
-  if (/turnstile/i.test(html)) avisos.push("Cloudflare Turnstile");
-  if (/csrf|_token|authenticity_token/i.test(html)) avisos.push("Token CSRF — hay que leerlo de la página antes de pedir");
-  if (/admin-ajax\.php/i.test(html)) avisos.push("WordPress admin-ajax — suele pedir un nonce");
+  if (/csrf|_token|authenticity_token/i.test(texto)) {
+    avisos.push("Token CSRF — se lee de la página antes de pedir (esto sí lo hace el bot)");
+  }
+  if (/admin-ajax\.php/i.test(texto)) {
+    avisos.push("WordPress admin-ajax — suele pedir un nonce");
+  }
 
-  return avisos;
+  return { avisos: [...new Set(avisos)], bloqueante };
 }
 
 // ---------- buscar el archivo en la respuesta ----------
@@ -762,10 +855,19 @@ plugin ya escrito listo para subir a la carpeta de comandos.`
     } catch {}
   }
 
+  const globales = variablesGlobales(fuentes);
+  const desdeLlamadas = analizarLlamadas(fuentes, base, globales);
   const desdeJs = analizarScripts(fuentes, base);
-  const protecciones = detectarProtecciones(html, portada.headers);
+
+  // El captcha puede estar en un script externo, no solo en el HTML.
+  const todoElTexto = fuentes.map((f) => f.texto).join("\n");
+  const { avisos: protecciones, bloqueante } = detectarProtecciones(todoElTexto, portada.headers);
+
+  const manual = normalizarUrl(args[2] || "");
 
   const candidatos = [
+    ...(manual ? [{ url: manual.url.toString(), via: "endpoint que me diste", puntos: 100 }] : []),
+    ...desdeLlamadas,
     ...formularios.map((f) => ({
       url: f.action,
       via: "formulario " + f.metodo.toUpperCase(),
@@ -773,7 +875,9 @@ plugin ya escrito listo para subir a la carpeta de comandos.`
       puntos: 10
     })),
     ...desdeJs
-  ].slice(0, MAX_CANDIDATOS);
+  ]
+    .sort((a, b) => b.puntos - a.puntos)
+    .slice(0, MAX_CANDIDATOS);
 
   if (!candidatos.length) {
     return conn.sendMessage(
@@ -811,8 +915,12 @@ ${lista}
     informe += `\n\n⚠️ *Protecciones detectadas*\n${protecciones.map((p) => "  • " + p).join("\n")}`;
   }
 
+  if (bloqueante) {
+    informe += `\n\n🛑 *Este sitio no se puede automatizar*\n${bloqueante}\nPruebo igual por si el servidor no lo comprueba, pero lo normal es que rechace.`;
+  }
+
   if (!urlPrueba) {
-    informe += `\n\n💡 Para comprobarlos de verdad y recibir el plugin ya escrito:\n${pref}${command} ${args[0]} <enlace de prueba>`;
+    informe += `\n\n💡 Para comprobarlos de verdad y recibir el plugin ya escrito:\n${pref}${command} ${args[0]} <enlace de prueba>\n\n🎯 Si ya sabes cuál es el bueno (lo viste en F12 → Red):\n${pref}${command} ${args[0]} <enlace> <endpoint>`;
 
     await conn.sendMessage(chatId, { contextInfo: canal(), text: informe }, { quoted: msg });
     return conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } });
@@ -845,6 +953,13 @@ ${lista}
   }
 
   if (!ganador) {
+    const motivo = bloqueante
+      ? `🛑 *Es el captcha.*\n${bloqueante}\n\nEste sitio hay que descartarlo: busca otro que no pida captcha.`
+      : `Puede ser por:
+  • token o cookie que hay que sacar de la página primero
+  • que el endpoint real solo aparezca al pulsar el botón
+  • que la página lo arme con JavaScript en el momento`;
+
     await conn.sendMessage(
       chatId,
       {
@@ -852,13 +967,14 @@ ${lista}
         text:
 `❌ Ninguno de los candidatos devolvió un enlace de descarga.
 
-Puede ser por:
-  • token o cookie que hay que sacar de la página primero
-  • captcha
-  • que el endpoint real solo aparezca al pulsar el botón
+${motivo}
 
-Los candidatos de arriba siguen siendo válidos como pista: mira en las
-herramientas del navegador (pestaña Red) cuál se dispara al descargar.`
+💡 Abre el sitio con F12 → pestaña *Red*, dale a descargar y mira qué
+petición sale. Luego pásamela directa:
+${pref}${command} ${args[0]} ${urlPrueba} <endpoint>
+
+O pruébala al vuelo con:
+${pref}get2 <endpoint> ${urlPrueba}`
       },
       { quoted: msg }
     );
@@ -913,7 +1029,7 @@ queda disponible como *${pref}${comando} <enlace>*.`
 };
 
 handler.command = ["crack"];
-handler.help = ["crack <url del sitio> [enlace de prueba]"];
+handler.help = ["crack <url del sitio> [enlace de prueba] [endpoint]"];
 handler.tags = ["owner"];
 
 export default handler;
