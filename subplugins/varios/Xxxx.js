@@ -1,11 +1,13 @@
-// plugins/xxx2.js — ESM-safe NSFW checker
+// subplugins/varios/Xxxx.js — Analizador NSFW con SKY NSFW DETECTION
 "use strict";
 
-import Checker from '../../libs/nsfw.js';
+import { analizarBuffer } from '../../libs/nsfwsky.js';
 import ffmpeg from 'fluent-ffmpeg';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+
+const UMBRAL = 70;
 
 // —— helpers ——
 function unwrapMessage(m) {
@@ -77,7 +79,7 @@ const handler = async (msg, { conn, wa }) => {
     );
   }
 
-  let buffer = null, mimeType = "image/png";
+  let buffer = null, nombre = "media.png";
   const tmpId  = (msg.key.id || String(Date.now())).replace(/[^a-zA-Z0-9]/g, "");
   const inPath = path.join(os.tmpdir(), `${tmpId}.mp4`);
   const outPath= path.join(os.tmpdir(), `${tmpId}.webp`);
@@ -103,13 +105,17 @@ const handler = async (msg, { conn, wa }) => {
       });
 
       buffer = await fs.promises.readFile(outPath);
-      mimeType = "image/webp";
+      nombre = "media.webp";
     } else if (quoted.imageMessage || quoted.stickerMessage) {
       const isSticker = !!quoted.stickerMessage;
       const node = isSticker ? quoted.stickerMessage : quoted.imageMessage;
       const type = isSticker ? "sticker" : "image";
       buffer = await downloadToBuffer(DL, type, node);
-      mimeType = node.mimetype || (isSticker ? "image/webp" : "image/png");
+
+      const mime = node.mimetype || (isSticker ? "image/webp" : "image/png");
+      let ext = String(mime).split("/")[1] || "png";
+      if (ext === "jpeg") ext = "jpg";
+      nombre = `media.${ext.split(";")[0]}`;
     } else {
       return conn.sendMessage(
         chatId,
@@ -118,24 +124,35 @@ const handler = async (msg, { conn, wa }) => {
       );
     }
 
-    // Analizar con Checker NSFW
-    const checker = new Checker();
-    const result  = await checker.response(buffer, mimeType);
-    if (!result?.status) throw new Error(result?.msg || "Error desconocido del analizador.");
+    // Analizar con SKY NSFW DETECTION
+    const r = await analizarBuffer(buffer, { nombre, umbral: UMBRAL });
 
-    const { NSFW, percentage, response } = result.result || {};
-    const estado = NSFW ? "🔞 *NSFW detectado*" : "✅ *Contenido seguro*";
+    if (!r.ok) throw new Error(`${r.code || "ERROR"} — ${r.error || "Fallo desconocido."}`);
 
-    await conn.sendMessage(
-      chatId,
-      { text: `${estado}\n📊 *Confianza:* ${percentage}\n\n${response || ""}`.trim() },
-      { quoted: msg }
-    );
+    const estado = r.esNsfw ? "🔞 *NSFW detectado*" : "✅ *Contenido seguro*";
+    const barra = "█".repeat(Math.round(r.percent / 10)).padEnd(10, "░");
 
-    try { await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }); } catch {}
+    const detalle = [
+      `${estado}`,
+      ``,
+      `📊 *NSFW:* ${r.porcentaje}%`,
+      `${barra}`,
+      `✅ *Seguro:* ${Number(r.safe_percent ?? 0).toFixed(2)}%`,
+      `📈 *Nivel:* ${r.veredicto || r.nivel || "—"}`,
+      `🛠️ *Recomendación:* ${r.accion || "—"}`,
+      `📁 *Tipo:* ${r.tipo || "—"}${r.formato ? ` (${r.formato})` : ""}`,
+      r.fotogramas ? `🎞️ *Fotogramas analizados:* ${r.fotogramas}` : "",
+      r.worst_frame ? `⚠️ *Peor fotograma:* ${Number(r.worst_frame.nsfw_percent ?? 0).toFixed(2)}% en el segundo ${r.worst_frame.time ?? "?"}` : "",
+      ``,
+      `_SKY NSFW DETECTION_`
+    ].filter(Boolean).join("\n");
+
+    await conn.sendMessage(chatId, { text: detalle }, { quoted: msg });
+
+    try { await conn.sendMessage(chatId, { react: { text: r.esNsfw ? "🔞" : "✅", key: msg.key } }); } catch {}
 
   } catch (err) {
-    console.error("[xxx2] NSFW error:", err?.message || err);
+    console.error("[xxx] NSFW error:", err?.message || err);
     await conn.sendMessage(
       chatId,
       { text: `❌ *Error al analizar el archivo:* ${err?.message || "Fallo desconocido."}` },

@@ -51,6 +51,7 @@ import readline from "readline";
 import pino from "pino";
 import axios from "axios";
 import { setConfig, getConfig, getAntideleteDB, saveAntideleteDB } from "./db.js";
+import { revisarNsfw } from "./libs/antiporno.js";
 import { startWebServer } from "./webserver.js";
 import { limpiarRespuestaBoton } from "./disenos.js";
 import "./config.js";
@@ -1639,6 +1640,14 @@ try {
 
   const chatId = m.key.remoteJid;
   const isGroupHere = typeof chatId === "string" && chatId.endsWith("@g.us");
+
+  // === 🔞 ANTIPORNO === (solo hace algo si el grupo lo tiene activado)
+  try {
+    const borradoPorNsfw = await revisarNsfw(sock, m, { owners: global.owner || [] });
+    if (borradoPorNsfw) return true;
+  } catch (e) {
+    console.error("[antiporno] fallo al revisar:", e?.message || e);
+  }
 
   const antilinkState = await getConfig(chatId, "antilink");
 
