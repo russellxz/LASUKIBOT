@@ -9,37 +9,14 @@
 
 "use strict";
 
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
-
 import { setConfig, getConfig } from "../db.js";
 import { analizarBuffer } from "./nsfwsky.js";
-
-const ejecutar = promisify(execFile);
-const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
+import { muestrasDeMedia } from "./muestras.js";
 
 const UMBRAL = 70;          // % a partir del cual se considera +18
 const AVISOS_MAX = 5;       // al quinto, fuera del grupo
 const MAX_MB = 25;          // límite que acepta la API
 const MAX_MB_DESCARGA = 120; // por encima de esto ni lo bajamos, para no reventar la RAM
-
-// De un video largo no se manda el video: se sacan un par de fotos y se
-// mandan como imagen. Pesa menos, la API no tiene que extraer fotogramas
-// (funciona aunque su servidor no tenga ffmpeg) y cubre dos momentos
-// separados en vez de cinco segundos seguidos.
-const CAPTURAS = 2;
-const CAPTURA_ANCHO = 640;
-const CAPTURA_1 = 60;       // minuto 1: el principio de un video no dice nada
-const CAPTURA_2 = 120;      // minuto 2
-const DURACION_CORTA = 15;  // por debajo de esto se manda el video entero
-
-// Si no se pueden sacar las fotos, se cae a un trozo de 5 s cortado con
-// -c copy, que tampoco recodifica.
-const CLIP_SEGUNDOS = 5;
-const CLIP_DESDE = 60;
 
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 
@@ -67,8 +44,17 @@ function multimediaDe(m) {
   const raiz = desenvolver(m);
   if (!raiz) return null;
 
-  if (raiz.imageMessage) return { tipo: "image", nodo: raiz.imageMessage, nombre: "media.jpg" };
-  if (raiz.stickerMessage) return { tipo: "sticker", nodo: raiz.stickerMessage, nombre: "media.webp" };
+  if (raiz.imageMessage) return { tipo: "image", nodo: raiz.imageMessage, nombre: "media.jpg", extension: "jpg", animado: false };
+  if (raiz.stickerMessage) {
+    return {
+      tipo: "sticker",
+      nodo: raiz.stickerMessage,
+      nombre: "media.webp",
+      extension: "webp",
+      // Un sticker animado se mira fotograma a fotograma; uno quieto va tal cual.
+      animado: !!raiz.stickerMessage.isAnimated
+    };
+  }
 
   if (raiz.videoMessage) {
     // Los GIF de WhatsApp son vídeos con gifPlayback.
@@ -77,12 +63,21 @@ function multimediaDe(m) {
       tipo: "video",
       nodo: raiz.videoMessage,
       nombre,
+      extension: "mp4",
+      animado: true,
       duracion: Number(raiz.videoMessage.seconds || 0)
     };
   }
 
   if (raiz.documentMessage && /^(image|video)\//i.test(raiz.documentMessage.mimetype || "")) {
-    return { tipo: "document", nodo: raiz.documentMessage, nombre: raiz.documentMessage.fileName || "media" };
+    const esVideo = /^video\//i.test(raiz.documentMessage.mimetype || "");
+    return {
+      tipo: "document",
+      nodo: raiz.documentMessage,
+      nombre: raiz.documentMessage.fileName || "media",
+      extension: esVideo ? "mp4" : "jpg",
+      animado: esVideo
+    };
   }
 
   return null;
@@ -96,123 +91,6 @@ async function descargar(conn, nodo, tipo) {
   for await (const trozo of stream) buf = Buffer.concat([buf, trozo]);
 
   return buf;
-}
-
-// ---------- recorte del video ----------
-function borrar(p) { try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch {} }
-
-// En qué segundos sacar las fotos. Vacío = mandar el video entero (es corto).
-function momentosDe(duracion) {
-  if (!duracion || duracion <= DURACION_CORTA) return [];
-
-  // Videos largos: el minuto 1 y el minuto 2, tal como se pidió.
-  if (duracion > CAPTURA_2 + 10) return [CAPTURA_1, CAPTURA_2];
-
-  // De 70 s a 2 min: el minuto 1 y un punto avanzado.
-  if (duracion > CAPTURA_1 + 10) return [CAPTURA_1, Math.floor(duracion * 0.8)];
-
-  // De 15 s a ~1 min: repartidos, evitando el principio.
-  return [Math.floor(duracion * 0.35), Math.floor(duracion * 0.7)].slice(0, CAPTURAS);
-}
-
-// -ss delante de -i salta directo al segundo pedido sin descodificar lo
-// anterior, y -vframes 1 saca una sola foto. Es lo más barato que hay.
-async function sacarCaptura(entrada, segundo, salida) {
-  await ejecutar(FFMPEG, [
-    "-y",
-    "-ss", String(segundo),   // antes de -i: salta sin descodificar lo anterior
-    "-i", entrada,
-    "-vframes", "1",
-    "-vf", `scale=${CAPTURA_ANCHO}:-2`,
-    "-q:v", "3",
-    "-loglevel", "error",
-    salida
-  ], { timeout: 30000 });
-
-  const foto = await fs.promises.readFile(salida);
-  return foto.length > 1024 ? foto : null;
-}
-
-// Trozo de 5 s sin recodificar, por si las fotos no salen.
-async function recortarVideo(entrada, inicio, salida) {
-  await ejecutar(FFMPEG, [
-    "-y",
-    "-ss", String(inicio),
-    "-i", entrada,
-    "-t", String(CLIP_SEGUNDOS),
-    "-c", "copy",
-    "-avoid_negative_ts", "make_zero",
-    "-movflags", "+faststart",
-    "-loglevel", "error",
-    salida
-  ], { timeout: 60000 });
-
-  const clip = await fs.promises.readFile(salida);
-  return clip.length > 2048 ? clip : null;
-}
-
-/**
- * Qué mandar a la API para un video. Devuelve una lista de muestras, porque
- * de un video largo se miran varios momentos y vale el peor.
- */
-async function muestrasDeVideo(buffer, duracion) {
-  const momentos = momentosDe(duracion);
-
-  if (!momentos.length) {
-    return [{ datos: buffer, nombre: "media.mp4", nota: "video completo" }];
-  }
-
-  const base = path.join(os.tmpdir(), `ap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-  const entrada = `${base}_in.mp4`;
-  const temporales = [entrada];
-
-  try {
-    await fs.promises.writeFile(entrada, buffer);
-
-    // 1) lo normal: un par de fotos
-    const muestras = [];
-
-    for (let i = 0; i < momentos.length && i < CAPTURAS; i++) {
-      const salida = `${base}_${i}.jpg`;
-      temporales.push(salida);
-
-      try {
-        const foto = await sacarCaptura(entrada, momentos[i], salida);
-        if (foto) {
-          muestras.push({
-            datos: foto,
-            nombre: `captura_${i + 1}.jpg`,
-            nota: `captura del segundo ${momentos[i]}`
-          });
-        }
-      } catch (e) {
-        console.error(`[antiporno] no pude capturar el segundo ${momentos[i]}:`, e?.message || e);
-      }
-    }
-
-    if (muestras.length) return muestras;
-
-    // 2) respaldo: un trozo de 5 s
-    const salidaClip = `${base}_clip.mp4`;
-    temporales.push(salidaClip);
-
-    try {
-      const clip = await recortarVideo(entrada, Math.min(CLIP_DESDE, momentos[0]), salidaClip);
-      if (clip) {
-        return [{ datos: clip, nombre: "media.mp4", nota: `${CLIP_SEGUNDOS}s de video` }];
-      }
-    } catch (e) {
-      console.error("[antiporno] tampoco pude recortar:", e?.message || e);
-    }
-
-    // 3) último recurso: el video tal cual
-    return [{ datos: buffer, nombre: "media.mp4", nota: "video completo (ffmpeg no disponible)" }];
-  } catch (e) {
-    console.error("[antiporno] error preparando el video:", e?.message || e);
-    return [{ datos: buffer, nombre: "media.mp4", nota: "video completo" }];
-  } finally {
-    for (const t of temporales) borrar(t);
-  }
 }
 
 // El bot principal guarda su configuración en activos.db; cada subbot tiene la
@@ -274,11 +152,14 @@ export async function revisarNsfw(conn, m, { owners = [] } = {}) {
     const buffer = await descargar(conn, media.nodo, media.tipo);
     if (!buffer?.length) return false;
 
-    // De un video se sacan un par de fotos; una imagen o un sticker van tal cual.
-    const muestras =
-      media.tipo === "video"
-        ? await muestrasDeVideo(buffer, media.duracion)
-        : [{ datos: buffer, nombre: media.nombre, nota: "" }];
+    // De un video o un sticker animado se sacan varias fotos repartidas; una
+    // imagen o un sticker quieto van tal cual.
+    const muestras = await muestrasDeMedia(buffer, {
+      animado: media.animado,
+      duracion: media.duracion || 0,
+      extension: media.extension || "mp4",
+      nombreOriginal: media.nombre
+    });
 
     // Se mira cada muestra y vale la peor, igual que hace la API con los
     // fotogramas de un video. En cuanto una da +18 paramos: ya está decidido
@@ -286,6 +167,7 @@ export async function revisarNsfw(conn, m, { owners = [] } = {}) {
     let r = null;
     let nota = "";
     let fallo = null;
+    let vistas = 0;
 
     for (const muestra of muestras) {
       if (muestra.datos.length > MAX_MB * 1024 * 1024) {
@@ -305,7 +187,13 @@ export async function revisarNsfw(conn, m, { owners = [] } = {}) {
         nota = muestra.nota;
       }
 
+      vistas++;
+
       if (parcial.esNsfw) break;
+
+      // Si las tres primeras salen claramente limpias, el resto no va a
+      // cambiar nada: no gastamos más peticiones.
+      if (vistas >= 3 && r.percent < 20) break;
     }
 
     // Si la API falla NO borramos: mejor dejar pasar algo dudoso que cargarse
