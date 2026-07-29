@@ -114,9 +114,9 @@ los dos. El contador de avisos es común a ambos.
 
 ⚠️ El bot necesita ser *administrador* para poder borrar y expulsar.
 
-📌 El detector de sangre acierta en torno al 60% de los casos y puede
-confundirse con líquidos rojos muy saturados. Sirve de ayuda, no es
-infalible.`
+📌 Borra a partir del *75%* de confianza. Está alto a propósito para
+que no borre por un líquido rojo o una salsa; a cambio, la sangre poco
+evidente se le puede escapar.`
     }, { quoted: msg });
     return;
   }
