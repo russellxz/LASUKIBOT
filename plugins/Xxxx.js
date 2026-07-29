@@ -5,7 +5,7 @@ import { analizarBuffer } from '../libs/nsfwsky.js';
 import { muestrasDeMedia } from '../libs/muestras.js';
 
 const UMBRAL = 70;
-const UMBRAL_GORE = 25;   // el que recomiendan los autores del detector
+const UMBRAL_GORE = 75;   // el mismo que usa el antigore para borrar
 
 // —— helpers ——
 function unwrapMessage(m) {
