@@ -17,6 +17,7 @@ import { pathToFileURL } from "url";
 import pino from "pino";
 import chalk from "chalk";
 import { canal, limpiarRespuestaBoton } from "./disenos.js";
+import { revisarNsfw } from "./libs/antiporno.js";
 
 const SUB_ROOT = path.resolve("./subbots");
 const SESSIONS_DIR = path.join(SUB_ROOT, "sessions");
@@ -1205,6 +1206,16 @@ export async function handleSubMessage(sock, number, m) {
         }
       }
     } catch {}
+  }
+
+  // === 🔞 ANTIPORNO === (solo hace algo si el grupo lo tiene activado)
+  if (isGroup && !fromMe) {
+    try {
+      const borradoPorNsfw = await revisarNsfw(sock, m, { owners: global.owner || [] });
+      if (borradoPorNsfw) return;
+    } catch (e) {
+      console.error("[antiporno] fallo al revisar:", e?.message || e);
+    }
   }
 
   // === 🔗 ANTILINK / LINKALL (con advertencias por subbot) ===
