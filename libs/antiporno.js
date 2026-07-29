@@ -12,20 +12,34 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import ffmpeg from "fluent-ffmpeg";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
 import { setConfig, getConfig } from "../db.js";
 import { analizarBuffer } from "./nsfwsky.js";
+
+const ejecutar = promisify(execFile);
+const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 
 const UMBRAL = 70;          // % a partir del cual se considera +18
 const AVISOS_MAX = 5;       // al quinto, fuera del grupo
 const MAX_MB = 25;          // límite que acepta la API
 const MAX_MB_DESCARGA = 120; // por encima de esto ni lo bajamos, para no reventar la RAM
 
-// De un video largo solo se manda un trozo. El corte es con -c copy, o sea
-// copiando bytes sin recodificar: cuesta milisegundos y ahorra subir 25 MB.
-const CLIP_SEGUNDOS = 5;
-const CLIP_DESDE = 60;      // desde el minuto 1: el principio suele ser inocente
+// De un video largo no se manda el video: se sacan un par de fotos y se
+// mandan como imagen. Pesa menos, la API no tiene que extraer fotogramas
+// (funciona aunque su servidor no tenga ffmpeg) y cubre dos momentos
+// separados en vez de cinco segundos seguidos.
+const CAPTURAS = 2;
+const CAPTURA_ANCHO = 640;
+const CAPTURA_1 = 60;       // minuto 1: el principio de un video no dice nada
+const CAPTURA_2 = 120;      // minuto 2
 const DURACION_CORTA = 15;  // por debajo de esto se manda el video entero
+
+// Si no se pueden sacar las fotos, se cae a un trozo de 5 s cortado con
+// -c copy, que tampoco recodifica.
+const CLIP_SEGUNDOS = 5;
+const CLIP_DESDE = 60;
 
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 
@@ -87,74 +101,118 @@ async function descargar(conn, nodo, tipo) {
 // ---------- recorte del video ----------
 function borrar(p) { try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch {} }
 
-// Desde dónde cortar. null = mandar el video entero (ya es corto).
-function inicioDelClip(duracion) {
-  if (!duracion || duracion <= DURACION_CORTA) return null;
+// En qué segundos sacar las fotos. Vacío = mandar el video entero (es corto).
+function momentosDe(duracion) {
+  if (!duracion || duracion <= DURACION_CORTA) return [];
 
-  // Si llega al minuto y pico, del minuto 1 en adelante.
-  if (duracion > CLIP_DESDE + CLIP_SEGUNDOS) return CLIP_DESDE;
+  // Videos largos: el minuto 1 y el minuto 2, tal como se pidió.
+  if (duracion > CAPTURA_2 + 10) return [CAPTURA_1, CAPTURA_2];
 
-  // Entre 15 s y ~1 min: por el primer tercio, que ya no es la portada.
-  return Math.max(0, Math.floor(duracion * 0.35));
+  // De 70 s a 2 min: el minuto 1 y un punto avanzado.
+  if (duracion > CAPTURA_1 + 10) return [CAPTURA_1, Math.floor(duracion * 0.8)];
+
+  // De 15 s a ~1 min: repartidos, evitando el principio.
+  return [Math.floor(duracion * 0.35), Math.floor(duracion * 0.7)].slice(0, CAPTURAS);
 }
 
-// -ss delante de -i busca por el índice del archivo sin descodificar, y
-// -c copy pasa los bytes tal cual. El corte cae en el fotograma clave más
-// cercano, que para esto da igual.
-async function recortarVideo(buffer, inicio) {
+// -ss delante de -i salta directo al segundo pedido sin descodificar lo
+// anterior, y -vframes 1 saca una sola foto. Es lo más barato que hay.
+async function sacarCaptura(entrada, segundo, salida) {
+  await ejecutar(FFMPEG, [
+    "-y",
+    "-ss", String(segundo),   // antes de -i: salta sin descodificar lo anterior
+    "-i", entrada,
+    "-vframes", "1",
+    "-vf", `scale=${CAPTURA_ANCHO}:-2`,
+    "-q:v", "3",
+    "-loglevel", "error",
+    salida
+  ], { timeout: 30000 });
+
+  const foto = await fs.promises.readFile(salida);
+  return foto.length > 1024 ? foto : null;
+}
+
+// Trozo de 5 s sin recodificar, por si las fotos no salen.
+async function recortarVideo(entrada, inicio, salida) {
+  await ejecutar(FFMPEG, [
+    "-y",
+    "-ss", String(inicio),
+    "-i", entrada,
+    "-t", String(CLIP_SEGUNDOS),
+    "-c", "copy",
+    "-avoid_negative_ts", "make_zero",
+    "-movflags", "+faststart",
+    "-loglevel", "error",
+    salida
+  ], { timeout: 60000 });
+
+  const clip = await fs.promises.readFile(salida);
+  return clip.length > 2048 ? clip : null;
+}
+
+/**
+ * Qué mandar a la API para un video. Devuelve una lista de muestras, porque
+ * de un video largo se miran varios momentos y vale el peor.
+ */
+async function muestrasDeVideo(buffer, duracion) {
+  const momentos = momentosDe(duracion);
+
+  if (!momentos.length) {
+    return [{ datos: buffer, nombre: "media.mp4", nota: "video completo" }];
+  }
+
   const base = path.join(os.tmpdir(), `ap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
   const entrada = `${base}_in.mp4`;
-  const salida = `${base}_out.mp4`;
+  const temporales = [entrada];
 
   try {
     await fs.promises.writeFile(entrada, buffer);
 
-    await new Promise((listo, fallo) => {
-      ffmpeg(entrada)
-        .inputOptions([`-ss ${inicio}`])
-        .outputOptions([
-          `-t ${CLIP_SEGUNDOS}`,
-          "-c", "copy",
-          "-avoid_negative_ts", "make_zero",
-          "-movflags", "+faststart"
-        ])
-        .save(salida)
-        .on("end", listo)
-        .on("error", fallo);
-    });
+    // 1) lo normal: un par de fotos
+    const muestras = [];
 
-    const clip = await fs.promises.readFile(salida);
-    return clip.length > 2048 ? clip : null;
+    for (let i = 0; i < momentos.length && i < CAPTURAS; i++) {
+      const salida = `${base}_${i}.jpg`;
+      temporales.push(salida);
+
+      try {
+        const foto = await sacarCaptura(entrada, momentos[i], salida);
+        if (foto) {
+          muestras.push({
+            datos: foto,
+            nombre: `captura_${i + 1}.jpg`,
+            nota: `captura del segundo ${momentos[i]}`
+          });
+        }
+      } catch (e) {
+        console.error(`[antiporno] no pude capturar el segundo ${momentos[i]}:`, e?.message || e);
+      }
+    }
+
+    if (muestras.length) return muestras;
+
+    // 2) respaldo: un trozo de 5 s
+    const salidaClip = `${base}_clip.mp4`;
+    temporales.push(salidaClip);
+
+    try {
+      const clip = await recortarVideo(entrada, Math.min(CLIP_DESDE, momentos[0]), salidaClip);
+      if (clip) {
+        return [{ datos: clip, nombre: "media.mp4", nota: `${CLIP_SEGUNDOS}s de video` }];
+      }
+    } catch (e) {
+      console.error("[antiporno] tampoco pude recortar:", e?.message || e);
+    }
+
+    // 3) último recurso: el video tal cual
+    return [{ datos: buffer, nombre: "media.mp4", nota: "video completo (ffmpeg no disponible)" }];
   } catch (e) {
-    console.error(`[antiporno] no pude recortar desde ${inicio}s:`, e?.message || e);
-    return null;
+    console.error("[antiporno] error preparando el video:", e?.message || e);
+    return [{ datos: buffer, nombre: "media.mp4", nota: "video completo" }];
   } finally {
-    borrar(entrada);
-    borrar(salida);
+    for (const t of temporales) borrar(t);
   }
-}
-
-// Devuelve lo que hay que mandar a la API y una nota de qué se analizó.
-async function prepararVideo(buffer, duracion) {
-  const inicio = inicioDelClip(duracion);
-
-  if (inicio === null) return { datos: buffer, nota: "video completo" };
-
-  let clip = await recortarVideo(buffer, inicio);
-  let desde = inicio;
-
-  // Si el corte del minuto 1 sale vacío (video raro, sin índice), probamos
-  // desde el principio antes de rendirnos.
-  if (!clip && inicio > 0) {
-    clip = await recortarVideo(buffer, 0);
-    desde = 0;
-  }
-
-  if (clip) {
-    return { datos: clip, nota: `${CLIP_SEGUNDOS}s desde el segundo ${desde}` };
-  }
-
-  return { datos: buffer, nota: "video completo (no se pudo recortar)" };
 }
 
 // El bot principal guarda su configuración en activos.db; cada subbot tiene la
@@ -216,28 +274,44 @@ export async function revisarNsfw(conn, m, { owners = [] } = {}) {
     const buffer = await descargar(conn, media.nodo, media.tipo);
     if (!buffer?.length) return false;
 
-    // De un video largo solo se manda un trozo: cabe en el límite de la API
-    // y se analiza en un momento.
-    let datos = buffer;
+    // De un video se sacan un par de fotos; una imagen o un sticker van tal cual.
+    const muestras =
+      media.tipo === "video"
+        ? await muestrasDeVideo(buffer, media.duracion)
+        : [{ datos: buffer, nombre: media.nombre, nota: "" }];
+
+    // Se mira cada muestra y vale la peor, igual que hace la API con los
+    // fotogramas de un video. En cuanto una da +18 paramos: ya está decidido
+    // y no hace falta gastar otra petición.
+    let r = null;
     let nota = "";
+    let fallo = null;
 
-    if (media.tipo === "video") {
-      const preparado = await prepararVideo(buffer, media.duracion);
-      datos = preparado.datos;
-      nota = preparado.nota;
+    for (const muestra of muestras) {
+      if (muestra.datos.length > MAX_MB * 1024 * 1024) {
+        console.log(`[antiporno] muestra descartada: ${(muestra.datos.length / 1024 / 1024).toFixed(1)} MB pasa el límite de la API`);
+        continue;
+      }
+
+      const parcial = await analizarBuffer(muestra.datos, { nombre: muestra.nombre, umbral: UMBRAL });
+
+      if (!parcial.ok) {
+        fallo = parcial;
+        continue;
+      }
+
+      if (!r || parcial.percent > r.percent) {
+        r = parcial;
+        nota = muestra.nota;
+      }
+
+      if (parcial.esNsfw) break;
     }
-
-    if (datos.length > MAX_MB * 1024 * 1024) {
-      console.log(`[antiporno] descartado tras preparar: ${(datos.length / 1024 / 1024).toFixed(1)} MB pasa el límite de la API`);
-      return false;
-    }
-
-    const r = await analizarBuffer(datos, { nombre: media.nombre, umbral: UMBRAL });
 
     // Si la API falla NO borramos: mejor dejar pasar algo dudoso que cargarse
     // una foto normal porque el servidor estaba caído.
-    if (!r.ok) {
-      console.error("[antiporno]", r.code, r.error);
+    if (!r) {
+      if (fallo) console.error("[antiporno]", fallo.code, fallo.error);
       return false;
     }
 
