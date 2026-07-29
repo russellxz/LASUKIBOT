@@ -9,6 +9,7 @@
 export const API_NSFW = "https://nsfwsky.ultraplus.click/api/v1";
 
 const TIMEOUT = 90000;
+export const UMBRAL_GORE = 25;   // los autores del detector recomiendan 25, no 70
 const REINTENTOS = 3;
 const ESPERA_REINTENTO = 3000;
 
@@ -20,19 +21,51 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function normalizar(data) {
   const percent = Number(data?.percent ?? data?.nsfw_percent ?? 0);
+  const gorePercent = Number(data?.gore?.percent ?? 0);
+
+  // checked es la fuente de la verdad: si una categoría no está ahí, su
+  // porcentaje viene a 0 y eso NO significa que esté limpia.
+  const revisado = Array.isArray(data?.checked) ? data.checked : ["nsfw", "gore"];
 
   return {
     ...data,
     percent,
     porcentaje: percent.toFixed(2),
-    esNsfw: data?.is_nsfw === true,
+    esNsfw: data?.is_nsfw === true || data?.flags?.nsfw === true,
     nivel: data?.level || "",
     veredicto: data?.verdict || "",
     accion: data?.action || "",
     tipo: data?.media?.type || "",
     formato: data?.media?.format || "",
-    fotogramas: data?.media?.frames_analyzed ?? null
+    fotogramas: data?.media?.frames_analyzed ?? null,
+
+    // ---- sangre / gore ----
+    esGore: data?.is_gore === true || data?.gore?.detected === true || data?.flags?.gore === true,
+    gorePercent,
+    gorePorcentaje: gorePercent.toFixed(2),
+    goreNivel: data?.gore?.level || "",
+    goreZonas: data?.gore?.detections ?? null,
+    goreDisponible: data?.gore?.available !== false,
+
+    revisado,
+    seRevisoNsfw: revisado.includes("nsfw"),
+    seRevisoGore: revisado.includes("gore")
   };
+}
+
+// La API acepta ?checks=nsfw, ?checks=gore o las dos. Pidiendo solo lo que el
+// grupo tiene activado tarda aproximadamente la mitad.
+function construirUrl({ umbral, umbralGore, checks }) {
+  const q = new URLSearchParams();
+
+  q.set("threshold", String(umbral));
+  q.set("gore_threshold", String(umbralGore));
+
+  if (Array.isArray(checks) && checks.length && checks.length < 2) {
+    q.set("checks", checks.join(","));
+  }
+
+  return `${API_NSFW}/check?${q.toString()}`;
 }
 
 /**
@@ -42,7 +75,13 @@ function normalizar(data) {
  * @param {string} opciones.nombre  nombre con el que se sube (ayuda a la API a saber el formato)
  * @param {number} opciones.umbral  porcentaje a partir del cual se marca como +18
  */
-export async function analizarBuffer(buffer, { nombre = "media", umbral = 70, timeout = TIMEOUT } = {}) {
+export async function analizarBuffer(buffer, {
+  nombre = "media",
+  umbral = 70,
+  umbralGore = UMBRAL_GORE,
+  checks = ["nsfw", "gore"],
+  timeout = TIMEOUT
+} = {}) {
   if (!buffer?.length) return { ok: false, code: "NO_INPUT", error: "No se recibió ningún archivo." };
 
   let ultimo = { ok: false, code: "UNKNOWN", error: "No se pudo analizar." };
@@ -55,7 +94,7 @@ export async function analizarBuffer(buffer, { nombre = "media", umbral = 70, ti
       const form = new FormData();
       form.append("file", new Blob([buffer]), nombre);
 
-      const res = await fetch(`${API_NSFW}/check?threshold=${encodeURIComponent(umbral)}`, {
+      const res = await fetch(construirUrl({ umbral, umbralGore, checks }), {
         method: "POST",
         body: form,
         signal: control.signal
@@ -91,12 +130,17 @@ export async function analizarBuffer(buffer, { nombre = "media", umbral = 70, ti
 }
 
 /** Analiza una imagen que ya está publicada en internet. */
-export async function analizarUrl(url, { umbral = 70, timeout = TIMEOUT } = {}) {
+export async function analizarUrl(url, {
+  umbral = 70,
+  umbralGore = UMBRAL_GORE,
+  checks = ["nsfw", "gore"],
+  timeout = TIMEOUT
+} = {}) {
   const control = new AbortController();
   const corte = setTimeout(() => control.abort(), timeout);
 
   try {
-    const res = await fetch(`${API_NSFW}/check?threshold=${encodeURIComponent(umbral)}`, {
+    const res = await fetch(construirUrl({ umbral, umbralGore, checks }), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),

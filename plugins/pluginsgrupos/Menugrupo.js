@@ -33,6 +33,7 @@ const handler = async (msg, { conn }) => {
           `${p}antis on/off`,
           `${p}antidelete on/off`,
           `${p}antiporno on/off`,
+          `${p}antigore on/off`,
           `${p}antiarabe on/off`,
           `${p}configrupo`,
           `${p}addco (comando a sticker)`,
