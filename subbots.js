@@ -33,7 +33,6 @@ const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 const subbots = new Map();
 
 let baileysMod = null;
-let cachedVersion = null;
 let subPluginsPromise = null;
 
 const silentLogger = pino({ level: "silent" });
@@ -177,20 +176,10 @@ async function getBaileys() {
   return baileysMod;
 }
 
-async function getWaVersion(B) {
-  if (cachedVersion) return cachedVersion;
-  try {
-    const fn =
-      typeof B.fetchLatestWaWebVersion === "function"
-        ? B.fetchLatestWaWebVersion
-        : B.fetchLatestBaileysVersion;
-    const { version } = await fn();
-    cachedVersion = version;
-  } catch {
-    cachedVersion = undefined;
-  }
-  return cachedVersion;
-}
+// ℹ️ Ya no se fija la versión a mano: ultra-baileys le pregunta a WhatsApp qué
+// versión de WA Web está sirviendo en cada conexión (y la cachea 1 hora por su
+// cuenta). Fijarla aquí apagaba esa sincronización y, encima, se guardaba para
+// toda la vida del proceso: a las horas ya estaba vieja → 405/428.
 
 // ------------------------------------------------------------
 // Plugins de subbots (se cargan UNA vez y se comparten en memoria)
@@ -1743,7 +1732,6 @@ async function connectSubbot(num, entry) {
     downloadContentFromMessage
   } = B;
 
-  const version = await getWaVersion(B);
   const sessionDir = subSessionDir(num);
   if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
@@ -1763,14 +1751,13 @@ async function connectSubbot(num, entry) {
   const metaCache = new Map();
 
   const sock = makeWASocket({
-    version,
+    // sin `version`: se usa la que WhatsApp esté sirviendo ahora mismo
     logger: silentLogger,
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, silentLogger)
     },
-    browser: ["Ubuntu", "Chrome", "20.0.04"],
-    printQRInTerminal: false,
+    browser: ["Mac OS", "Chrome", "14.4.1"],
     markOnlineOnConnect: false,
     syncFullHistory: false,
     generateHighQualityLinkPreview: false,
