@@ -322,12 +322,13 @@ let phoneNumber = "";
       }
 
       const sock = makeWASocket({
-        // 📌 Versión de WA Web que hoy sí deja vincular (la de tu amigo).
-        // Con la librería nueva esto es solo el RESPALDO: si se puede hablar
-        // con WhatsApp, gana la versión que esté sirviendo en vivo.
-        // ¿Quieres usar SIEMPRE esta y nunca la de en vivo? pon syncWaWebVersion: false
+        // 📌 Versión de WA Web FIJA (la de tu amigo, que sí deja vincular).
+        // syncWaWebVersion en false = manda esta y NADA más; no se consulta la
+        // que WhatsApp sirva en vivo. Cuando WhatsApp vuelva a moverse y falle
+        // la vinculación, cambia el número de abajo (o pon true para que la
+        // busque sola otra vez).
         version: [2, 3000, 1044006379],
-        syncWaWebVersion: true,
+        syncWaWebVersion: false,
         logger: pino({ level: "silent" }),
         auth: {
           creds: state.creds,
