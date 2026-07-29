@@ -209,7 +209,17 @@ let phoneNumber = "";
   // 🎨 Banner de ultra-baileys AQUÍ: después de los plugins y del figlet, y
   // antes de las instrucciones de vinculación. Solo se imprime una vez por
   // proceso, así que ya no vuelve a salir al crear el socket ni con cada subbot.
-  try { B.printBanner?.(); } catch {}
+  //
+  // Si printBanner NO existe, la librería instalada es la vieja (el banner
+  // saldrá recién al crear el socket, o sea después de escribir el número) y
+  // tampoco trae la sincronización de versión de WA Web.
+  if (typeof B.printBanner === "function") {
+    B.printBanner();
+  } else {
+    console.log(chalk.red("\n⚠️  Estás usando una versión VIEJA de ultra-baileys."));
+    console.log(chalk.yellow("   Instálala así y vuelve a arrancar:"));
+    console.log(chalk.gray("   npm i github:russellxz/ultra-baileys#claude/baileys-connection-pairing-l7wixg\n"));
+  }
 
   // 🧹 Limpieza de sesión a medio vincular (por eso a veces no volvía a salir
   // el código): creds.json se escribe apenas se pide el código, con tu número
@@ -312,6 +322,12 @@ let phoneNumber = "";
       }
 
       const sock = makeWASocket({
+        // 📌 Versión de WA Web que hoy sí deja vincular (la de tu amigo).
+        // Con la librería nueva esto es solo el RESPALDO: si se puede hablar
+        // con WhatsApp, gana la versión que esté sirviendo en vivo.
+        // ¿Quieres usar SIEMPRE esta y nunca la de en vivo? pon syncWaWebVersion: false
+        version: [2, 3000, 1044006379],
+        syncWaWebVersion: true,
         logger: pino({ level: "silent" }),
         auth: {
           creds: state.creds,
