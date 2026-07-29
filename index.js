@@ -206,6 +206,26 @@ let phoneNumber = "";
     ? fetchLatestWaWebVersion
     : fetchLatestBaileysVersion;
 
+  // 🎨 Banner de ultra-baileys AQUÍ: después de los plugins y del figlet, y
+  // antes de las instrucciones de vinculación. Solo se imprime una vez por
+  // proceso, así que ya no vuelve a salir al crear el socket ni con cada subbot.
+  try { B.printBanner?.(); } catch {}
+
+  // 🧹 Limpieza de sesión a medio vincular (por eso a veces no volvía a salir
+  // el código): creds.json se escribe apenas se pide el código, con tu número
+  // dentro pero SIN "registered". Si arrancas otra vez con eso, el bot cree que
+  // ya está vinculado e intenta iniciar sesión con un número que WhatsApp nunca
+  // aprobó → 401 y ni código ni conexión. Se borra y se empieza limpio.
+  try {
+    if (fs.existsSync("./sessions/creds.json")) {
+      const credsPrevias = JSON.parse(fs.readFileSync("./sessions/creds.json", "utf-8"));
+      if (!credsPrevias?.registered) {
+        console.log(chalk.yellow("🧹 Vinculación anterior sin terminar. Limpiando ./sessions..."));
+        fs.rmSync("./sessions", { recursive: true, force: true });
+      }
+    }
+  } catch {}
+
   const { state, saveCreds } = await useMultiFileAuthState("./sessions");
 
   const yaVinculado = fs.existsSync("./sessions/creds.json");
@@ -244,8 +264,12 @@ let phoneNumber = "";
 
   async function startBot() {
     try {
-      // ✅ usa la función de versión disponible en tu Baileys
-      const { version } = await getWaVersion();
+      // ⚠️ IMPORTANTE: ya no se fija la versión aquí.
+      // getWaVersion() devuelve la versión vieja incluida en la librería SIN
+      // avisar cuando no logra hablar con WhatsApp, y pasarla por `version`
+      // apaga la sincronización automática de ultra-baileys. Sin esta línea,
+      // el socket pregunta en cada conexión qué versión sirve WhatsApp y
+      // avisa en consola si tuvo que usar la incluida.
 
       // 🚀 Caché de metadata de grupos: evita que Baileys consulte la
       // metadata del grupo en CADA envío (gran parte de la latencia en grupos).
@@ -288,7 +312,6 @@ let phoneNumber = "";
       }
 
       const sock = makeWASocket({
-        version,
         logger: pino({ level: "silent" }),
         auth: {
           creds: state.creds,
