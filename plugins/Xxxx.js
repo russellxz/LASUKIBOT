@@ -2,10 +2,7 @@
 "use strict";
 
 import { analizarBuffer } from '../libs/nsfwsky.js';
-import ffmpeg from 'fluent-ffmpeg';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import { muestrasDeMedia } from '../libs/muestras.js';
 
 const UMBRAL = 70;
 
@@ -54,13 +51,53 @@ async function downloadToBuffer(DL, type, content) {
   return buf;
 }
 
-function safeUnlink(p) { try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch {} }
+// Qué se ha citado y cómo hay que tratarlo.
+function queEs(quoted) {
+  if (quoted.videoMessage) {
+    return {
+      tipo: "video",
+      nodo: quoted.videoMessage,
+      extension: "mp4",
+      animado: true,
+      duracion: Number(quoted.videoMessage.seconds || 0),
+      nombre: "media.mp4"
+    };
+  }
+
+  if (quoted.stickerMessage) {
+    const animado = !!quoted.stickerMessage.isAnimated;
+    return {
+      tipo: animado ? "sticker animado" : "sticker",
+      nodo: quoted.stickerMessage,
+      extension: "webp",
+      animado,
+      duracion: 0,
+      nombre: "media.webp"
+    };
+  }
+
+  if (quoted.imageMessage) {
+    const mime = quoted.imageMessage.mimetype || "image/jpeg";
+    let ext = String(mime).split("/")[1]?.split(";")[0] || "jpg";
+    if (ext === "jpeg") ext = "jpg";
+
+    return {
+      tipo: "imagen",
+      nodo: quoted.imageMessage,
+      extension: ext,
+      animado: false,
+      duracion: 0,
+      nombre: `media.${ext}`
+    };
+  }
+
+  return null;
+}
 
 // —— handler ——
 const handler = async (msg, { conn, wa }) => {
   const chatId = msg.key.remoteJid;
 
-  // downloader ESM-safe
   let DL;
   try { DL = await getDownloader(wa); }
   catch (e) {
@@ -79,77 +116,77 @@ const handler = async (msg, { conn, wa }) => {
     );
   }
 
-  let buffer = null, nombre = "media.png";
-  const tmpId  = (msg.key.id || String(Date.now())).replace(/[^a-zA-Z0-9]/g, "");
-  const inPath = path.join(os.tmpdir(), `${tmpId}.mp4`);
-  const outPath= path.join(os.tmpdir(), `${tmpId}.webp`);
+  const media = queEs(quoted);
+  if (!media) {
+    return conn.sendMessage(
+      chatId,
+      { text: "❌ *Tipo no soportado. Usa video, imagen o sticker.*" },
+      { quoted: msg }
+    );
+  }
 
   try {
-    if (quoted.videoMessage) {
-      // Descargar video y extraer 1 frame → webp 512x512
-      const vbuf = await downloadToBuffer(DL, "video", quoted.videoMessage);
-      await fs.promises.writeFile(inPath, vbuf);
+    const descarga = media.tipo === "video" ? "video" : media.tipo.startsWith("sticker") ? "sticker" : "image";
+    const buffer = await downloadToBuffer(DL, descarga, media.nodo);
 
-      await new Promise((resolve, reject) => {
-        ffmpeg(inPath)
-          .outputOptions([
-            "-vframes 1",
-            "-vf",
-            "thumbnail,scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=white@0.0,setsar=1",
-            "-vcodec", "libwebp",
-            "-q:v", "80"
-          ])
-          .save(outPath)
-          .on("end", resolve)
-          .on("error", reject);
-      });
+    // De un video o un sticker animado se sacan varias fotos repartidas a lo
+    // largo de la duración; una imagen o un sticker quieto van tal cual.
+    const muestras = await muestrasDeMedia(buffer, {
+      animado: media.animado,
+      duracion: media.duracion,
+      extension: media.extension,
+      nombreOriginal: media.nombre
+    });
 
-      buffer = await fs.promises.readFile(outPath);
-      nombre = "media.webp";
-    } else if (quoted.imageMessage || quoted.stickerMessage) {
-      const isSticker = !!quoted.stickerMessage;
-      const node = isSticker ? quoted.stickerMessage : quoted.imageMessage;
-      const type = isSticker ? "sticker" : "image";
-      buffer = await downloadToBuffer(DL, type, node);
+    const analisis = [];
+    let fallo = null;
 
-      const mime = node.mimetype || (isSticker ? "image/webp" : "image/png");
-      let ext = String(mime).split("/")[1] || "png";
-      if (ext === "jpeg") ext = "jpg";
-      nombre = `media.${ext.split(";")[0]}`;
-    } else {
-      return conn.sendMessage(
-        chatId,
-        { text: "❌ *Tipo no soportado. Usa video, imagen o sticker.*" },
-        { quoted: msg }
-      );
+    for (const muestra of muestras) {
+      const r = await analizarBuffer(muestra.datos, { nombre: muestra.nombre, umbral: UMBRAL });
+
+      if (!r.ok) { fallo = r; continue; }
+
+      analisis.push({ ...r, nota: muestra.nota });
     }
 
-    // Analizar con SKY NSFW DETECTION
-    const r = await analizarBuffer(buffer, { nombre, umbral: UMBRAL });
+    if (!analisis.length) {
+      throw new Error(fallo ? `${fallo.code || "ERROR"} — ${fallo.error || "Fallo desconocido."}` : "No se pudo analizar.");
+    }
 
-    if (!r.ok) throw new Error(`${r.code || "ERROR"} — ${r.error || "Fallo desconocido."}`);
+    // Vale el peor, igual que hace la API con los fotogramas de un video.
+    const peor = analisis.reduce((a, b) => (b.percent > a.percent ? b : a));
 
-    const estado = r.esNsfw ? "🔞 *NSFW detectado*" : "✅ *Contenido seguro*";
-    const barra = "█".repeat(Math.round(r.percent / 10)).padEnd(10, "░");
+    const estado = peor.esNsfw ? "🔞 *NSFW detectado*" : "✅ *Contenido seguro*";
+    const barra = "█".repeat(Math.round(peor.percent / 10)).padEnd(10, "░");
+
+    // Con varias muestras se enseña el desglose, para ver en qué momento salta.
+    const desglose =
+      analisis.length > 1
+        ? "\n\n🎞️ *Momentos analizados:*\n" +
+          analisis
+            .map((a) => `   • ${a.nota}: ${a.porcentaje}%${a.esNsfw ? " 🔞" : ""}`)
+            .join("\n")
+        : "";
 
     const detalle = [
       `${estado}`,
       ``,
-      `📊 *NSFW:* ${r.porcentaje}%`,
+      `📊 *NSFW:* ${peor.porcentaje}%`,
       `${barra}`,
-      `✅ *Seguro:* ${Number(r.safe_percent ?? 0).toFixed(2)}%`,
-      `📈 *Nivel:* ${r.veredicto || r.nivel || "—"}`,
-      `🛠️ *Recomendación:* ${r.accion || "—"}`,
-      `📁 *Tipo:* ${r.tipo || "—"}${r.formato ? ` (${r.formato})` : ""}`,
-      r.fotogramas ? `🎞️ *Fotogramas analizados:* ${r.fotogramas}` : "",
-      r.worst_frame ? `⚠️ *Peor fotograma:* ${Number(r.worst_frame.nsfw_percent ?? 0).toFixed(2)}% en el segundo ${r.worst_frame.time ?? "?"}` : "",
+      `✅ *Seguro:* ${Number(peor.safe_percent ?? 0).toFixed(2)}%`,
+      `📈 *Nivel:* ${peor.veredicto || peor.nivel || "—"}`,
+      `🛠️ *Recomendación:* ${peor.accion || "—"}`,
+      `📁 *Tipo:* ${media.tipo}${peor.formato ? ` (${peor.formato})` : ""}`,
+      analisis.length === 1 && peor.nota ? `🎞️ *Analizado:* ${peor.nota}` : "",
+      peor.fotogramas > 1 ? `🎬 *Fotogramas de la API:* ${peor.fotogramas}` : "",
+      desglose,
       ``,
       `_SKY NSFW DETECTION_`
     ].filter(Boolean).join("\n");
 
     await conn.sendMessage(chatId, { text: detalle }, { quoted: msg });
 
-    try { await conn.sendMessage(chatId, { react: { text: r.esNsfw ? "🔞" : "✅", key: msg.key } }); } catch {}
+    try { await conn.sendMessage(chatId, { react: { text: peor.esNsfw ? "🔞" : "✅", key: msg.key } }); } catch {}
 
   } catch (err) {
     console.error("[xxx] NSFW error:", err?.message || err);
@@ -159,9 +196,6 @@ const handler = async (msg, { conn, wa }) => {
       { quoted: msg }
     );
     try { await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } }); } catch {}
-  } finally {
-    safeUnlink(inPath);
-    safeUnlink(outPath);
   }
 };
 
