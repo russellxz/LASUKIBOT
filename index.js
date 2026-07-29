@@ -196,33 +196,19 @@ let phoneNumber = "";
     default: makeWASocket,
     useMultiFileAuthState,
     makeCacheableSignalKeyStore,
+    fetchLatestWaWebVersion,    // puede existir solo en versiones nuevas
+    fetchLatestBaileysVersion,  // existe en 6.x
     downloadContentFromMessage
   } = B;
 
-  // ℹ️ Ya NO pedimos la versión aquí: ultra-baileys le pregunta a WhatsApp qué
-  // versión de WA Web está sirviendo en cada conexión. Si le pasáramos
-  // `version` a mano, esa sincronización se apaga y volverían los 405/428.
-
-  // 🧹 Sesión a medio vincular: creds.json se escribe apenas se pide el código,
-  // con tu número dentro pero SIN `registered`. Si se reintenta con eso, Baileys
-  // cree que ya está vinculado e intenta iniciar sesión → 401 en bucle y el
-  // código nunca vuelve a salir. Se limpia y se empieza de cero.
-  try {
-    if (fs.existsSync("./sessions/creds.json")) {
-      const credsPrevias = JSON.parse(fs.readFileSync("./sessions/creds.json", "utf-8"));
-      if (!credsPrevias?.registered) {
-        console.log(chalk.yellow("🧹 Vinculación anterior sin terminar. Limpiando ./sessions..."));
-        fs.rmSync("./sessions", { recursive: true, force: true });
-      }
-    }
-  } catch {}
+  // Función de versión compatible (usa la nueva si existe; si no, la vieja)
+  const getWaVersion = typeof fetchLatestWaWebVersion === "function"
+    ? fetchLatestWaWebVersion
+    : fetchLatestBaileysVersion;
 
   const { state, saveCreds } = await useMultiFileAuthState("./sessions");
 
-  // ✅ "Ya vinculado" NO es que exista creds.json: ese archivo se escribe apenas
-  // se pide el código. Lo que manda es creds.registered (lo pone WhatsApp
-  // cuando la vinculación termina de verdad).
-  const yaVinculado = !!state.creds?.registered;
+  const yaVinculado = fs.existsSync("./sessions/creds.json");
 
   if (!yaVinculado) {
     // 🔗 Instrucciones de vinculación: van de ÚLTIMO, cuando ya no queda
@@ -256,23 +242,10 @@ let phoneNumber = "";
     arrancarSubbots();
   }
 
-  // 🔒 Un solo socket vivo a la vez. Dos sockets con las mismas credenciales
-  // pelean entre sí (WhatsApp cierra uno con 440) y, durante la vinculación,
-  // el segundo INVALIDA el código que el usuario está escribiendo.
-  let sockActual = null;
-  let arrancando = false;
-  let codigoPedido = false;
-
   async function startBot() {
-    if (arrancando) return;
-    arrancando = true;
     try {
-      // 🧹 Si quedó un socket anterior vivo, ciérralo antes de abrir otro
-      if (sockActual) {
-        try { sockActual.ev.removeAllListeners(); } catch {}
-        try { await sockActual.end(undefined); } catch {}
-        sockActual = null;
-      }
+      // ✅ usa la función de versión disponible en tu Baileys
+      const { version } = await getWaVersion();
 
       // 🚀 Caché de metadata de grupos: evita que Baileys consulte la
       // metadata del grupo en CADA envío (gran parte de la latencia en grupos).
@@ -315,15 +288,14 @@ let phoneNumber = "";
       }
 
       const sock = makeWASocket({
-        // sin `version`: el socket usa la que WhatsApp esté sirviendo ahora mismo
+        version,
         logger: pino({ level: "silent" }),
         auth: {
           creds: state.creds,
           keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
         },
-        // navegador oficial de escritorio: pasa la validación de WhatsApp sin
-        // tocar nada interno (nada de spoofear plataformas en el protobuf)
-        browser: ["Mac OS", "Chrome", "14.4.1"],
+        browser: method === "1" ? ["AzuraBot", "Safari", "1.0.0"] : ["Ubuntu", "Chrome", "20.0.04"],
+        printQRInTerminal: method === "1",
         markOnlineOnConnect: false,
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
@@ -333,8 +305,6 @@ let phoneNumber = "";
         },
         userDevicesCache: global.__deviceListCache,
       });
-
-      sockActual = sock;
 
       // Cada consulta de metadata (nuestra o de un plugin) alimenta el caché
       const __origGroupMetadata = sock.groupMetadata.bind(sock);
@@ -432,18 +402,10 @@ try {
         }
       }
       
-      // 🔑 Código de vinculación.
-      //
-      // OJO: el código lo genera Baileys en tu PC, pero SOLO sirve cuando
-      // WhatsApp recibe la petición. Por eso no se pide con un setTimeout a
-      // ciegas: se pide cuando la conexión ya está lista (ultra-baileys espera
-      // el handshake por dentro). Si se pide antes, se imprime un código que
-      // WhatsApp nunca vio → el teléfono dice "ese código no es".
-      if (!state.creds?.registered && method === "2") {
-        (async () => {
+      if (!fs.existsSync("./sessions/creds.json") && method === "2") {
+        setTimeout(async () => {
           try {
             const code = await sock.requestPairingCode(phoneNumber);
-            codigoPedido = true;
             const bonito = code.match(/.{1,4}/g).join(" - ");
             recuadro("yellow", [
               chalk.yellow.bold("🔑  TU CÓDIGO DE VINCULACIÓN"),
@@ -456,17 +418,15 @@ try {
               chalk.gray("   ") + PASOS_WHATSAPP[3],
               "",
               chalk.gray("Escribe ese código en tu teléfono. Dura ~60 segundos."),
-              chalk.gray("Si se vence, aquí abajo saldrá uno nuevo: usa SIEMPRE el último."),
             ]);
           } catch (e) {
             console.log(chalk.red("❌ No se pudo generar el código: " + e.message));
-            console.log(chalk.gray("   Se reintenta en la próxima reconexión."));
           } finally {
             // Recién ahora arrancan los subbots ya vinculados: así sus logs
             // no tapan el código que el usuario tiene que escribir.
             arrancarSubbots();
           }
-        })();
+        }, 2000);
       }
 
 
@@ -2993,7 +2953,7 @@ if (isGroup) {
   }
 });
 
-sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
+sock.ev.on("connection.update", async ({ connection }) => {
   if (connection === "open") {
     console.log(chalk.green("✅ Conectado correctamente a WhatsApp."));
 
@@ -3019,52 +2979,26 @@ sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
     }
 
   } else if (connection === "close") {
-    const codigo =
-      lastDisconnect?.error?.output?.statusCode ||
-      lastDisconnect?.error?.output?.payload?.statusCode ||
-      0;
-
-    // 🚪 401 loggedOut / 403 / 411: la sesión ya no vale. Reconectar con esas
-    // credenciales es un bucle infinito: hay que borrar ./sessions y vincular
-    // de nuevo.
-    if ([401, 403, 411].includes(Number(codigo))) {
-      console.log(chalk.red(`🔌 Sesión cerrada por WhatsApp (${codigo}).`));
-      console.log(chalk.yellow("   Borra la carpeta ./sessions y vuelve a vincular:"));
-      console.log(chalk.gray("   rm -rf ./sessions && npm start"));
-      return;
-    }
-
-    // 🔑 Aún sin vincular: cada reconexión trae un código NUEVO y el anterior
-    // deja de servir. Se avisa para que nadie escriba el viejo.
-    if (!state.creds?.registered && codigoPedido) {
-      console.log(chalk.yellow("⏳ El código anterior venció. Generando uno nuevo..."));
-    }
-
-    console.log(chalk.red(`❌ Conexión cerrada (${codigo || "sin código"}). Reintentando en 5 segundos...`));
+    console.log(chalk.red("❌ Conexión cerrada. Reintentando en 5 segundos..."));
     setTimeout(startBot, 5000);
   }
 });
 
       sock.ev.on("creds.update", saveCreds);
 
+      process.on("uncaughtException", (err) => {
+        console.error(chalk.red("⚠️ Error no capturado:"), err);
+      });
+
+      process.on("unhandledRejection", (reason, promise) => {
+        console.error(chalk.red("🚨 Promesa sin manejar:"), promise, "Razón:", reason);
+      });
+
     } catch (e) {
       console.error(chalk.red("❌ Error en conexión:"), e);
       setTimeout(startBot, 5000);
-    } finally {
-      // libera el candado: la próxima caída ya puede reconectar
-      arrancando = false;
     }
   }
-
-  // ⚠️ Estos van UNA sola vez, fuera de startBot: si se registran en cada
-  // reconexión se van acumulando listeners en el proceso.
-  process.on("uncaughtException", (err) => {
-    console.error(chalk.red("⚠️ Error no capturado:"), err);
-  });
-
-  process.on("unhandledRejection", (reason, promise) => {
-    console.error(chalk.red("🚨 Promesa sin manejar:"), promise, "Razón:", reason);
-  });
 
   startBot();
 })();
