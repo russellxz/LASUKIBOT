@@ -1,10 +1,11 @@
-// subplugins/varios/Xxxx.js — Analizador NSFW con SKY NSFW DETECTION
+// subplugins/varios/Xxxx.js — Analiza +18 y sangre con SKY NSFW DETECTION
 "use strict";
 
 import { analizarBuffer } from '../../libs/nsfwsky.js';
 import { muestrasDeMedia } from '../../libs/muestras.js';
 
 const UMBRAL = 70;
+const UMBRAL_GORE = 25;   // el que recomiendan los autores del detector
 
 // —— helpers ——
 function unwrapMessage(m) {
@@ -142,7 +143,12 @@ const handler = async (msg, { conn, wa }) => {
     let fallo = null;
 
     for (const muestra of muestras) {
-      const r = await analizarBuffer(muestra.datos, { nombre: muestra.nombre, umbral: UMBRAL });
+      const r = await analizarBuffer(muestra.datos, {
+        nombre: muestra.nombre,
+        umbral: UMBRAL,
+        umbralGore: UMBRAL_GORE,
+        checks: ["nsfw", "gore"]
+      });
 
       if (!r.ok) { fallo = r; continue; }
 
@@ -153,28 +159,38 @@ const handler = async (msg, { conn, wa }) => {
       throw new Error(fallo ? `${fallo.code || "ERROR"} — ${fallo.error || "Fallo desconocido."}` : "No se pudo analizar.");
     }
 
-    // Vale el peor, igual que hace la API con los fotogramas de un video.
+    // Vale el peor de cada categoría por separado: un archivo puede dar
+    // positivo en una, en las dos o en ninguna.
     const peor = analisis.reduce((a, b) => (b.percent > a.percent ? b : a));
+    const peorGore = analisis.reduce((a, b) => (b.gorePercent > a.gorePercent ? b : a));
 
-    const estado = peor.esNsfw ? "🔞 *NSFW detectado*" : "✅ *Contenido seguro*";
+    const marcas = [];
+    if (peor.esNsfw) marcas.push("🔞 *+18 detectado*");
+    if (peorGore.esGore) marcas.push("🩸 *Sangre detectada*");
+
+    const estado = marcas.length ? marcas.join("  ·  ") : "✅ *Contenido seguro*";
     const barra = "█".repeat(Math.round(peor.percent / 10)).padEnd(10, "░");
+    const barraGore = "█".repeat(Math.round(peorGore.gorePercent / 10)).padEnd(10, "░");
 
     // Con varias muestras se enseña el desglose, para ver en qué momento salta.
     const desglose =
       analisis.length > 1
         ? "\n\n🎞️ *Momentos analizados:*\n" +
           analisis
-            .map((a) => `   • ${a.nota}: ${a.porcentaje}%${a.esNsfw ? " 🔞" : ""}`)
+            .map((a) => `   • ${a.nota}: +18 ${a.porcentaje}%${a.esNsfw ? " 🔞" : ""} · 🩸 ${a.gorePorcentaje}%${a.esGore ? " ⚠️" : ""}`)
             .join("\n")
         : "";
 
     const detalle = [
       `${estado}`,
       ``,
-      `📊 *NSFW:* ${peor.porcentaje}%`,
+      `🔞 *+18:* ${peor.porcentaje}%`,
       `${barra}`,
+      `🩸 *Sangre:* ${peorGore.gorePorcentaje}%${peorGore.goreZonas ? ` (${peorGore.goreZonas} zona/s)` : ""}`,
+      `${barraGore}`,
+      peorGore.goreDisponible === false ? `⚠️ *Sangre:* el detector no estaba disponible` : "",
       `✅ *Seguro:* ${Number(peor.safe_percent ?? 0).toFixed(2)}%`,
-      `📈 *Nivel:* ${peor.veredicto || peor.nivel || "—"}`,
+      `📈 *Nivel:* +18 ${peor.veredicto || peor.nivel || "—"} · sangre ${peorGore.goreNivel || "—"}`,
       `🛠️ *Recomendación:* ${peor.accion || "—"}`,
       `📁 *Tipo:* ${media.tipo}${peor.formato ? ` (${peor.formato})` : ""}`,
       analisis.length === 1 && peor.nota ? `🎞️ *Analizado:* ${peor.nota}` : "",
@@ -186,7 +202,7 @@ const handler = async (msg, { conn, wa }) => {
 
     await conn.sendMessage(chatId, { text: detalle }, { quoted: msg });
 
-    try { await conn.sendMessage(chatId, { react: { text: peor.esNsfw ? "🔞" : "✅", key: msg.key } }); } catch {}
+    try { await conn.sendMessage(chatId, { react: { text: peor.esNsfw ? "🔞" : peorGore.esGore ? "🩸" : "✅", key: msg.key } }); } catch {}
 
   } catch (err) {
     console.error("[xxx] NSFW error:", err?.message || err);
@@ -201,7 +217,7 @@ const handler = async (msg, { conn, wa }) => {
 
 handler.command  = ["xxx"];
 handler.tags     = ["tools"];
-handler.help     = ["xxx <responde a un video, imagen o sticker>"];
+handler.help     = ["xxx <responde a un video, imagen o sticker> — analiza +18 y sangre"];
 handler.register = true;
 
 export default handler;
