@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { isAdminInGroup, isOwnerCheck } from '../libs/adminCheck.js';
+import { isAdminByNumber, numeroDelRemitente, isOwnerCheck } from '../libs/adminCheck.js';
 import path from 'path';
 
 const RUTA_VIEJA = path.resolve("./guar.json");       // legacy (base64)
@@ -109,7 +109,7 @@ const handler = async (msg, { conn, args }) => {
   const targetUser = target.de || target.user;
 
   // ====== Protección de permisos (igual que antes) ======
-  const isAdmin = isGroup ? await isAdminInGroup(conn, chatId, msg.realJid || msg.key.participant || msg.key.remoteJid) : false;
+  const isAdmin = isGroup ? await isAdminByNumber(conn, chatId, numeroDelRemitente(msg)) : false;
   const esOwner = isOwnerCheck(msg.realJid || msg.key.participant || msg.key.remoteJid) || global.isOwner(sender);
   const esDueñoDelArchivo = targetUser === sender;
   const archivoEsDeOwner = global.owner.some(([o]) => o === targetUser);

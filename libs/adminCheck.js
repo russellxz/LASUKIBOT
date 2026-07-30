@@ -99,6 +99,75 @@ export async function isAdminInGroup(conn, chatId, senderJid) {
 }
 
 /**
+ * Verifica si un NÚMERO es admin del grupo.
+ *
+ * Es la misma lógica que usan .abrir y .cerrar, que sí acierta con las cuentas
+ * que WhatsApp entrega como @lid. La diferencia con isAdminInGroup está en el
+ * tercer intento: cuando el participante viene en @lid y el lidMap global
+ * todavía no lo tiene cacheado, se pregunta a conn.lidParser. Sin ese paso, a
+ * un admin con LID el bot lo trataba como si no lo fuera.
+ *
+ * @param {object} conn    conexión Baileys
+ * @param {string} chatId  JID del grupo
+ * @param {string} number  número ya normalizado (solo dígitos)
+ * @returns {Promise<boolean>}
+ */
+export async function isAdminByNumber(conn, chatId, number) {
+  try {
+    const meta = await conn.groupMetadata(chatId);
+    const rawParts = Array.isArray(meta?.participants) ? meta.participants : [];
+
+    const adminNums = new Set();
+
+    for (let i = 0; i < rawParts.length; i++) {
+      const p = rawParts[i];
+      const flagAdmin = p.admin === "admin" || p.admin === "superadmin";
+      if (!flagAdmin) continue;
+
+      const pid = String(p.id || "");
+      const pjid = String(p.jid || "");
+
+      // 1) el número viene tal cual
+      if (pid.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(pid.split(":")[0]));
+      if (pjid.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(pjid.split(":")[0]));
+
+      // 2) viene en @lid: se busca en el mapa global
+      if (pid.endsWith("@lid") && global.lidMap instanceof Map) {
+        const resolved = global.lidMap.get(pid);
+        if (resolved && resolved.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(resolved.split(":")[0]));
+      }
+      if (pjid.endsWith("@lid") && global.lidMap instanceof Map) {
+        const resolved2 = global.lidMap.get(pjid);
+        if (resolved2 && resolved2.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(resolved2.split(":")[0]));
+      }
+
+      // 3) el mapa no lo tenía: se lo preguntamos a Baileys
+      if (typeof conn.lidParser === "function") {
+        const normed = conn.lidParser([p]);
+        if (normed && normed[0]) {
+          const nid = String(normed[0].id || "");
+          if (nid.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(nid.split(":")[0]));
+        }
+      }
+    }
+
+    return adminNums.has(String(number));
+  } catch (e) {
+    console.error("[adminCheck] Error leyendo admins:", e);
+    return false;
+  }
+}
+
+/**
+ * Saca el número del remitente igual que lo hacen .abrir y .cerrar.
+ * @returns {string} solo dígitos
+ */
+export function numeroDelRemitente(msg) {
+  const senderId = msg?.realJid || msg?.key?.participant || msg?.key?.remoteJid || "";
+  return String(msg?.realNumber || DIGITS(String(senderId).split(":")[0]));
+}
+
+/**
  * Verifica si un JID/número es owner del bot.
  * @param {string} senderJid
  * @returns {boolean}
