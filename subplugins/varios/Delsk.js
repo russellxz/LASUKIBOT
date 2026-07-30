@@ -5,7 +5,7 @@
 //   .dels hola fino 1          → elimina el #1 de "hola fino"
 
 import fs from 'fs';
-import { isAdminInGroup, isOwnerCheck } from '../../libs/adminCheck.js';
+import { isAdminByNumber, numeroDelRemitente, isOwnerCheck } from '../../libs/adminCheck.js';
 import path from 'path';
 
 
@@ -70,7 +70,7 @@ const handler = async (msg, { conn, args }) => {
   const targetUser = target.addedBy || pack.createdBy;
 
   // ====== Protección de permisos ======
-  const isAdmin = isGroup ? await isAdminInGroup(conn, chatId, msg.realJid || msg.key.participant || msg.key.remoteJid) : false;
+  const isAdmin = isGroup ? await isAdminByNumber(conn, chatId, numeroDelRemitente(msg)) : false;
   const esOwner = isOwnerCheck(msg.realJid || msg.key.participant || msg.key.remoteJid) || global.isOwner(sender);
   const esDueñoDelSticker = targetUser === sender;
   const stickerEsDeOwner = global.owner.some(([o]) => o === targetUser);

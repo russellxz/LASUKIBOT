@@ -2,6 +2,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { isAdminByNumber } from '../../libs/adminCheck.js';
 
 // ==== helpers comunes ====
 const DIGITS = (s = "") => String(s).replace(/\D/g, "");
@@ -14,26 +15,6 @@ function lidParser(participants = []) {
   } catch {
     return participants || [];
   }
-}
-async function isAdminByNumber(conn, chatId, number) {
-  try {
-    const meta = await conn.groupMetadata(chatId);
-    const raw  = Array.isArray(meta?.participants) ? meta.participants : [];
-    const norm = lidParser(raw);
-    const adminNums = new Set();
-    for (let i = 0; i < raw.length; i++) {
-      const r = raw[i], n = norm[i];
-      const isAdm = (r?.admin === "admin" || r?.admin === "superadmin" ||
-                     n?.admin === "admin" || n?.admin === "superadmin");
-      if (isAdm) {
-        [r?.id, r?.jid, n?.id].forEach(x => {
-          const d = DIGITS(x || "");
-          if (d) adminNums.add(d);
-        });
-      }
-    }
-    return adminNums.has(number);
-  } catch { return false; }
 }
 function unwrapMessage(m) {
   let node = m;

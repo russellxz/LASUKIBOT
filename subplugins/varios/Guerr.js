@@ -1,5 +1,5 @@
 import moment from 'moment-timezone';
-import { isAdminInGroup, isOwnerCheck } from '../../libs/adminCheck.js';
+import { isAdminByNumber, numeroDelRemitente, isOwnerCheck } from '../../libs/adminCheck.js';
 
 const handler = async (msg, { conn, args }) => {
   const chatId = msg.key.remoteJid;
@@ -14,7 +14,7 @@ const handler = async (msg, { conn, args }) => {
 
   const meta = await conn.groupMetadata(chatId);
   const groupName = meta.subject || "Clan";
-  const isAdmin = await isAdminInGroup(conn, chatId, msg.realJid || sender);
+  const isAdmin = await isAdminByNumber(conn, chatId, numeroDelRemitente(msg));
 
   if (!isAdmin && !isOwner && !isFromMe) {
     return conn.sendMessage(chatId, {

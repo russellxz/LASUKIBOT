@@ -1,30 +1,8 @@
 // subplugins/grupos/delwelcome.js — Borra bienvenida/despedida personalizadas del SUBBOT
 // Config independiente por subbot: subbots/data/<numero>/welcome.json
+import { isAdminByNumber } from '../../libs/adminCheck.js';
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 
-async function isAdminByNumber(conn, chatId, number) {
-  try {
-    const meta = await conn.groupMetadata(chatId);
-    const rawParts = Array.isArray(meta?.participants) ? meta.participants : [];
-    const adminNums = new Set();
-    for (const p of rawParts) {
-      const flagAdmin = p.admin === "admin" || p.admin === "superadmin";
-      if (!flagAdmin) continue;
-      for (const id of [p.id, p.jid, p.pn, p.phoneNumber]) {
-        const s = String(id || "");
-        if (s.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(s.split(":")[0]));
-      }
-      if (typeof conn.lidParser === "function") {
-        const normed = conn.lidParser([p]);
-        const nid = String(normed?.[0]?.id || "");
-        if (nid.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(nid.split(":")[0]));
-      }
-    }
-    return adminNums.has(number);
-  } catch {
-    return false;
-  }
-}
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
