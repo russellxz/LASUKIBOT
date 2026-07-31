@@ -1,8 +1,15 @@
 // libs/antispam.js — Corta el spam de repetir lo mismo una y otra vez.
 //
-// Cómo funciona: se lleva la cuenta de cuántas veces seguidas alguien manda
-// el mismo texto. Las tres primeras pasan. De la cuarta en adelante el bot
-// borra el mensaje, y al llegar a siete lo saca del grupo.
+// Dos formas de pillarlo:
+//
+//   1) Mensajes iguales seguidos. Los 3 primeros pasan, del 4º en adelante se
+//      borran y al llegar a 7 lo saca del grupo.
+//
+//   2) Repeticiones dentro de un mismo mensaje. Da igual qué se repita: una
+//      letra ("aaaaaaaaaa"), un número ("1111111111"), un emoji, una sílaba
+//      ("jajajajajaja", "123123123123123123") o cualquier palabra, esté bien
+//      o mal escrita ("asdkj asdkj asdkj asdkj asdkj"). Eso se borra al
+//      momento, sin esperar al cuarto mensaje.
 //
 // Se aplica a todo el mundo, admins incluidos: si no, el spam de un admin no
 // se podría cortar.
@@ -17,9 +24,21 @@ import { setConfig, getConfig } from "../db.js";
 
 export const REPETIR_PARA_BORRAR = 3;   // las 3 primeras pasan; de la 4ª en adelante se borra
 export const REPETIR_PARA_SACAR = 7;    // a la 7ª, fuera del grupo
-const PALABRA_REPETIDA = 5;             // "hola hola hola hola hola" en un solo mensaje
+
+// Cuánto hay que repetir dentro de un mensaje para que cuente como spam.
+// Si alguna resulta muy floja o muy dura en el grupo, se cambia aquí.
+export const RACHA_PEGADA = 10;         // "aaaaaaaaaa" — la misma letra pegada
+export const PATRON_REPETIDO = 6;       // "jajajajajaja" — "ja" seis veces
+export const PALABRA_REPETIDA = 5;      // "hola hola hola hola hola"
+
 const OLVIDAR_MS = 5 * 60 * 1000;       // 5 min sin escribir y se reinicia la cuenta
 const MAX_EN_MEMORIA = 5000;
+
+// Una letra, número o emoji pegado a sí mismo muchas veces.
+const RE_RACHA = new RegExp(`(\\S)\\1{${RACHA_PEGADA - 1},}`, "u");
+
+// Un trocito de 2 a 4 caracteres repetido sin parar: "ja"+"ja"+…, "123"+"123"+…
+const RE_PATRON = new RegExp(`(.{2,4}?)\\1{${PATRON_REPETIDO - 1},}`, "u");
 
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 
@@ -32,30 +51,71 @@ function quienEs(conn) {
 
 // Para comparar dos mensajes: sin acentos, sin signos, sin repetir espacios y
 // sin letras estiradas, porque "holaaaa" y "holaaaaaa" son el mismo spam.
+// Los emojis se dejan tal cual: mandar el mismo emoji cien veces también es
+// spam, así que no se pueden tirar aquí.
 export function normalizar(texto = "") {
   return String(texto)
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")   // fuera los acentos
-    .replace(/(.)\1{2,}/g, "$1$1")
-    .replace(/[^\w\sáéíóúñ]/gi, "")
+    .replace(/(.)\1{2,}/gu, "$1$1")     // "holaaaa" = "holaaaaaa"
+    .replace(/\p{P}/gu, "")             // fuera los signos, pero no los emojis
     .replace(/\s+/g, " ")
     .trim();
 }
 
-// ¿El mensaje repite la misma palabra muchas veces él solo?
-export function palabraRepetida(texto = "") {
-  const palabras = normalizar(texto).split(" ").filter((p) => p.length > 1);
-  if (palabras.length < PALABRA_REPETIDA) return null;
+/**
+ * ¿El mensaje repite algo él solo? Vale cualquier cosa: una letra, un número,
+ * un emoji, una sílaba o una palabra, esté bien escrita, mal escrita o sea
+ * inventada.
+ *
+ * Se mira sobre el texto tal cual llegó, sin normalizar, porque normalizar
+ * acorta las rachas ("aaaaaaaaaa" queda en "aa") y se perdería justo lo que
+ * estamos buscando.
+ *
+ * @returns {{tipo:string, muestra:string, veces:number}|null}
+ */
+export function repeticionInterna(texto = "") {
+  const crudo = String(texto || "");
+  if (!crudo) return null;
 
-  const cuenta = new Map();
-  for (const p of palabras) cuenta.set(p, (cuenta.get(p) || 0) + 1);
+  // 1) La misma letra/número/emoji pegada: "aaaaaaaaaa", "1111111111", "😂😂😂…"
+  const racha = RE_RACHA.exec(crudo);
+  if (racha) {
+    return { tipo: "racha", muestra: racha[1], veces: [...racha[0]].length };
+  }
 
-  for (const [palabra, veces] of cuenta) {
-    if (veces >= PALABRA_REPETIDA) return { palabra, veces };
+  // 2) Un trocito repetido sin parar: "jajajajajaja", "123123123123123123".
+  //    Se quitan los espacios para que "ja ja ja ja ja ja" también entre.
+  const patron = RE_PATRON.exec(crudo.toLowerCase().replace(/\s+/g, ""));
+  if (patron) {
+    return {
+      tipo: "patron",
+      muestra: patron[1],
+      veces: Math.floor(patron[0].length / patron[1].length)
+    };
+  }
+
+  // 3) La misma palabra suelta muchas veces. Ahora entran también las de una
+  //    sola letra o número ("a a a a a", "1 1 1 1 1"), que antes se colaban
+  //    porque se pedía que la palabra tuviera más de una letra.
+  const palabras = normalizar(texto).split(" ").filter(Boolean);
+  if (palabras.length >= PALABRA_REPETIDA) {
+    const cuenta = new Map();
+    for (const p of palabras) cuenta.set(p, (cuenta.get(p) || 0) + 1);
+
+    for (const [palabra, veces] of cuenta) {
+      if (veces >= PALABRA_REPETIDA) return { tipo: "palabra", muestra: palabra, veces };
+    }
   }
 
   return null;
+}
+
+/** Se queda por compatibilidad: solo la repetición de palabras. */
+export function palabraRepetida(texto = "") {
+  const r = repeticionInterna(texto);
+  return r && r.tipo === "palabra" ? { palabra: r.muestra, veces: r.veces } : null;
 }
 
 function limpiarViejos(ahora) {
@@ -73,11 +133,15 @@ export function reiniciar(conn, chatId, numero) {
 
 /**
  * Apunta el mensaje y dice qué hay que hacer con él.
- * @returns {{veces:number, borrar:boolean, sacar:boolean, palabra:string}}
+ * @returns {{veces:number, borrar:boolean, sacar:boolean, palabra:string, tipoSpam:string}}
  */
 export function apuntar(conn, chatId, numero, texto) {
-  const limpio = normalizar(texto);
-  if (!limpio) return { veces: 0, borrar: false, sacar: false, palabra: "" };
+  // Si al normalizar no queda nada (un mensaje de puros signos, por ejemplo)
+  // se compara el original en crudo, para no dejar de contarlo.
+  const limpio = normalizar(texto) ||
+    String(texto || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  if (!limpio) return { veces: 0, borrar: false, sacar: false, palabra: "", tipoSpam: "" };
 
   const ahora = Date.now();
   limpiarViejos(ahora);
@@ -85,9 +149,9 @@ export function apuntar(conn, chatId, numero, texto) {
   const clave = `${quienEs(conn)}|${chatId}|${DIGITS(numero)}`;
   const previo = cuentas.get(clave);
 
-  // Una sola palabra repetida dentro del mensaje ya cuenta como spam, sin
-  // esperar a que lo mande cuatro veces.
-  const dentro = palabraRepetida(texto);
+  // Algo repetido dentro del propio mensaje ya cuenta como spam, sin esperar
+  // a que lo mande cuatro veces.
+  const dentro = repeticionInterna(texto);
 
   let veces;
   if (previo && previo.texto === limpio && ahora - previo.ultima <= OLVIDAR_MS) {
@@ -106,7 +170,8 @@ export function apuntar(conn, chatId, numero, texto) {
     veces,
     borrar,
     sacar,
-    palabra: dentro ? dentro.palabra : "",
+    tipoSpam: dentro ? dentro.tipo : (porRepetir ? "mensaje" : ""),
+    palabra: dentro ? dentro.muestra : "",
     vecesPalabra: dentro ? dentro.veces : 0
   };
 }
@@ -145,8 +210,10 @@ export async function revisarSpam(conn, m, { owners = [] } = {}) {
     const cfg = configDe(conn);
     if (Number(cfg.leer(chatId, "antispam")) !== 1) return false;
 
+    // Se cuenta cualquier mensaje con algo escrito, aunque sea una sola letra:
+    // mandar "a" cincuenta veces es spam igual que mandar una frase.
     const texto = textoDe(m);
-    if (!texto || texto.length < 2) return false;
+    if (!texto || !texto.trim()) return false;
 
     const autorJid = m.realJid || m.key.participant || chatId;
     const autorNum = DIGITS(String(m.realNumber || autorJid).split(":")[0]);
@@ -164,9 +231,11 @@ export async function revisarSpam(conn, m, { owners = [] } = {}) {
       return false;
     }
 
-    const motivo = r.palabra
-      ? `repetir "${r.palabra}" ${r.vecesPalabra} veces en un mensaje`
-      : `mandar lo mismo ${r.veces} veces seguidas`;
+    const motivo =
+      r.tipoSpam === "racha"   ? `repetir "${r.palabra}" ${r.vecesPalabra} veces pegadas` :
+      r.tipoSpam === "patron"  ? `repetir "${r.palabra}" ${r.vecesPalabra} veces sin parar` :
+      r.tipoSpam === "palabra" ? `repetir "${r.palabra}" ${r.vecesPalabra} veces en un mensaje` :
+                                 `mandar lo mismo ${r.veces} veces seguidas`;
 
     console.log(`[antispam] ${chatId} · ${autorNum} · ${motivo}`);
 
@@ -217,4 +286,6 @@ Si sigues, a los *${REPETIR_PARA_SACAR}* seguidos sales del grupo.`,
   }
 }
 
-export default { revisarSpam, apuntar, reiniciar, normalizar, palabraRepetida };
+export default {
+  revisarSpam, apuntar, reiniciar, normalizar, repeticionInterna, palabraRepetida
+};
