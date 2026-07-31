@@ -54,7 +54,13 @@ function quienEs(conn) {
 }
 
 // Para comparar dos mensajes: sin acentos, sin signos, sin repetir espacios y
-// sin letras estiradas, porque "holaaaa" y "holaaaaaa" son el mismo spam.
+// con las letras estiradas recortadas a una sola, para que "hola", "holaaa" y
+// "holaaaaaa" sean el mismo mensaje. Si se dejaran en dos, "hola" no casaría
+// con "holaaa" y bastaría con ir alargando la palabra para escaparse.
+//
+// Efecto de paso: palabras que solo se diferencian en una letra doble ("caro"
+// y "carro") quedan iguales. Da igual, solo sirve para contar repeticiones.
+//
 // Los emojis se dejan tal cual: mandar el mismo emoji cien veces también es
 // spam, así que no se pueden tirar aquí.
 export function normalizar(texto = "") {
@@ -62,7 +68,7 @@ export function normalizar(texto = "") {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")   // fuera los acentos
-    .replace(/(.)\1{2,}/gu, "$1$1")     // "holaaaa" = "holaaaaaa"
+    .replace(/(.)\1+/gu, "$1")          // "hola" = "holaaa" = "holaaaaaa"
     .replace(/\p{P}/gu, "")             // fuera los signos, pero no los emojis
     .replace(/\s+/g, " ")
     .trim();
