@@ -52,6 +52,7 @@ import pino from "pino";
 import axios from "axios";
 import { setConfig, getConfig, getAntideleteDB, saveAntideleteDB } from "./db.js";
 import { revisarNsfw } from "./libs/antiporno.js";
+import { revisarSpam } from "./libs/antispam.js";
 import { startWebServer } from "./webserver.js";
 import { limpiarRespuestaBoton } from "./disenos.js";
 import "./config.js";
@@ -1640,6 +1641,14 @@ try {
 
   const chatId = m.key.remoteJid;
   const isGroupHere = typeof chatId === "string" && chatId.endsWith("@g.us");
+
+  // === 🔇 ANTISPAM === (solo hace algo si el grupo lo tiene activado)
+  try {
+    const borradoPorSpam = await revisarSpam(sock, m, { owners: global.owner || [] });
+    if (borradoPorSpam) return true;
+  } catch (e) {
+    console.error("[antispam] fallo al revisar:", e?.message || e);
+  }
 
   // === 🔞 ANTIPORNO === (solo hace algo si el grupo lo tiene activado)
   try {

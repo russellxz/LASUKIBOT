@@ -6,5 +6,6 @@ tmp/*
 *.log
 .DS_Store
 activoss.json
+warns.json
 subbots/
 subplugins/tmp/

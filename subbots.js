@@ -18,6 +18,7 @@ import pino from "pino";
 import chalk from "chalk";
 import { canal, limpiarRespuestaBoton } from "./disenos.js";
 import { revisarNsfw } from "./libs/antiporno.js";
+import { revisarSpam } from "./libs/antispam.js";
 
 const SUB_ROOT = path.resolve("./subbots");
 const SESSIONS_DIR = path.join(SUB_ROOT, "sessions");
@@ -1206,6 +1207,16 @@ export async function handleSubMessage(sock, number, m) {
         }
       }
     } catch {}
+  }
+
+  // === 🔇 ANTISPAM === (solo hace algo si el grupo lo tiene activado)
+  if (isGroup && !fromMe) {
+    try {
+      const borradoPorSpam = await revisarSpam(sock, m, { owners: global.owner || [] });
+      if (borradoPorSpam) return;
+    } catch (e) {
+      console.error("[antispam] fallo al revisar:", e?.message || e);
+    }
   }
 
   // === 🔞 ANTIPORNO === (solo hace algo si el grupo lo tiene activado)
