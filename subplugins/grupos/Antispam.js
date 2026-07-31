@@ -107,7 +107,9 @@ Estado actual: *${activo ? "activado ✅" : "desactivado ❌"}*
 Cómo funciona: se cuenta cuántas veces seguidas alguien manda el mismo
 mensaje. Las *3* primeras pasan. De la *4ª* en adelante el bot lo borra,
 y a las *7* seguidas lo saca del grupo. Vale hasta para una sola letra:
-mandar "a" siete veces también es spam.
+mandar "a" siete veces también es spam, y da igual que vaya cambiando de
+letra ("a t u a t u a") porque las de una sola letra cuentan juntas.
+Las respuestas de dos letras ("si", "ok", "ya") no se tocan.
 
 Y borra al momento el mensaje que ya repite algo él solo, sea lo que sea:
   • una letra, número o emoji pegado → "aaaaaaaaaa", "1111111111"

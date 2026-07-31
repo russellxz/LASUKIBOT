@@ -40,6 +40,10 @@ const RE_RACHA = new RegExp(`(\\S)\\1{${RACHA_PEGADA - 1},}`, "u");
 // Un trocito de 2 a 4 caracteres repetido sin parar: "ja"+"ja"+…, "123"+"123"+…
 const RE_PATRON = new RegExp(`(.{2,4}?)\\1{${PATRON_REPETIDO - 1},}`, "u");
 
+// Etiqueta interna para meter en el mismo saco todos los mensajes de una sola
+// letra. No puede chocar con ningún texto real porque lleva un carácter nulo.
+const SACO_UNA_LETRA = "\u0000una-letra";
+
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 
 // clave: <bot>|<grupo>|<numero>  →  { texto, veces, ultima }
@@ -153,14 +157,21 @@ export function apuntar(conn, chatId, numero, texto) {
   // a que lo mande cuatro veces.
   const dentro = repeticionInterna(texto);
 
+  // Los mensajes de una sola letra van todos al mismo saco, aunque vaya
+  // cambiando de letra: mandar "a t u a t u a" es el mismo spam que mandar
+  // "a a a a a a a". Con dos caracteres ya no, porque "si", "ok" o "ya"
+  // son respuestas normales y no hay que borrárselas a nadie.
+  const sueltas = [...limpio].length === 1;
+  const comparar = sueltas ? SACO_UNA_LETRA : limpio;
+
   let veces;
-  if (previo && previo.texto === limpio && ahora - previo.ultima <= OLVIDAR_MS) {
+  if (previo && previo.texto === comparar && ahora - previo.ultima <= OLVIDAR_MS) {
     veces = previo.veces + 1;
   } else {
     veces = 1;
   }
 
-  cuentas.set(clave, { texto: limpio, veces, ultima: ahora });
+  cuentas.set(clave, { texto: comparar, veces, ultima: ahora });
 
   const porRepetir = veces > REPETIR_PARA_BORRAR;
   const borrar = porRepetir || !!dentro;
@@ -170,7 +181,7 @@ export function apuntar(conn, chatId, numero, texto) {
     veces,
     borrar,
     sacar,
-    tipoSpam: dentro ? dentro.tipo : (porRepetir ? "mensaje" : ""),
+    tipoSpam: dentro ? dentro.tipo : (porRepetir ? (sueltas ? "sueltas" : "mensaje") : ""),
     palabra: dentro ? dentro.muestra : "",
     vecesPalabra: dentro ? dentro.veces : 0
   };
@@ -235,6 +246,7 @@ export async function revisarSpam(conn, m, { owners = [] } = {}) {
       r.tipoSpam === "racha"   ? `repetir "${r.palabra}" ${r.vecesPalabra} veces pegadas` :
       r.tipoSpam === "patron"  ? `repetir "${r.palabra}" ${r.vecesPalabra} veces sin parar` :
       r.tipoSpam === "palabra" ? `repetir "${r.palabra}" ${r.vecesPalabra} veces en un mensaje` :
+      r.tipoSpam === "sueltas" ? `mandar ${r.veces} letras sueltas seguidas` :
                                  `mandar lo mismo ${r.veces} veces seguidas`;
 
     console.log(`[antispam] ${chatId} · ${autorNum} · ${motivo}`);
@@ -245,7 +257,9 @@ export async function revisarSpam(conn, m, { owners = [] } = {}) {
 `🚫 *EXPULSADO POR SPAM*
 
 👤 @${autorNum}
-📊 ${r.veces} mensajes iguales seguidos
+📊 ${r.tipoSpam === "sueltas"
+      ? `${r.veces} mensajes de una sola letra seguidos`
+      : `${r.veces} mensajes iguales seguidos`}
 
 Se avisó y no paró.`,
         mentions: [autorJid]
