@@ -104,18 +104,21 @@ Estado actual: *${activo ? "activado ✅" : "desactivado ❌"}*
 .antispam on
 .antispam off
 
-Cómo funciona: se cuenta cuántas veces seguidas alguien manda el mismo
-mensaje. Las *3* primeras pasan. De la *4ª* en adelante el bot lo borra,
-y a las *7* seguidas lo saca del grupo. Vale hasta para una sola letra:
-mandar "a" siete veces también es spam, y da igual que vaya cambiando de
-letra ("a t u a t u a") porque las de una sola letra cuentan juntas.
-Las respuestas de dos letras ("si", "ok", "ya") no se tocan.
+Cómo funciona: se cuenta cuántas veces manda alguien el *mismo* mensaje.
+Las *3* primeras pasan. De la *4ª* en adelante el bot lo borra, y a las
+*7* lo saca del grupo.
 
-Y borra al momento el mensaje que ya repite algo él solo, sea lo que sea:
-  • una letra, número o emoji pegado → "aaaaaaaaaa", "1111111111"
-  • una sílaba sin parar → "jajajajajaja", "123123123123123123"
-  • una palabra suelta *5* veces → "xd xd xd xd xd"
-Da igual que la palabra esté mal escrita o sea inventada.
+⏳ Para que la cuenta vuelva a cero hay que esperar *3 minutos* sin
+mandarlo. Si lo repite antes, suma otra vez.
+
+Vale hasta para una sola letra: mandar "a" siete veces también es spam, y
+da igual que vaya cambiando de letra ("a t u a t u a") porque las de una
+sola letra cuentan juntas. Las respuestas de dos letras ("si", "ok", "ya")
+no se tocan.
+
+📌 Lo que lleve escrito el mensaje da igual. "aaaaaaaaaaaaaa" o "hhhhhh"
+no son spam por sí solos, por muchas letras que repitan: lo son cuando se
+mandan varias veces, igual que cualquier otro mensaje.
 
 📌 Se aplica a *todos*, admins incluidos. Solo los dueños del bot quedan
 fuera. Si no, el spam de un admin no se podría cortar.
