@@ -161,7 +161,7 @@ async function avisarPago(conn, grupo, factura) {
 }
 
 /** El cliente no pagó a tiempo: se le cancela el servicio y se avisa */
-async function avisarImpago(conn, grupo, factura, venta) {
+async function avisarImpago(conn, grupo, factura, venta, cuenta) {
   const t = getTienda(grupo);
   const producto = tituloProducto(factura.producto);
 
@@ -180,10 +180,8 @@ async function avisarImpago(conn, grupo, factura, venta) {
     console.error(`[factura] no se pudo avisar el impago a +${factura.cliente}:`, e.message);
   }
 
-  // Datos de la cuenta que hay que recuperar
-  const cuenta = venta
-    ? t.productos?.[venta.producto]?.cuentas?.find((c) => c.id === venta.cuentaId)
-    : null;
+  // Los datos de la cuenta llegan desde fuera: por impago la cuenta ya se
+  // borró del producto, y aquí hacen falta para poder ir a recuperarla.
 
   const base =
     `⛔ *CANCELADO POR FALTA DE PAGO*\n\n` +
@@ -203,14 +201,15 @@ async function avisarImpago(conn, grupo, factura, venta) {
     (cuenta
       ? `\n━━━━━━━━━━━━━━━━━━━━\n🔐 *CUENTA QUE HAY QUE RECUPERAR*\n\n${cuenta.datos}\n━━━━━━━━━━━━━━━━━━━━\n`
       : "") +
-    `\n_Ya volvió a tu stock: puedes venderla otra vez, o cambiarle los datos_\n` +
-    `_con la opción *8* del menú de configuración._`;
+    `\n_Esta cuenta ya NO está en tu stock: se quitó del producto al cancelarla._\n` +
+    `_Ve a recuperarla y, cuando la tengas lista, agrégala otra vez con la_\n` +
+    `_opción *3* del menú de configuración._`;
 
   // Si no hay números de aviso va al grupo, y ahí NO se ponen credenciales
   const alGrupo =
     base +
-    `\n_La cuenta volvió a tu stock. Mira sus datos con *totalventas*_\n` +
-    `_o con la opción *7* del menú de configuración._`;
+    `\n_Esa cuenta se quitó del stock al cancelarla. Cuando la recuperes,_\n` +
+    `_agrégala de nuevo con la opción *3* del menú de configuración._`;
 
   const privados = (t.avisos || []).map((n) => `${n}@s.whatsapp.net`);
   if (privados.length) {
@@ -240,7 +239,7 @@ async function revisar(conn) {
       const r = cancelarPorImpago(grupo, f.id);
       if (!r) continue;
       console.log(`⛔ [factura] ${grupo} → impago de +${f.cliente} (${f.producto})`);
-      await avisarImpago(conn, grupo, r.factura, r.venta);
+      await avisarImpago(conn, grupo, r.factura, r.venta, r.cuenta);
     }
 
     // 2) Y después las que toca cobrar ahora

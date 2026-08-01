@@ -457,13 +457,25 @@ export function cancelarPorImpago(chatId, facturaId) {
     f.vencida = Date.now();
 
     const v = t.ventas.find((x) => x.id === f.ventaId);
+    let cuenta = null;
+
     if (v && v.estado === "activa") {
       v.estado = "cancelada";
       v.motivo = "impago";
-      const cuenta = t.productos[v.producto]?.cuentas?.find((c) => c.id === v.cuentaId);
-      if (cuenta) cuenta.vendidaA = null;   // la cuenta vuelve al stock
+
+      // Por impago la cuenta NO vuelve al stock: se borra del producto. Se la
+      // quedó alguien que no pagó, así que no sirve para revenderla tal cual.
+      // (Cancelando a mano desde el panel sí vuelve al stock; esto es solo
+      // cuando la tumba el sistema por no pagar.)
+      const p = t.productos[v.producto];
+      if (p?.cuentas) {
+        const i = p.cuentas.findIndex((c) => c.id === v.cuentaId);
+        // Se devuelve para poder mandarle sus datos al dueño en el aviso:
+        // los va a necesitar para ir a recuperar la cuenta.
+        if (i >= 0) [cuenta] = p.cuentas.splice(i, 1);
+      }
     }
-    return { factura: f, venta: v };
+    return { factura: f, venta: v, cuenta };
   });
 }
 
