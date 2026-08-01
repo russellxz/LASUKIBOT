@@ -2,6 +2,7 @@
 // El diseño, la imagen/video y el nombre salen de la personalización (setmenu).
 import { enviarMenu } from "../../disenos.js";
 import { ventasConfiguradas } from "../../ventas-core.js";
+import { comandosCreados } from "./Crear.js";
 
 // Cada grupo lleva el comando que MUESTRA el contenido. Para configurarlo se
 // usa el mismo nombre con "set" delante (stock → setstock).
@@ -67,6 +68,7 @@ const GRUPOS = [
 // Comandos del sistema, que no siguen el patrón "x / setx"
 const APARTE = [
   ["crear <nombre>", "crea un producto nuevo con su comando"],
+  ["crear borrar <nombre>", "borra uno creado, si no tiene clientes"],
   ["addcredit @cliente 50", "dale créditos a un cliente"],
   ["totalventas", "panel: clientes, cobros y ganancias"],
   ["sorteo", "sortea entre los que reaccionen"]
@@ -82,16 +84,28 @@ const handler = async (msg, { conn }) => {
   let puestos = new Set();
   try { puestos = new Set(ventasConfiguradas(chatId)); } catch {}
 
-  const total = GRUPOS.reduce((n, g) => n + g.items.length, 0);
-  const listos = GRUPOS.reduce(
-    (n, g) => n + g.items.filter((c) => puestos.has(c)).length,
-    0
-  );
+  // Los que el propio usuario creó con .crear
+  let creados = [];
+  try { creados = comandosCreados(); } catch {}
+
+  const todos = [...GRUPOS.flatMap((g) => g.items), ...creados.map((c) => c.clave)];
+  const total = todos.length;
+  const listos = todos.filter((c) => puestos.has(c)).length;
 
   const secciones = GRUPOS.map((g) => ({
     titulo: g.titulo,
     items: g.items.map((c) => `${p}${c}${puestos.has(c) ? "  ✅" : ""}`)
   }));
+
+  // Y van en su propio apartado del menú
+  if (creados.length) {
+    secciones.push({
+      titulo: "🧩 CREADOS POR TI",
+      items: creados.map(
+        (c) => `${p}${c.clave}${puestos.has(c.clave) ? "  ✅" : ""}`
+      )
+    });
+  }
 
   secciones.push({
     titulo: "⚙️ SISTEMA DE VENTAS",

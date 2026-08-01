@@ -35,7 +35,7 @@ const tituloProducto = (clave) => getProducto(clave)?.titulo || clave;
 // Este panel entra en el registro compartido de menús: al abrirlo se cierran
 // los demás (los set de ventas y la personalización), para que un número no
 // dispare dos conversaciones a la vez.
-registrarSesion("panel", (conn, msg) => borrarPendiente(conn, msg));
+registrarSesion("panel", (conn, msg) => borrarTodoDelUsuario(conn, msg));
 
 const ESPERA_MS = 10 * 60 * 1000;
 const pendientes = new Map();
@@ -79,6 +79,24 @@ const borrarPendiente = (conn, msg) => {
   for (const k of clavesDe(conn, msg)) {
     const p = pendientes.get(k);
     for (const x of p?.__claves || [k]) pendientes.delete(x);
+  }
+};
+
+/**
+ * Cierra el panel que este usuario tuviera abierto en CUALQUIER chat.
+ * Si solo se borrara el del chat actual, un panel abierto en el grupo seguía
+ * vivo mientras se configuraba por privado y los dos contestaban al mismo
+ * número.
+ */
+const borrarTodoDelUsuario = (conn, msg) => {
+  const bot = String(conn?.user?.id || "main");
+  const mios = new Set(identidades(conn, msg));
+  if (!mios.size) return;
+
+  for (const k of [...pendientes.keys()]) {
+    const partes = k.split("|");
+    const numero = partes[partes.length - 1];
+    if (partes[0] === bot && mios.has(numero)) pendientes.delete(k);
   }
 };
 
@@ -291,6 +309,12 @@ async function elegirGrupo(conn, msg) {
     );
   }
 
+  // Si solo es admin de un grupo, no hay nada que elegir
+  if (grupos.length === 1) {
+    await responder(conn, msg, `🏘️ Panel de *${grupos[0].nombre}*`);
+    return abrirPanel(conn, msg, grupos[0].jid);
+  }
+
   // Marcamos los que ya tienen ventas, para encontrarlos rápido
   const conVentas = new Set(gruposConTienda());
 
@@ -354,7 +378,8 @@ function registrar(conn) {
         const bajo = texto.toLowerCase();
 
         if (bajo === "cancelar" || bajo === "salir") {
-          borrarPendiente(conn, m);
+          borrarTodoDelUsuario(conn, m);
+          abrirSesion("nada", conn, m);   // y lo que tuviera abierto de otros menús
           await responder(conn, m, "🚪 Panel cerrado.");
           continue;
         }
@@ -391,7 +416,8 @@ function registrar(conn) {
           const op = Number(texto);
 
           if (op === 0) {
-            borrarPendiente(conn, m);
+            borrarTodoDelUsuario(conn, m);
+            abrirSesion("nada", conn, m);
             await responder(conn, m, "🚪 Panel cerrado.");
           } else if (op === 1) {
             setPendiente(conn, m, { paso: "menu", grupo });

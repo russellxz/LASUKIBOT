@@ -34,7 +34,7 @@ import { registrarSesion, abrirSesion, yaAtendido } from "./sesiones.js";
 // La personalización también entra en el registro compartido de menús: si se
 // abre este, se cierran los de ventas, y al revés. Antes, con dos abiertos, el
 // mismo número disparaba los dos.
-registrarSesion("setmenu", (conn, msg) => borrarPendiente(conn, msg));
+registrarSesion("setmenu", (conn, msg) => borrarTodoDelUsuario(conn, msg));
 
 // Menús que se pueden personalizar de a uno (sin "descargas", que sigue al global)
 const MENUS_ELEGIBLES = MENU_KEYS.filter((k) => k !== "descargas");
@@ -77,6 +77,20 @@ function getPendiente(conn, msg) {
 
 function borrarPendiente(conn, msg) {
   pendientes.delete(claveUsuario(conn, msg));
+}
+
+/** Cierra lo que este usuario tuviera abierto aquí, en cualquier chat */
+function borrarTodoDelUsuario(conn, msg) {
+  const bot = dueno(conn);
+  const quien = msg?.key?.fromMe
+    ? DIGITS(conn?.user?.id)
+    : DIGITS(msg?.key?.participant || msg?.key?.remoteJid);
+  if (!quien) return;
+
+  for (const k of [...pendientes.keys()]) {
+    const partes = k.split("|");
+    if (partes[0] === bot && partes[partes.length - 1] === quien) pendientes.delete(k);
+  }
 }
 
 function limpiarViejos() {
@@ -669,7 +683,8 @@ function registrarListener(conn, puedeUsar) {
 
         // Cancelar en cualquier paso
         if (pend && (texto === "cancelar" || texto === "cancel")) {
-          borrarPendiente(conn, m);
+          borrarTodoDelUsuario(conn, m);
+          abrirSesion("nada", conn, m);   // cierra también los menús de ventas
           await responder(conn, m, "🚪 Personalización cancelada.");
           continue;
         }

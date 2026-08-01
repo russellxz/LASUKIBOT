@@ -11,6 +11,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { crearVenta, esProductoSimple } from "../../ventas-core.js";
+import { ventasDeProducto, cuentasDeProducto } from "../../facturacion-core.js";
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "../../libs/adminCheck.js";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -32,6 +33,11 @@ function leer() {
 
 function guardar(lista) {
   fs.writeFileSync(ARCHIVO, JSON.stringify(lista, null, 2));
+}
+
+/** Los comandos que el usuario ha creado, para el menú de ventas */
+export function comandosCreados() {
+  return leer();
 }
 
 /** Mete el comando en el bot que ya está corriendo */
@@ -110,9 +116,19 @@ const handler = async (msg, { conn, args }) => {
         ``,
         creados.length
           ? `*Ya creados (${creados.length}):*\n` +
-            creados.map((c) => `• ${pref}${c.clave}`).join("\n") +
-            `\n\n🗑️ Para borrar uno: *${pref}crear borrar <nombre>*`
-          : `_Todavía no has creado ninguno._`
+            creados
+              .map((c) => {
+                const ventas = ventasDeProducto(c.clave).length;
+                const cuentas = cuentasDeProducto(c.clave);
+                if (ventas) return `🔴 ${pref}${c.clave} — ${ventas} cliente(s) activo(s)`;
+                if (cuentas) return `🟡 ${pref}${c.clave} — ${cuentas} cuenta(s), sin vender`;
+                return `🟢 ${pref}${c.clave} — vacío`;
+              })
+              .join("\n") +
+            `\n\n🗑️ *Para borrar uno:* *${pref}crear borrar <nombre>*\n` +
+            `_Solo se pueden borrar los que no tengan clientes activos (🔴)._`
+          : `_Todavía no has creado ninguno._\n\n` +
+            `🗑️ Cuando tengas alguno, lo borras con *${pref}crear borrar <nombre>*`
       ].join("\n")
     );
   }
@@ -125,6 +141,30 @@ const handler = async (msg, { conn, args }) => {
     if (i < 0) {
       return responder(`❌ No hay ningún comando creado que se llame *${nombre}*.`);
     }
+    const objetivo = lista[i];
+
+    // No se borra si todavía hay clientes pagando ese producto
+    const activas = ventasDeProducto(objetivo.clave);
+    if (activas.length) {
+      const clientes = [...new Set(activas.map((x) => x.venta.cliente))];
+      return responder(
+        [
+          `🚫 *NO SE PUEDE BORRAR TODAVÍA*`,
+          ``,
+          `*${objetivo.titulo}* tiene *${activas.length}* venta(s) activa(s)`,
+          `de *${clientes.length}* cliente(s):`,
+          ``,
+          ...clientes.slice(0, 10).map((c) => `• +${c}`),
+          clientes.length > 10 ? `• …y ${clientes.length - 10} más` : "",
+          ``,
+          `Si lo borro ahora, esa gente se queda con el producto y sin cobro.`,
+          ``,
+          `👉 Primero cancélales la venta desde *${pref}totalventas*`,
+          `(opción *3*) y luego ya lo puedes borrar.`
+        ].join("\n")
+      );
+    }
+
     const [fuera] = lista.splice(i, 1);
     guardar(lista);
 
@@ -132,10 +172,13 @@ const handler = async (msg, { conn, args }) => {
     global.plugins = (global.plugins || []).filter((p) => p?.ventas?.clave !== fuera.clave);
     if (typeof global.buildPluginIndex === "function") global.buildPluginIndex();
 
+    const cuentas = cuentasDeProducto(fuera.clave);
     return responder(
       `🗑️ *${fuera.titulo}* borrado.\n\n` +
         `Los comandos *${pref}${fuera.clave}* y *${pref}set${fuera.clave}* ya no existen.\n` +
-        `_Lo que tuvieras configurado sigue guardado por si lo vuelves a crear._`
+        (cuentas
+          ? `_Sus ${cuentas} cuenta(s) y lo que tuvieras configurado siguen guardados_\n_por si lo vuelves a crear._`
+          : `_Lo que tuvieras configurado sigue guardado por si lo vuelves a crear._`)
     );
   }
 
