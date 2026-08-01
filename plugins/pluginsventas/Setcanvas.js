@@ -152,5 +152,5 @@ const handler = async (msg, { conn, args, text, wa }) => {
   await conn.sendMessage(chatId, { text: "✅ *CANVAS configurado correctamente.*" }, { quoted: msg });
 };
 
-handler.command = ["setcanvas"];
+handler.command = ["setcanvas", "setcanva"];
 export default handler;

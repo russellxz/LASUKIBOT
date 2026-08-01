@@ -30,6 +30,7 @@ export const MENU_KEYS = [
   "menufree",
   "allmenu",
   "menuowner",
+  "menuventas",
   "descargas"
 ];
 
@@ -41,6 +42,7 @@ export const MENU_NOMBRES = {
   menufree: "Menú free",
   allmenu: "All menu",
   menuowner: "Menú owner",
+  menuventas: "Menú de ventas",
   descargas: "Comandos de descarga"
 };
 
@@ -53,7 +55,8 @@ const MEDIA_FABRICA_MAIN = {
   menurpg: { url: "https://cdn.russellxz.click/d744b5bf.jpeg", tipo: "image" },
   menufree: { url: "https://cdn.russellxz.click/bdd4fca0.jpeg", tipo: "image" },
   allmenu: { url: "https://cdn.russellxz.click/40df9bcb.jpeg", tipo: "image" },
-  menuowner: { url: "https://cdn.russellxz.click/a0b60c86.mp4", tipo: "video" }
+  menuowner: { url: "https://cdn.russellxz.click/a0b60c86.mp4", tipo: "video" },
+  menuventas: { url: "https://cdn.russellxz.click/b67d2480.jpg", tipo: "image" }
 };
 
 const MEDIA_FABRICA_SUB = {

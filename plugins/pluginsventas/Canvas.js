@@ -26,5 +26,5 @@ const handler = async (msg, { conn }) => {
   }
 };
 
-handler.command = ["canvas"];
+handler.command = ["canvas", "canva"];
 export default handler;
