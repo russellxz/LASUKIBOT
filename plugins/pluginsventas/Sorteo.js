@@ -1,4 +1,5 @@
 // plugins/sorteo.js
+import { numeroDelRemitente, isOwnerCheck, isAdminByNumber } from '../../libs/adminCheck.js';
 const DIGITS = (s = "") => String(s).replace(/\D/g, "");
 
 /** Normaliza: si participante viene como @lid y trae .jid (real), usa .jid */
@@ -31,28 +32,12 @@ function resolveRealFromId(id, partsRaw, partsNorm) {
   return hit ? hit.id : null;
 }
 
-/** ¿El número es admin? (considera LID y no-LID) */
-function getAdminNumbers(partsRaw, partsNorm) {
-  const adminNums = new Set();
-  for (let i = 0; i < partsRaw.length; i++) {
-    const r = partsRaw[i], n = partsNorm[i];
-    const isAdm = (r?.admin === "admin" || r?.admin === "superadmin" ||
-                   n?.admin === "admin" || n?.admin === "superadmin");
-    if (isAdm) {
-      [r?.id, r?.jid, n?.id].forEach(x => {
-        const d = DIGITS(x || "");
-        if (d) adminNums.add(d);
-      });
-    }
-  }
-  return adminNums;
-}
-
 const handler = async (msg, { conn, args }) => {
   const chatId   = msg.key.remoteJid;
   const isGroup  = chatId.endsWith("@g.us");
-  const senderId = msg.key.participant || msg.key.remoteJid; // puede ser @lid
-  const senderNo = DIGITS(senderId);
+  // numeroDelRemitente resuelve los @lid; con el participant a secas los
+  // admins de esos grupos no se reconocían.
+  const senderNo = numeroDelRemitente(msg);
   const isFromMe = !!msg.key.fromMe;
 
   if (!isGroup) {
@@ -77,11 +62,8 @@ const handler = async (msg, { conn, args }) => {
   const botJid = `${botNo}@s.whatsapp.net`;
 
   // ¿Sender es admin / owner?
-  const adminNums = getAdminNumbers(partsRaw, partsNorm);
-  const isAdmin   = adminNums.has(senderNo);
-  const isOwner   = (typeof global.isOwner === "function")
-    ? (global.isOwner(senderNo) || global.isOwner(`${senderNo}@s.whatsapp.net`))
-    : (Array.isArray(global.owner) && global.owner.some(([id]) => id === senderNo));
+  const isAdmin   = await isAdminByNumber(conn, chatId, senderNo);
+  const isOwner   = isOwnerCheck(senderNo);
 
   if (!isAdmin && !isOwner && !isFromMe) {
     return conn.sendMessage(chatId, {

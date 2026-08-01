@@ -11,53 +11,12 @@
 
 import fs from "fs";
 
+// Detección de admin/owner compartida con el resto del bot (la misma que usan
+// .abrir y .cerrar). Resuelve las cuentas que WhatsApp entrega como @lid: sin
+// esto, en esos grupos los admins salían como si no lo fueran.
+import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "./libs/adminCheck.js";
+
 const ARCHIVO = "./ventas365.json";
-
-// ------------------------------------------------------------
-// Helpers de identidad (compatibles con LID)
-// ------------------------------------------------------------
-const DIGITS = (s = "") => String(s || "").replace(/\D/g, "");
-
-/** Si el participante viene como @lid y trae .jid real, usa el real */
-function lidParser(participants = []) {
-  try {
-    return participants.map((v) => ({
-      id: typeof v?.id === "string" && v.id.endsWith("@lid") && v.jid ? v.jid : v.id,
-      admin: v?.admin ?? null,
-      raw: v
-    }));
-  } catch {
-    return participants || [];
-  }
-}
-
-/** ¿Es admin del grupo? Se compara por NÚMERO, así funciona con y sin LID */
-async function esAdmin(conn, chatId, numero) {
-  try {
-    const meta = await conn.groupMetadata(chatId);
-    const raw = Array.isArray(meta?.participants) ? meta.participants : [];
-    const norm = lidParser(raw);
-
-    const numerosAdmin = new Set();
-    for (let i = 0; i < raw.length; i++) {
-      const r = raw[i];
-      const n = norm[i];
-      const admin =
-        r?.admin === "admin" ||
-        r?.admin === "superadmin" ||
-        n?.admin === "admin" ||
-        n?.admin === "superadmin";
-      if (!admin) continue;
-      for (const x of [r?.id, r?.jid, n?.id]) {
-        const d = DIGITS(x);
-        if (d) numerosAdmin.add(d);
-      }
-    }
-    return numerosAdmin.has(numero);
-  } catch {
-    return false;
-  }
-}
 
 // ------------------------------------------------------------
 // Helpers de mensajes
@@ -205,14 +164,16 @@ export function crearVenta({ clave, comandos, setComandos, titulo, emoji = "🛒
         );
       }
 
-      const quien = DIGITS(msg.key.participant || msg.key.remoteJid);
-      const esDueno =
-        Array.isArray(global.owner) && global.owner.some(([id]) => id === quien);
+      const quien = numeroDelRemitente(msg);
 
-      if (!msg.key.fromMe && !esDueno && !(await esAdmin(conn, chatId, quien))) {
+      if (
+        !msg.key.fromMe &&
+        !isOwnerCheck(quien) &&
+        !(await isAdminByNumber(conn, chatId, quien))
+      ) {
         return conn.sendMessage(
           chatId,
-          { text: "🚫 Este comando solo puede ser usado por administradores." },
+          { text: "🚫 Solo administradores u owners pueden usar este comando." },
           { quoted: msg }
         );
       }
