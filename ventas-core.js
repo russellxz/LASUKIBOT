@@ -811,7 +811,7 @@ function pedirCiclo(conn, msg, cabecera) {
       `🧪 *Para probar sin esperar:* usa *m* de minutos.\n` +
       `• *5m* → cada 5 minutos\n` +
       `• *1m* → cada minuto\n\n` +
-      `❌ Escribe *cancelar* para salir.`
+      `❌ Escribe *volver* para el menú, o *0* para salir.`
   );
 }
 
@@ -865,7 +865,8 @@ async function menuAvisos(conn, msg, info) {
       `*Responde con:*`,
       `• *agregar 50712345678* — añadir un número`,
       `• *quitar 50712345678* — sacarlo`,
-      `• *0* — volver al menú`,
+      `• *volver* — volver al menú`,
+      `• *0* — cerrar la configuración`,
       ``,
       `🇲🇽 Si es de México y le falta el *1* después del *52*, se lo pongo yo.`
     ].join("\n")
@@ -889,7 +890,7 @@ async function pedirCuentaEnPrivado(conn, msg, clave, grupo, aqui, info) {
     `📌 PIN: 1234\n` +
     `👤 Perfil: 2\n\n` +
     `Después te pregunto el precio y cada cuánto se cobra.\n\n` +
-    `❌ Escribe *cancelar* para salir.`;
+    `❌ Escribe *volver* para el menú, o *0* para salir.`;
 
   const privado = jidPrivadoDe(conn, msg);
 
@@ -986,7 +987,10 @@ export function registrarListenerVentas(conn) {
         // Solo atendemos a quien puede configurar
         if (!(await puedeConfigurar(conn, m, pend.grupo))) continue;
 
-        if (bajo === "cancelar" || bajo === "salir") {
+        // "cancelar" y el 0 cierran SIEMPRE, desde el paso que sea. Antes, si
+        // estabas en "manda la foto", el 0 solo contestaba "eso no es una
+        // imagen" y no había forma de salir más que escribiendo cancelar.
+        if (bajo === "cancelar" || bajo === "salir" || texto === "0") {
           borrarTodoDelUsuario(conn, m);
           abrirSesion("nada", conn, m);   // y también lo de los otros menús
           await responder(conn, m, "🚪 Configuración cerrada.");
@@ -1000,6 +1004,18 @@ export function registrarListenerVentas(conn) {
         const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
         const volverAlMenu = () =>
           setPendiente(conn, m, { clave: pend.clave, paso: "menu", grupo: chatId }, aqui);
+
+        // "volver" sube al menú sin cerrar nada, desde el paso que sea
+        if (bajo === "volver" && pend.paso !== "menu") {
+          volverAlMenu();
+          await responder(
+            conn,
+            m,
+            textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
+          );
+          continue;
+        }
+
 
         // ---------- Menú principal ----------
         if (pend.paso === "menu") {
@@ -1017,18 +1033,14 @@ export function registrarListenerVentas(conn) {
             continue;
           }
 
-          if (op === 0) {
-            borrarTodoDelUsuario(conn, m);
-            abrirSesion("nada", conn, m);
-            await responder(conn, m, "🚪 Configuración cerrada.");
-          } else if (op === 1) {
+          if (op === 1) {
             setPendiente(conn, m, { clave: pend.clave, paso: "foto", grupo: chatId }, aqui);
             await responder(
               conn,
               m,
               `📷 *Manda ahora la foto* de ${info.titulo}.\n\n` +
                 `Puedes enviarla directa o responder a una que ya esté en el chat.\n\n` +
-                `❌ Escribe *cancelar* para salir.`
+                `❌ Escribe *volver* para el menú, o *0* para salir.`
             );
           } else if (op === 2) {
             setPendiente(conn, m, { clave: pend.clave, paso: "texto", grupo: chatId }, aqui);
@@ -1037,7 +1049,7 @@ export function registrarListenerVentas(conn) {
               m,
               `📝 *Escribe el texto* que verán los clientes con *${pref}${info.clave}*.\n\n` +
                 `Puedes usar varias líneas, emojis y negritas.\n\n` +
-                `❌ Escribe *cancelar* para salir.`
+                `❌ Escribe *volver* para el menú, o *0* para salir.`
             );
           } else if (op === 3) {
             await pedirCuentaEnPrivado(conn, m, pend.clave, chatId, aqui, info);
@@ -1083,7 +1095,7 @@ export function registrarListenerVentas(conn) {
                   )
                   .join("\n") +
                 `\n\n⚠️ Si está vendida, se cancela la venta del cliente.\n` +
-                `❌ Escribe *cancelar* para salir.`
+                `❌ Escribe *volver* para el menú, o *0* para salir.`
             );
           } else if (op === 7) {
             await verCuentas(conn, m, info);
@@ -1110,9 +1122,26 @@ export function registrarListenerVentas(conn) {
                   .join("\n\n") +
                 `\n\n_Sirve para cambiarle los datos cuando una cuenta se recupera,_\n` +
                 `_en vez de borrarla y volver a crearla._\n` +
-                `❌ Escribe *cancelar* para salir.`
+                `❌ Escribe *volver* para el menú, o *0* para salir.`
             );
           }
+          continue;
+        }
+
+        // Un número suelto mientras se pide un dato casi siempre es que
+        // quisieron pulsar una opción del menú. Se vuelve al menú en vez de
+        // guardar "6" como texto o como datos de una cuenta.
+        if (
+          /^\d$/.test(texto) &&
+          ["texto", "cuenta_datos", "editar_datos", "foto"].includes(pend.paso)
+        ) {
+          volverAlMenu();
+          await responder(
+            conn,
+            m,
+            `↩️ *${texto}* es una opción del menú, así que no lo guardé.\n\n` +
+              textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
+          );
           continue;
         }
 
@@ -1144,23 +1173,6 @@ export function registrarListenerVentas(conn) {
             conn,
             m,
             `✅ *Foto guardada.*\n\nYa sale con *${pref}${info.clave}*.\n\n` +
-              textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
-          );
-          continue;
-        }
-
-        // Un número suelto mientras se pide un dato casi siempre es que
-        // quisieron pulsar una opción del menú. Se vuelve al menú en vez de
-        // guardar "6" como texto o como datos de una cuenta.
-        if (
-          /^\d$/.test(texto) &&
-          ["texto", "cuenta_datos", "editar_datos"].includes(pend.paso)
-        ) {
-          volverAlMenu();
-          await responder(
-            conn,
-            m,
-            `↩️ *${texto}* es una opción del menú, así que no lo guardé.\n\n` +
               textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
           );
           continue;
@@ -1198,7 +1210,7 @@ export function registrarListenerVentas(conn) {
               `Escribe solo el número de créditos. Ejemplo: *10*\n\n` +
               `Ese es el precio que se le descuenta al cliente al comprar\n` +
               `y también lo que se le cobra en cada factura.\n\n` +
-              `❌ Escribe *cancelar* para salir.`
+              `❌ Escribe *volver* para el menú, o *0* para salir.`
           );
           continue;
         }
@@ -1294,7 +1306,7 @@ export function registrarListenerVentas(conn) {
               `━━━━━━━━━━━━━━━━━━━━\n` +
               `Escribe los datos nuevos tal cual los quieres.\n` +
               `Si solo quieres cambiarle el precio, escribe *saltar*.\n\n` +
-              `❌ Escribe *cancelar* para salir.`
+              `❌ Escribe *volver* para el menú, o *0* para salir.`
           );
           continue;
         }
@@ -1315,7 +1327,7 @@ export function registrarListenerVentas(conn) {
             m,
             `💵 *¿Precio nuevo?*\n\n` +
               `Escribe el número de créditos, o *saltar* para dejarlo igual.\n\n` +
-              `❌ Escribe *cancelar* para salir.`
+              `❌ Escribe *volver* para el menú, o *0* para salir.`
           );
           continue;
         }
@@ -1370,11 +1382,6 @@ export function registrarListenerVentas(conn) {
 
         // ---------- Avisos ----------
         if (pend.paso === "avisos") {
-          if (texto === "0") {
-            volverAlMenu();
-            await responder(conn, m, textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref));
-            continue;
-          }
           const mAdd = bajo.match(/^agregar\s+(.+)$/);
           const mDel = bajo.match(/^quitar\s+(.+)$/);
           if (mAdd) {
