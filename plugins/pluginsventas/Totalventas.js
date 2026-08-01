@@ -65,6 +65,11 @@ const clavesDe = (conn, msg) =>
 function setPendiente(conn, msg, datos) {
   const ahora = Date.now();
   for (const [k, v] of pendientes) if (ahora - v.ts > ESPERA_MS) pendientes.delete(k);
+
+  // Solo UNA conversación abierta por usuario: si no, quedaba viva la del
+  // grupo y la del privado a la vez y los pasos se pisaban.
+  borrarTodoDelUsuario(conn, msg);
+
   const ks = clavesDe(conn, msg);
   const p = { ...datos, ts: ahora, __claves: ks };
   for (const k of ks) pendientes.set(k, p);

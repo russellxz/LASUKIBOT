@@ -288,6 +288,12 @@ function setPendiente(conn, msg, datos, chatDestino) {
   const ahora = Date.now();
   for (const [k, v] of pendientes) if (ahora - v.ts > ESPERA_MS) pendientes.delete(k);
 
+  // Un usuario solo puede tener UNA conversación abierta. Si no se borra lo
+  // anterior, al pasar del grupo al privado quedaban las dos vivas y luego
+  // cada número contestaba en un sitio distinto, o se quedaba pegado en el
+  // paso que ya habías terminado.
+  borrarTodoDelUsuario(conn, msg);
+
   const ks = claves(conn, msg, chatDestino);
   const p = { ...datos, ts: ahora, __claves: ks };
   for (const k of ks) pendientes.set(k, p);
@@ -913,7 +919,9 @@ async function pedirCuentaEnPrivado(conn, msg, clave, grupo, aqui, info) {
         msg,
         `📩 *Te escribí al privado.*\n\n` +
           `Ponme ahí los datos de la cuenta: no conviene escribir contraseñas\n` +
-          `ni PIN en el grupo. Cuando termines vuelves aquí si quieres.`
+          `ni PIN en el grupo.\n\n` +
+          `_Seguimos por privado. Si luego quieres configurar desde aquí,_\n` +
+          `_vuelve a escribir *${(Array.isArray(global.prefixes) && global.prefixes[0]) || "."}set${clave}*._`
       );
     } catch (e) {
       console.log("[ventas] no se pudo abrir el privado del admin:", e.message);
