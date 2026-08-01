@@ -22,33 +22,45 @@ import {
   fecha
 } from "../../facturacion-core.js";
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "../../libs/adminCheck.js";
+import { identidades } from "../../ventas-core.js";
 
 const ESPERA_MS = 10 * 60 * 1000;
 const pendientes = new Map();
 const idsPropios = new Set();
 
-const claveDe = (conn, msg) =>
-  `${conn?.user?.id || "main"}|${msg.key.remoteJid}|${
-    msg.key.fromMe ? DIGITS(conn?.user?.id) : numeroDelRemitente(msg)
-  }`;
+// Igual que en ventas-core: este listener corre antes de que el bot resuelva
+// los @lid, así que el panel se guarda y se busca con todas las formas del
+// número. Si no, al responder el número no encontraría el panel abierto.
+const clavesDe = (conn, msg) =>
+  identidades(conn, msg).map((n) => `${conn?.user?.id || "main"}|${msg.key.remoteJid}|${n}`);
 
 function setPendiente(conn, msg, datos) {
   const ahora = Date.now();
   for (const [k, v] of pendientes) if (ahora - v.ts > ESPERA_MS) pendientes.delete(k);
-  pendientes.set(claveDe(conn, msg), { ...datos, ts: ahora });
+  const ks = clavesDe(conn, msg);
+  const p = { ...datos, ts: ahora, __claves: ks };
+  for (const k of ks) pendientes.set(k, p);
 }
 
 function getPendiente(conn, msg) {
-  const p = pendientes.get(claveDe(conn, msg));
-  if (!p) return null;
-  if (Date.now() - p.ts > ESPERA_MS) {
-    pendientes.delete(claveDe(conn, msg));
-    return null;
+  for (const k of clavesDe(conn, msg)) {
+    const p = pendientes.get(k);
+    if (!p) continue;
+    if (Date.now() - p.ts > ESPERA_MS) {
+      for (const x of p.__claves || [k]) pendientes.delete(x);
+      return null;
+    }
+    return p;
   }
-  return p;
+  return null;
 }
 
-const borrarPendiente = (conn, msg) => pendientes.delete(claveDe(conn, msg));
+const borrarPendiente = (conn, msg) => {
+  for (const k of clavesDe(conn, msg)) {
+    const p = pendientes.get(k);
+    for (const x of p?.__claves || [k]) pendientes.delete(x);
+  }
+};
 
 function recordar(res) {
   if (res?.key?.id) {
@@ -228,8 +240,11 @@ const handler = async (msg, { conn }) => {
   const quien = numeroDelRemitente(msg);
 
   if (chatId.endsWith("@g.us")) {
-    const permitido =
-      msg.key.fromMe || isOwnerCheck(quien) || (await isAdminByNumber(conn, chatId, quien));
+    let permitido = !!msg.key.fromMe;
+    for (const n of identidades(conn, msg)) {
+      if (permitido) break;
+      permitido = isOwnerCheck(n) || (await isAdminByNumber(conn, chatId, n));
+    }
     if (!permitido) {
       return responder(conn, msg, "🚫 Solo administradores u owners pueden ver el panel de ventas.");
     }
@@ -237,7 +252,7 @@ const handler = async (msg, { conn }) => {
   }
 
   // En privado solo el owner, y eligiendo grupo
-  if (!msg.key.fromMe && !isOwnerCheck(quien)) {
+  if (!msg.key.fromMe && !identidades(conn, msg).some((n) => isOwnerCheck(n))) {
     return responder(
       conn,
       msg,

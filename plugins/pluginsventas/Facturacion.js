@@ -11,7 +11,6 @@
 
 import {
   INTERVALO_REVISION_MS,
-  DIGITS,
   getTienda,
   gruposConTienda,
   ventasQueTocanFactura,
@@ -23,7 +22,7 @@ import {
   fecha
 } from "../../facturacion-core.js";
 import { generarFacturaImagen, textoFactura } from "../../factura-imagen.js";
-import { registrarListenerVentas, getProducto } from "../../ventas-core.js";
+import { registrarListenerVentas, getProducto, identidades } from "../../ventas-core.js";
 
 // Mensajes de factura que hemos enviado: id del mensaje → dónde vive la factura.
 // Sirve para saber a qué factura responde el cliente cuando escribe "pagar".
@@ -173,20 +172,31 @@ async function intentarCobro(conn, msg) {
   const texto = textoDe(msg);
   if (!esPalabraDePago(texto)) return false;
 
-  const cliente = DIGITS(
-    msg.realJid || msg.key.participant || msg.key.remoteJid
-  );
-  if (!cliente) return false;
+  // Aquí también corremos antes de que el bot resuelva los @lid: probamos
+  // todas las formas del número hasta dar con la que tiene la factura.
+  const posibles = identidades(conn, msg);
+  if (!posibles.length) return false;
 
   // ¿Responde a una factura concreta?
   const citado = citadoDe(msg);
   let objetivo = citado ? mensajesFactura.get(citado) : null;
+  let cliente = null;
 
-  // Si no, se cobra la más antigua que tenga pendiente
-  if (!objetivo) {
-    const lista = pendientesDeCliente(cliente);
-    if (!lista.length) return false;
-    objetivo = { grupo: lista[0].chatId, facturaId: lista[0].factura.id };
+  if (objetivo) {
+    const t0 = getTienda(objetivo.grupo);
+    const f0 = t0.facturas.find((f) => f.id === objetivo.facturaId);
+    if (!f0 || !posibles.includes(f0.cliente)) return false;
+    cliente = f0.cliente;
+  } else {
+    // Si no, se cobra la más antigua que tenga pendiente
+    for (const n of posibles) {
+      const lista = pendientesDeCliente(n);
+      if (!lista.length) continue;
+      objetivo = { grupo: lista[0].chatId, facturaId: lista[0].factura.id };
+      cliente = n;
+      break;
+    }
+    if (!objetivo) return false;
   }
 
   const t = getTienda(objetivo.grupo);
