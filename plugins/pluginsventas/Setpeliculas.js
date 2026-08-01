@@ -1,7 +1,7 @@
 // plugins/setpeliculas.js
 import fs from 'fs';
 import path from 'path';
-import { isAdminByNumber } from '../../libs/adminCheck.js';
+import { isAdminByNumber, numeroDelRemitente, isOwnerCheck } from '../../libs/adminCheck.js';
 
 // ——— Helpers LID-aware + texto ———
 const DIGITS = (s = "") => String(s).replace(/\D/g, "");
@@ -87,8 +87,9 @@ function ensureWA(wa, conn) {
 const handler = async (msg, { conn, args, text, wa }) => {
   const chatId    = msg.key.remoteJid;
   const isGroup   = chatId.endsWith("@g.us");
-  const senderJid = msg.key.participant || msg.key.remoteJid; // puede ser @lid
-  const senderNum = DIGITS(senderJid);
+  // numeroDelRemitente resuelve los @lid; con el participant a secas los
+  // admins de esos grupos no se reconocían.
+  const senderNum = numeroDelRemitente(msg);
   const isFromMe  = !!msg.key.fromMe;
 
   if (!isGroup) {
@@ -98,7 +99,7 @@ const handler = async (msg, { conn, args, text, wa }) => {
   // Permisos: admin / owner / bot
   const isAdmin = await isAdminByNumber(conn, chatId, senderNum);
   const owners  = Array.isArray(global.owner) ? global.owner : [];
-  const isOwner = owners.some(([id]) => id === senderNum);
+  const isOwner = isOwnerCheck(senderNum);
 
   if (!isAdmin && !isOwner && !isFromMe) {
     return conn.sendMessage(chatId, { text: "🚫 Este comando solo puede ser usado por administradores." }, { quoted: msg });
