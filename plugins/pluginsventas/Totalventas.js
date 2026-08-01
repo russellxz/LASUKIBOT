@@ -43,9 +43,16 @@ const idsPropios = new Set();
 
 // Igual que en ventas-core: este listener corre antes de que el bot resuelva
 // los @lid, así que el panel se guarda y se busca con todas las formas del
-// número. Si no, al responder el número no encontraría el panel abierto.
+// número. Y en los privados no se usa el jid del chat, porque el comando lo ve
+// ya normalizado y la respuesta todavía como @lid: la clave no coincidía y el
+// panel no reaccionaba al elegir el grupo.
+const chatClave = (msg) => {
+  const c = String(msg?.key?.remoteJid || "");
+  return c.endsWith("@g.us") ? c : "privado";
+};
+
 const clavesDe = (conn, msg) =>
-  identidades(conn, msg).map((n) => `${conn?.user?.id || "main"}|${msg.key.remoteJid}|${n}`);
+  identidades(conn, msg).map((n) => `${conn?.user?.id || "main"}|${chatClave(msg)}|${n}`);
 
 function setPendiente(conn, msg, datos) {
   const ahora = Date.now();

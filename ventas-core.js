@@ -194,6 +194,20 @@ export function productosRegistrados() {
   return [...PRODUCTOS.values()];
 }
 
+/**
+ * ¿Ese comando es uno de los "set" de ventas o el panel?
+ * El filtro de privados del bot lo usa para dejarlos pasar: cada uno
+ * comprueba por su cuenta de qué grupos es admin quien escribe.
+ */
+export function esComandoDeVentas(nombre) {
+  const n = String(nombre || "").toLowerCase().replace(/^[./#!]/, "");
+  if (["totalventas", "totalventa", "ventastotal"].includes(n)) return true;
+  for (const info of PRODUCTOS.values()) {
+    if (info.setComandos?.some((c) => String(c).toLowerCase() === n)) return true;
+  }
+  return false;
+}
+
 // ------------------------------------------------------------
 // Estado de los menús abiertos
 // ------------------------------------------------------------
@@ -232,8 +246,22 @@ export function identidades(conn, msg) {
   return out;
 }
 
+/**
+ * El chat con el que se guarda el menú abierto.
+ *
+ * En los privados NO se puede usar el jid tal cual: el bot reescribe los @lid
+ * a número real, pero eso pasa DESPUÉS de este listener. Así, el comando veía
+ * "50712345678@s.whatsapp.net" y la respuesta "9988@lid", la clave no
+ * coincidía y el menú no reaccionaba al elegir el número.
+ * Un privado es siempre la misma persona, así que basta con marcarlo.
+ */
+function chatClave(msg, chat) {
+  const c = String(chat || msg?.key?.remoteJid || "");
+  return c.endsWith("@g.us") ? c : "privado";
+}
+
 const claves = (conn, msg, chat) =>
-  identidades(conn, msg).map((n) => `${dueno(conn)}|${chat || msg.key.remoteJid}|${n}`);
+  identidades(conn, msg).map((n) => `${dueno(conn)}|${chatClave(msg, chat)}|${n}`);
 
 /**
  * @param chatDestino  dónde sigue la conversación. Para los datos de las
@@ -335,7 +363,6 @@ async function puedeConfigurar(conn, msg, grupo) {
  */
 export async function gruposDondeEsAdmin(conn, msg) {
   const mios = identidades(conn, msg);
-  const owner = mios.some((n) => isOwnerCheck(n));
 
   let todos = {};
   try {
@@ -348,8 +375,9 @@ export async function gruposDondeEsAdmin(conn, msg) {
   const salida = [];
   for (const [jid, meta] of Object.entries(todos)) {
     const nombre = meta?.subject || jid;
-    if (owner) { salida.push({ jid, nombre }); continue; }
 
+    // Solo donde el usuario es administrador de verdad, aunque sea el owner
+    // del bot: si no, salían todos los grupos donde está el bot.
     const admins = new Set();
     for (const p of meta?.participants || []) {
       if (p?.admin !== "admin" && p?.admin !== "superadmin") continue;
