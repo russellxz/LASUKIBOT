@@ -56,6 +56,7 @@ import { revisarSpam } from "./libs/antispam.js";
 import { startWebServer } from "./webserver.js";
 import { limpiarRespuestaBoton } from "./disenos.js";
 import { tienePendienteDePago } from "./facturacion-core.js";
+import { esComandoDeVentas } from "./ventas-core.js";
 
 // 🧾 Texto llano de un mensaje, para la excepción de "pagar" en privados
 const textoPlano = (m) => {
@@ -2785,17 +2786,26 @@ try {
     Esto aplica aunque modoprivado esté apagado.
   */
   if (!isGroup) {
-    // 🧾 Excepción SOLO para pagar facturas: si a este número le llegó una
-    // factura y responde "pagar", se le deja pasar aunque no esté en la lista.
-    // No abre nada más: cualquier otro texto suyo se sigue bloqueando igual.
-    let pagandoFactura = false;
+    // 🧾 Excepciones concretas, sin tocar el resto del filtro:
+    //  1. Quien tiene una factura pendiente y responde "pagar".
+    //  2. Los comandos de ventas (set... y totalventas), para que un admin
+    //     pueda administrar su tienda desde el privado. Cada comando
+    //     comprueba por su cuenta de qué grupos es admin quien escribe, así
+    //     que a un desconocido solo le responde que no es admin de ninguno.
+    let excepcionVentas = false;
     try {
-      if (esPalabraDePago(textoPlano(m)) && tienePendienteDePago(senderNum)) {
-        pagandoFactura = true;
+      const t = textoPlano(m);
+      if (esPalabraDePago(t) && tienePendienteDePago(senderNum)) {
+        excepcionVentas = true;
+      } else if (t) {
+        const primera = t.split(/\s+/)[0] || "";
+        const prefijos = Array.isArray(global.prefixes) ? global.prefixes : ["."];
+        const conPrefijo = prefijos.some((p) => primera.startsWith(p));
+        if (conPrefijo && esComandoDeVentas(primera)) excepcionVentas = true;
       }
     } catch {}
 
-    const permitidoPrivado = isBot || isOwner || isInPrivateWhitelist || pagandoFactura;
+    const permitidoPrivado = isBot || isOwner || isInPrivateWhitelist || excepcionVentas;
 
     if (!permitidoPrivado) {
       console.log("⛔ PRIVADO BLOQUEADO");

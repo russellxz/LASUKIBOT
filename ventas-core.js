@@ -16,6 +16,7 @@
 import fs from "fs";
 
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "./libs/adminCheck.js";
+import { registrarSesion, abrirSesion, yaAtendido } from "./sesiones.js";
 import {
   DIGITS,
   normalizarNumero,
@@ -193,6 +194,20 @@ export function productosRegistrados() {
   return [...PRODUCTOS.values()];
 }
 
+/**
+ * ¿Ese comando es uno de los "set" de ventas o el panel?
+ * El filtro de privados del bot lo usa para dejarlos pasar: cada uno
+ * comprueba por su cuenta de qué grupos es admin quien escribe.
+ */
+export function esComandoDeVentas(nombre) {
+  const n = String(nombre || "").toLowerCase().replace(/^[./#!]/, "");
+  if (["totalventas", "totalventa", "ventastotal"].includes(n)) return true;
+  for (const info of PRODUCTOS.values()) {
+    if (info.setComandos?.some((c) => String(c).toLowerCase() === n)) return true;
+  }
+  return false;
+}
+
 // ------------------------------------------------------------
 // Estado de los menús abiertos
 // ------------------------------------------------------------
@@ -231,8 +246,22 @@ export function identidades(conn, msg) {
   return out;
 }
 
+/**
+ * El chat con el que se guarda el menú abierto.
+ *
+ * En los privados NO se puede usar el jid tal cual: el bot reescribe los @lid
+ * a número real, pero eso pasa DESPUÉS de este listener. Así, el comando veía
+ * "50712345678@s.whatsapp.net" y la respuesta "9988@lid", la clave no
+ * coincidía y el menú no reaccionaba al elegir el número.
+ * Un privado es siempre la misma persona, así que basta con marcarlo.
+ */
+function chatClave(msg, chat) {
+  const c = String(chat || msg?.key?.remoteJid || "");
+  return c.endsWith("@g.us") ? c : "privado";
+}
+
 const claves = (conn, msg, chat) =>
-  identidades(conn, msg).map((n) => `${dueno(conn)}|${chat || msg.key.remoteJid}|${n}`);
+  identidades(conn, msg).map((n) => `${dueno(conn)}|${chatClave(msg, chat)}|${n}`);
 
 /**
  * @param chatDestino  dónde sigue la conversación. Para los datos de las
@@ -284,16 +313,14 @@ export function registrarEnvioFactura(fn) {
   if (typeof fn === "function") enviarFacturaFn = fn;
 }
 
-const cerradores = [];
+// Este menú entra en el registro compartido: al abrirlo se cierran los demás
+registrarSesion("ventas", (conn, msg) => borrarPendiente(conn, msg));
 
+const cerrarOtrasSesiones = (conn, msg) => abrirSesion("ventas", conn, msg);
+
+// Se mantiene por compatibilidad con quien ya lo usaba
 export function registrarCerrador(fn) {
-  if (typeof fn === "function" && !cerradores.includes(fn)) cerradores.push(fn);
-}
-
-function cerrarOtrasSesiones(conn, msg) {
-  for (const fn of cerradores) {
-    try { fn(conn, msg); } catch (e) { console.error("[ventas] cerrador:", e.message); }
-  }
+  registrarSesion(`extra${Math.random().toString(36).slice(2)}`, fn);
 }
 
 function recordar(res) {
@@ -336,7 +363,6 @@ async function puedeConfigurar(conn, msg, grupo) {
  */
 export async function gruposDondeEsAdmin(conn, msg) {
   const mios = identidades(conn, msg);
-  const owner = mios.some((n) => isOwnerCheck(n));
 
   let todos = {};
   try {
@@ -349,8 +375,9 @@ export async function gruposDondeEsAdmin(conn, msg) {
   const salida = [];
   for (const [jid, meta] of Object.entries(todos)) {
     const nombre = meta?.subject || jid;
-    if (owner) { salida.push({ jid, nombre }); continue; }
 
+    // Solo donde el usuario es administrador de verdad, aunque sea el owner
+    // del bot: si no, salían todos los grupos donde está el bot.
     const admins = new Set();
     for (const p of meta?.participants || []) {
       if (p?.admin !== "admin" && p?.admin !== "superadmin") continue;
@@ -877,6 +904,10 @@ export function registrarListenerVentas(conn) {
         const pend = getPendiente(conn, m);
         if (!pend) continue;
 
+        // WhatsApp a veces entrega el mismo mensaje dos veces: el segundo
+        // se comería el paso siguiente
+        if (yaAtendido("ventas", m, dueno(conn))) continue;
+
         const crudo = textoDe(m);
         if (esTextoPropio(crudo)) continue;
 
@@ -1057,6 +1088,23 @@ export function registrarListenerVentas(conn) {
             conn,
             m,
             `✅ *Foto guardada.*\n\nYa sale con *${pref}${info.clave}*.\n\n` +
+              textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
+          );
+          continue;
+        }
+
+        // Un número suelto mientras se pide un dato casi siempre es que
+        // quisieron pulsar una opción del menú. Se vuelve al menú en vez de
+        // guardar "6" como texto o como datos de una cuenta.
+        if (
+          /^\d$/.test(texto) &&
+          ["texto", "cuenta_datos", "editar_datos"].includes(pend.paso)
+        ) {
+          volverAlMenu();
+          await responder(
+            conn,
+            m,
+            `↩️ *${texto}* es una opción del menú, así que no lo guardé.\n\n` +
               textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
           );
           continue;
