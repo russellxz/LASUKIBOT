@@ -220,14 +220,19 @@ export function identidades(conn, msg) {
   return out;
 }
 
-const claves = (conn, msg) =>
-  identidades(conn, msg).map((n) => `${dueno(conn)}|${msg.key.remoteJid}|${n}`);
+const claves = (conn, msg, chat) =>
+  identidades(conn, msg).map((n) => `${dueno(conn)}|${chat || msg.key.remoteJid}|${n}`);
 
-function setPendiente(conn, msg, datos) {
+/**
+ * @param chatDestino  dónde sigue la conversación. Para los datos de las
+ *                     cuentas se pasa el privado del admin, así las
+ *                     credenciales no se escriben en el grupo.
+ */
+function setPendiente(conn, msg, datos, chatDestino) {
   const ahora = Date.now();
   for (const [k, v] of pendientes) if (ahora - v.ts > ESPERA_MS) pendientes.delete(k);
 
-  const ks = claves(conn, msg);
+  const ks = claves(conn, msg, chatDestino);
   const p = { ...datos, ts: ahora, __claves: ks };
   for (const k of ks) pendientes.set(k, p);
 }
@@ -272,8 +277,8 @@ async function responder(conn, msg, texto, extra = {}) {
 // ------------------------------------------------------------
 // Permisos
 // ------------------------------------------------------------
-async function puedeConfigurar(conn, msg) {
-  const chatId = msg.key.remoteJid;
+async function puedeConfigurar(conn, msg, grupo) {
+  const chatId = grupo || msg.key.remoteJid;
   if (!chatId.endsWith("@g.us")) return false;
   if (msg.key.fromMe) return true;
 
@@ -284,6 +289,29 @@ async function puedeConfigurar(conn, msg) {
     if (await isAdminByNumber(conn, chatId, n)) return true;
   }
   return false;
+}
+
+/**
+ * El chat privado de quien escribe, para pedirle ahí las credenciales.
+ * Devuelve null si solo tenemos un @lid sin resolver: en ese caso el flujo
+ * se queda en el grupo en vez de fallar.
+ */
+function jidPrivadoDe(conn, msg) {
+  const candidatos = [msg?.realJid, msg?.key?.participant, msg?.key?.remoteJid];
+
+  for (const j of candidatos) {
+    if (typeof j === "string" && j.endsWith("@s.whatsapp.net")) {
+      return `${normalizarNumero(j)}@s.whatsapp.net`;
+    }
+  }
+  for (const j of candidatos) {
+    if (typeof j === "string" && j.endsWith("@lid") && global.lidMap instanceof Map) {
+      const real = global.lidMap.get(j);
+      if (real) return `${normalizarNumero(real)}@s.whatsapp.net`;
+    }
+  }
+  if (msg?.realNumber) return `${normalizarNumero(msg.realNumber)}@s.whatsapp.net`;
+  return null;
 }
 
 /** El número con el que se le apunta el saldo y las compras a alguien */
@@ -312,7 +340,7 @@ function textoMenuSet(chatId, clave, titulo, emoji, pref) {
     ``,
     `*1.* 📷 Poner foto`,
     `*2.* 📝 Poner texto`,
-    `*3.* ➕ Agregar cuenta (correo, contraseña, PIN...)`,
+    `*3.* ➕ Agregar cuenta  _(te escribo al privado)_`,
     `*4.* ⏱️ Cambiar el ciclo de una cuenta`,
     `*5.* 🔔 Números que reciben TODAS las facturas`,
     `*6.* 🗑️ Quitar una cuenta`,
@@ -329,7 +357,9 @@ function textoMenuSet(chatId, clave, titulo, emoji, pref) {
     `cobro automático:`,
     ``,
     `1️⃣ Cada cuenta lleva sus datos (correo, contraseña, PIN, perfil...),`,
-    `su *precio en créditos* y su *ciclo de cobro*.`,
+    `su *precio en créditos* y su *ciclo de cobro*. Esos datos me los pasas`,
+    `*por privado*: al elegir la opción 3 te abro la conversación yo, para que`,
+    `no queden contraseñas escritas en el grupo.`,
     `2️⃣ El cliente compra con *${pref}${clave} 1* y los datos le llegan a su`,
     `privado. Al grupo nunca.`,
     `3️⃣ Al cumplirse el ciclo, el bot le manda la *factura a su privado* y`,
@@ -352,7 +382,7 @@ export async function abrirSetVenta(msg, conn, info) {
     return responder(conn, msg, "🚫 Solo administradores u owners pueden usar este comando.");
   }
 
-  setPendiente(conn, msg, { clave: info.clave, paso: "menu" });
+  setPendiente(conn, msg, { clave: info.clave, paso: "menu", grupo: chatId });
   return responder(conn, msg, textoMenuSet(chatId, info.clave, info.titulo, info.emoji, pref));
 }
 
@@ -527,6 +557,8 @@ export function crearVenta({ clave, comandos, setComandos, titulo, emoji = "🛒
 // ------------------------------------------------------------
 const MARCAS_PROPIAS = [
   "📷 *Manda ahora",
+  "📩 *Te escribí al privado",
+  "⚠️ No pude escribirte al privado",
   "📝 *Escribe el texto",
   "➕ *AGREGAR CUENTA",
   "💵 *¿Cuánto cuesta",
@@ -622,6 +654,60 @@ async function menuAvisos(conn, msg, info) {
   );
 }
 
+/**
+ * Los datos de una cuenta (correo, contraseña, PIN...) NO se escriben en el
+ * grupo: el bot le abre la conversación al admin por privado y el resto del
+ * paso ocurre ahí. Si no se puede saber su privado, se sigue en el grupo para
+ * no dejarlo tirado.
+ */
+async function pedirCuentaEnPrivado(conn, msg, clave, grupo, aqui, info) {
+  const texto =
+    `➕ *AGREGAR CUENTA*  ·  ${info.emoji} ${info.titulo}\n\n` +
+    `Escribe aquí los datos que recibirá el cliente cuando compre.\n` +
+    `Van tal cual los escribas, en varias líneas si quieres:\n\n` +
+    `_Ejemplo:_\n` +
+    `📧 Correo: cuenta@correo.com\n` +
+    `🔑 Contraseña: MiClave123\n` +
+    `📌 PIN: 1234\n` +
+    `👤 Perfil: 2\n\n` +
+    `Después te pregunto el precio y cada cuánto se cobra.\n\n` +
+    `❌ Escribe *cancelar* para salir.`;
+
+  const privado = jidPrivadoDe(conn, msg);
+
+  // Ya estamos en su privado: se sigue aquí mismo
+  if (privado && aqui === privado) {
+    setPendiente(conn, msg, { clave, paso: "cuenta_datos", grupo }, aqui);
+    return responder(conn, msg, texto);
+  }
+
+  if (privado) {
+    try {
+      recordar(await conn.sendMessage(privado, { text: texto }));
+      setPendiente(conn, msg, { clave, paso: "cuenta_datos", grupo }, privado);
+      // En el grupo solo queda el aviso, sin ninguna credencial
+      return responder(
+        conn,
+        msg,
+        `📩 *Te escribí al privado.*\n\n` +
+          `Ponme ahí los datos de la cuenta: no conviene escribir contraseñas\n` +
+          `ni PIN en el grupo. Cuando termines vuelves aquí si quieres.`
+      );
+    } catch (e) {
+      console.log("[ventas] no se pudo abrir el privado del admin:", e.message);
+    }
+  }
+
+  // Sin privado disponible: se sigue en el grupo, avisando
+  setPendiente(conn, msg, { clave, paso: "cuenta_datos", grupo }, aqui);
+  return responder(
+    conn,
+    msg,
+    `⚠️ No pude escribirte al privado, así que seguimos por aquí.\n` +
+      `_Escríbeme primero por privado y la próxima vez te lo pido allá._\n\n${texto}`
+  );
+}
+
 /** Se llama una vez por conexión desde el plugin de facturación */
 export function registrarListenerVentas(conn) {
   if (conn._ventasListener) return;
@@ -645,7 +731,7 @@ export function registrarListenerVentas(conn) {
         if (!info) { borrarPendiente(conn, m); continue; }
 
         // Solo atendemos a quien puede configurar
-        if (!(await puedeConfigurar(conn, m))) continue;
+        if (!(await puedeConfigurar(conn, m, pend.grupo))) continue;
 
         if (bajo === "cancelar" || bajo === "salir") {
           borrarPendiente(conn, m);
@@ -653,9 +739,13 @@ export function registrarListenerVentas(conn) {
           continue;
         }
 
-        const chatId = m.key.remoteJid;
+        // El producto siempre es el del GRUPO donde se abrió el menú, aunque
+        // el admin esté respondiendo desde su privado (opción 3).
+        const chatId = pend.grupo || m.key.remoteJid;
+        const aqui = m.key.remoteJid;
         const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
-        const volverAlMenu = () => setPendiente(conn, m, { clave: pend.clave, paso: "menu" });
+        const volverAlMenu = () =>
+          setPendiente(conn, m, { clave: pend.clave, paso: "menu", grupo: chatId }, aqui);
 
         // ---------- Menú principal ----------
         if (pend.paso === "menu") {
@@ -666,7 +756,7 @@ export function registrarListenerVentas(conn) {
             borrarPendiente(conn, m);
             await responder(conn, m, "🚪 Configuración cerrada.");
           } else if (op === 1) {
-            setPendiente(conn, m, { clave: pend.clave, paso: "foto" });
+            setPendiente(conn, m, { clave: pend.clave, paso: "foto", grupo: chatId }, aqui);
             await responder(
               conn,
               m,
@@ -675,7 +765,7 @@ export function registrarListenerVentas(conn) {
                 `❌ Escribe *cancelar* para salir.`
             );
           } else if (op === 2) {
-            setPendiente(conn, m, { clave: pend.clave, paso: "texto" });
+            setPendiente(conn, m, { clave: pend.clave, paso: "texto", grupo: chatId }, aqui);
             await responder(
               conn,
               m,
@@ -684,21 +774,7 @@ export function registrarListenerVentas(conn) {
                 `❌ Escribe *cancelar* para salir.`
             );
           } else if (op === 3) {
-            setPendiente(conn, m, { clave: pend.clave, paso: "cuenta_datos" });
-            await responder(
-              conn,
-              m,
-              `➕ *AGREGAR CUENTA*\n\n` +
-                `Escribe los datos que se le entregarán al cliente cuando compre.\n` +
-                `Van tal cual los escribas, en varias líneas si quieres:\n\n` +
-                `_Ejemplo:_\n` +
-                `📧 Correo: cuenta@correo.com\n` +
-                `🔑 Contraseña: MiClave123\n` +
-                `📌 PIN: 1234\n` +
-                `👤 Perfil: 2\n\n` +
-                `Solo el cliente que compre verá esto, y le llega al privado.\n\n` +
-                `❌ Escribe *cancelar* para salir.`
-            );
+            await pedirCuentaEnPrivado(conn, m, pend.clave, chatId, aqui, info);
           } else if (op === 4) {
             const cuentas = getCuentas(chatId, pend.clave);
             if (!cuentas.length) {
@@ -706,7 +782,7 @@ export function registrarListenerVentas(conn) {
               volverAlMenu();
               continue;
             }
-            setPendiente(conn, m, { clave: pend.clave, paso: "ciclo_cual" });
+            setPendiente(conn, m, { clave: pend.clave, paso: "ciclo_cual", grupo: chatId }, aqui);
             await responder(
               conn,
               m,
@@ -720,7 +796,7 @@ export function registrarListenerVentas(conn) {
                 `\n\n❌ Escribe *cancelar* para salir.`
             );
           } else if (op === 5) {
-            setPendiente(conn, m, { clave: pend.clave, paso: "avisos" });
+            setPendiente(conn, m, { clave: pend.clave, paso: "avisos", grupo: chatId }, aqui);
             await menuAvisos(conn, m, info);
           } else if (op === 6) {
             const cuentas = getCuentas(chatId, pend.clave);
@@ -729,7 +805,7 @@ export function registrarListenerVentas(conn) {
               volverAlMenu();
               continue;
             }
-            setPendiente(conn, m, { clave: pend.clave, paso: "quitar_cual" });
+            setPendiente(conn, m, { clave: pend.clave, paso: "quitar_cual", grupo: chatId }, aqui);
             await responder(
               conn,
               m,
@@ -807,7 +883,7 @@ export function registrarListenerVentas(conn) {
             await responder(conn, m, "⚠️ Escribe los datos de la cuenta o *cancelar*.");
             continue;
           }
-          setPendiente(conn, m, { clave: pend.clave, paso: "cuenta_precio", datos });
+          setPendiente(conn, m, { clave: pend.clave, paso: "cuenta_precio", datos, grupo: chatId }, aqui);
           await responder(
             conn,
             m,
@@ -826,7 +902,7 @@ export function registrarListenerVentas(conn) {
             await responder(conn, m, "⚠️ Pon solo un número. Ejemplo: *10*");
             continue;
           }
-          setPendiente(conn, m, { clave: pend.clave, paso: "cuenta_ciclo", datos: pend.datos, precio });
+          setPendiente(conn, m, { clave: pend.clave, paso: "cuenta_ciclo", datos: pend.datos, precio, grupo: chatId }, aqui);
           await pedirCiclo(conn, m, "⏱️ *¿Cada cuánto se le cobra?*");
           continue;
         }
@@ -864,7 +940,7 @@ export function registrarListenerVentas(conn) {
             await responder(conn, m, `⚠️ Elige un número del *1* al *${cuentas.length}*.`);
             continue;
           }
-          setPendiente(conn, m, { clave: pend.clave, paso: "ciclo_nuevo", cuentaId: cuenta.id });
+          setPendiente(conn, m, { clave: pend.clave, paso: "ciclo_nuevo", cuentaId: cuenta.id, grupo: chatId }, aqui);
           await pedirCiclo(conn, m, `⏱️ *¿Cada cuánto se cobra la cuenta ${i}?*`);
           continue;
         }
