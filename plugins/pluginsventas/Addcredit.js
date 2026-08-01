@@ -9,7 +9,8 @@
 // clientes compran las cuentas y pagan sus facturas.
 
 import {
-  DIGITS,
+  normalizarNumero,
+  numeroDeJid,
   getCreditos,
   sumarCreditos,
   getTienda
@@ -28,21 +29,40 @@ function desenvolver(m) {
   return n;
 }
 
-/** A quién va dirigido: mencionado, citado o escrito a mano */
+/**
+ * A quién va dirigido, en este orden:
+ *   1. el mensaje al que estás RESPONDIENDO
+ *   2. a quién mencionaste con @
+ *   3. el número que escribiste a mano
+ *
+ * Los @lid se resuelven al número real y los de México se completan con el 1
+ * que WhatsApp les pone después del 52.
+ */
 function destinatario(msg, args) {
   const m = desenvolver(msg?.message) || {};
   const ctx =
     m.extendedTextMessage?.contextInfo ||
     m.imageMessage?.contextInfo ||
+    m.videoMessage?.contextInfo ||
     null;
 
+  // Responder al mensaje de alguien
+  const citado = ctx?.participant || ctx?.quotedMessage?.key?.participant;
+  if (citado) {
+    const n = numeroDeJid(citado);
+    if (n.length >= 7) return n;
+  }
+
+  // Mencionar con @
   const mencion = ctx?.mentionedJid?.[0];
-  if (mencion) return DIGITS(String(mencion).split(":")[0]);
+  if (mencion) {
+    const n = numeroDeJid(mencion);
+    if (n.length >= 7) return n;
+  }
 
-  if (ctx?.participant) return DIGITS(String(ctx.participant).split(":")[0]);
-
+  // Escrito a mano
   for (const a of args || []) {
-    const n = DIGITS(a);
+    const n = normalizarNumero(a);
     if (n.length >= 7) return n;
   }
   return null;
@@ -57,7 +77,7 @@ function cantidadDe(args, destino) {
   for (let i = (args?.length || 0) - 1; i >= 0; i--) {
     const crudo = String(args[i]).trim();
     if (!/^[+-]?\d{1,7}$/.test(crudo)) continue;   // un teléfono nunca cabe aquí
-    if (destino && DIGITS(crudo) === destino) continue;
+    if (destino && normalizarNumero(crudo) === destino) continue;
     const n = Number(crudo);
     if (Number.isFinite(n) && n !== 0) return n;
   }
@@ -103,9 +123,13 @@ const handler = async (msg, { conn, args }) => {
         ``,
         `━━━━━━━━━━━━━━━━━━━━`,
         `*Cómo se usa:*`,
-        `• *${pref}addcredit @cliente 50* — le suma 50`,
+        `• *${pref}addcredit @cliente 50* — mencionándolo`,
+        `• Responde a su mensaje con *${pref}addcredit 50*`,
         `• *${pref}addcredit 50712345678 50* — por número`,
         `• *${pref}addcredit @cliente -20* — le quita 20`,
+        ``,
+        `🇲🇽 Si el número es de México y le falta el *1* después del *52*,`,
+        `el comando se lo pone solo.`,
         ``,
         `Con los créditos los clientes compran las cuentas y pagan sus facturas.`
       ].join("\n")
@@ -117,8 +141,10 @@ const handler = async (msg, { conn, args }) => {
 
   if (!numero) {
     return responder(
-      `⚠️ ¿A quién?\n\nMenciónalo, responde a su mensaje o pon su número:\n` +
-        `*${pref}addcredit @cliente 50*`
+      `⚠️ ¿A quién?\n\nPuedes hacerlo de tres formas:\n` +
+        `• Responde a su mensaje con *${pref}addcredit 50*\n` +
+        `• Menciónalo: *${pref}addcredit @cliente 50*\n` +
+        `• Pon su número: *${pref}addcredit 50712345678 50*`
     );
   }
   if (!Number.isFinite(cantidad) || cantidad === 0) {

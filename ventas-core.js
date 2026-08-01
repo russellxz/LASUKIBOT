@@ -267,14 +267,30 @@ function textoMenuSet(chatId, clave, titulo, emoji, pref) {
     `*2.* 📝 Poner texto`,
     `*3.* ➕ Agregar cuenta (correo, contraseña, PIN...)`,
     `*4.* ⏱️ Cambiar el ciclo de una cuenta`,
-    `*5.* 🔔 Números que reciben las facturas`,
+    `*5.* 🔔 Números que reciben TODAS las facturas`,
     `*6.* 🗑️ Quitar una cuenta`,
     `*7.* 👀 Ver las cuentas`,
     `*0.* 🚪 Salir`,
     ``,
     `━━━━━━━━━━━━━━━━━━━━`,
-    `ℹ️ Si solo pones foto y texto, *${pref}${clave}* mostrará eso y ya.`,
-    `Las cuentas son para vender con facturación automática.`
+    `📖 *CÓMO FUNCIONA*`,
+    ``,
+    `Si solo pones *foto* y *texto*, con *${pref}${clave}* el cliente ve eso`,
+    `y ya está. No hace falta nada más.`,
+    ``,
+    `Si además agregas *cuentas* (opción 3), se convierte en una venta con`,
+    `cobro automático:`,
+    ``,
+    `1️⃣ Cada cuenta lleva sus datos (correo, contraseña, PIN, perfil...),`,
+    `su *precio en créditos* y su *ciclo de cobro*.`,
+    `2️⃣ El cliente compra con *${pref}${clave} 1* y los datos le llegan a su`,
+    `privado. Al grupo nunca.`,
+    `3️⃣ Al cumplirse el ciclo, el bot le manda la *factura a su privado* y`,
+    `él la paga respondiendo *pagar*. Se le descuenta de sus créditos.`,
+    `4️⃣ Los créditos se los das tú con *${pref}addcredit*.`,
+    ``,
+    `El número de cada factura lo pone el sistema solo, en orden.`,
+    `Míralo todo con *${pref}totalventas*.`
   ].join("\n");
 }
 
@@ -532,13 +548,29 @@ async function menuAvisos(conn, msg, info) {
         ? avisos.map((n, i) => `*${i + 1}.* +${n}`).join("\n")
         : `_Todavía no hay ningún número._`,
       ``,
-      `Estos números reciben en privado la factura de cada cliente y el aviso`,
-      `cuando alguien paga. Puedes poner los que quieras.`,
+      `━━━━━━━━━━━━━━━━━━━━`,
+      `📖 *QUÉ ES ESTO*`,
       ``,
+      `Los números que pongas aquí reciben *en su privado* TODAS las facturas`,
+      `de TODOS los clientes de este grupo:`,
+      ``,
+      `🧾 Cada factura que se genera (las pendientes de cobro)`,
+      `✅ El aviso cada vez que un cliente paga la suya`,
+      ``,
+      `Es para llevar el control sin tener que estar en el grupo. Sirve para`,
+      `*todos los productos* de esta tienda, no solo para este comando.`,
+      `Puedes poner todos los números que quieras.`,
+      ``,
+      `_Si no pones ninguno, las facturas se mandan al grupo._`,
+      `_El cliente siempre recibe la suya en su privado, aparte de esto._`,
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━`,
       `*Responde con:*`,
       `• *agregar 50712345678* — añadir un número`,
       `• *quitar 50712345678* — sacarlo`,
-      `• *0* — volver al menú`
+      `• *0* — volver al menú`,
+      ``,
+      `🇲🇽 Si es de México y le falta el *1* después del *52*, se lo pongo yo.`
     ].join("\n")
   );
 }

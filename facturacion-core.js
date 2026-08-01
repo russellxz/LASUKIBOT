@@ -98,6 +98,34 @@ function nuevoId(t, prefijo) {
 
 export const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 
+/**
+ * Deja un número como lo usa WhatsApp.
+ *
+ * México es el caso raro: WhatsApp guarda los números como 52 + 1 + 10
+ * dígitos. Si el admin escribe el número sin ese 1 (52 + 10 dígitos), se lo
+ * ponemos nosotros para que no falle el envío.
+ */
+export function normalizarNumero(entrada) {
+  let n = DIGITS(String(entrada || "").split(":")[0]);
+  if (!n) return "";
+  if (n.startsWith("52") && n.length === 12) n = `521${n.slice(2)}`;
+  return n;
+}
+
+/**
+ * Número real a partir de un JID, resolviendo los @lid con el mapa que el
+ * bot va llenando. Sirve para cuando se responde al mensaje de alguien.
+ */
+export function numeroDeJid(jid) {
+  const s = String(jid || "");
+  if (!s) return "";
+  if (s.endsWith("@lid") && global.lidMap instanceof Map) {
+    const real = global.lidMap.get(s);
+    if (real) return normalizarNumero(real);
+  }
+  return normalizarNumero(s);
+}
+
 // ------------------------------------------------------------
 // Ciclos de facturación
 // ------------------------------------------------------------
@@ -160,12 +188,12 @@ export function fecha(ts) {
 // Créditos
 // ------------------------------------------------------------
 export function getCreditos(chatId, numero) {
-  return Number(getTienda(chatId).creditos?.[DIGITS(numero)] || 0);
+  return Number(getTienda(chatId).creditos?.[normalizarNumero(numero)] || 0);
 }
 
 export function sumarCreditos(chatId, numero, cantidad) {
   return editarTienda(chatId, (t) => {
-    const k = DIGITS(numero);
+    const k = normalizarNumero(numero);
     const nuevo = Math.max(0, Number(t.creditos[k] || 0) + Number(cantidad));
     t.creditos[k] = nuevo;
     return nuevo;
@@ -246,7 +274,7 @@ export function getAvisos(chatId) {
 
 export function agregarAviso(chatId, numero) {
   return editarTienda(chatId, (t) => {
-    const n = DIGITS(numero);
+    const n = normalizarNumero(numero);
     if (!n || n.length < 7) return null;
     if (!t.avisos.includes(n)) t.avisos.push(n);
     return n;
@@ -255,7 +283,7 @@ export function agregarAviso(chatId, numero) {
 
 export function quitarAviso(chatId, numero) {
   return editarTienda(chatId, (t) => {
-    const n = DIGITS(numero);
+    const n = normalizarNumero(numero);
     const i = t.avisos.indexOf(n);
     if (i < 0) return null;
     t.avisos.splice(i, 1);
@@ -277,7 +305,7 @@ export function comprar(chatId, clave, cuentaId, cliente) {
     if (!cuenta) return { error: "no_existe" };
     if (cuenta.vendidaA) return { error: "vendida" };
 
-    const num = DIGITS(cliente);
+    const num = normalizarNumero(cliente);
     const saldo = Number(t.creditos[num] || 0);
     if (saldo < cuenta.precio) {
       return { error: "sin_creditos", saldo, precio: cuenta.precio };
@@ -372,7 +400,7 @@ export function crearFactura(chatId, ventaId) {
 }
 
 export function facturasPendientes(chatId, cliente = null) {
-  const num = cliente ? DIGITS(cliente) : null;
+  const num = cliente ? normalizarNumero(cliente) : null;
   return getTienda(chatId).facturas.filter(
     (f) => f.estado === "pendiente" && (!num || f.cliente === num)
   );
@@ -410,7 +438,7 @@ export function pagarFactura(chatId, facturaId) {
  * Lo usa el filtro de privados del bot para dejar pasar su "pagar".
  */
 export function tienePendienteDePago(numero) {
-  const num = DIGITS(numero);
+  const num = normalizarNumero(numero);
   if (!num) return false;
   const datos = leer();
   for (const chatId of Object.keys(datos)) {
@@ -422,7 +450,7 @@ export function tienePendienteDePago(numero) {
 
 /** Facturas pendientes de un cliente en TODAS las tiendas */
 export function pendientesDeCliente(numero) {
-  const num = DIGITS(numero);
+  const num = normalizarNumero(numero);
   const datos = leer();
   const salida = [];
   for (const chatId of Object.keys(datos)) {
