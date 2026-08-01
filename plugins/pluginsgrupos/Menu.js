@@ -27,12 +27,14 @@ const handler = async (msg, { conn }) => {
           `${p}menuaudio`,
           `${p}menurpg`,
           `${p}menuowner`,
-          `${p}menufree`
+          `${p}menufree`,
+          `${p}menuventas`
         ]
       },
       {
         titulo: "PARA VENTAS",
         items: [
+          `${p}menuventas — TODOS los comandos de ventas`,
           `${p}setstock / stock`,
           `${p}setnetflix / netflix`,
           `${p}setpago / pago`,
