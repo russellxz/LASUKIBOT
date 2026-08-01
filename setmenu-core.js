@@ -689,7 +689,7 @@ function registrarListener(conn, puedeUsar) {
         const texto = textoCrudo.toLowerCase();
 
         // Cancelar en cualquier paso
-        if (pend && (texto === "cancelar" || texto === "cancel")) {
+        if (pend && (texto === "cancelar" || texto === "cancel" || texto === "0")) {
           borrarTodoDelUsuario(conn, m);
           abrirSesion("nada", conn, m);   // cierra también los menús de ventas
           await responder(conn, m, "🚪 Personalización cancelada.");

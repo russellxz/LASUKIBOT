@@ -286,13 +286,19 @@ function listaVentasNumeradas(chatId, titulo, aviso) {
             `     📦 ${tituloProducto(v.producto)} · 💵 ${v.precio} · 🔁 ${textoCiclo(v.ciclo)}`
         )
         .join("\n\n") +
-      `\n\n${aviso}\n\n_Responde con el número._\n❌ Escribe *cancelar* para salir.`
+      `\n\n${aviso}\n\n_Responde con el número._\n❌ Escribe *volver* para el panel, o *0* para salir.`
   };
 }
 
 // ------------------------------------------------------------
 // Apertura del panel
 // ------------------------------------------------------------
+/** Vuelve al panel sin cerrar la sesión */
+async function volverAlPanel(conn, msg, grupo) {
+  setPendiente(conn, msg, { paso: "menu", grupo });
+  return responder(conn, msg, textoPanel(grupo, await nombreGrupo(conn, grupo)));
+}
+
 async function abrirPanel(conn, msg, chatId) {
   abrirSesion("panel", conn, msg);   // que no queden dos conversaciones abiertas
   setPendiente(conn, msg, { paso: "menu", grupo: chatId });
@@ -337,7 +343,7 @@ async function elegirGrupo(conn, msg) {
         .map((g, i) => `*${i + 1}.* ${g.nombre}${conVentas.has(g.jid) ? "  🛒" : ""}`)
         .join("\n") +
       `\n\n_El 🛒 marca los que ya tienen tienda montada._\n` +
-      `❌ Escribe *cancelar* para salir.`
+      `❌ Escribe *volver* para el panel, o *0* para salir.`
   );
 }
 
@@ -401,7 +407,15 @@ function registrar(conn) {
         const texto = crudo.trim();
         const bajo = texto.toLowerCase();
 
-        if (bajo === "cancelar" || bajo === "salir") {
+        // "volver" sube al panel sin cerrarlo
+        if (bajo === "volver" && pend.paso !== "menu" && pend.grupo) {
+          await volverAlPanel(conn, m, pend.grupo);
+          continue;
+        }
+
+        // "cancelar" y el 0 cierran SIEMPRE, desde el paso que sea: si no,
+        // pidiendo el logo el 0 solo contestaba "eso no es una imagen".
+        if (bajo === "cancelar" || bajo === "salir" || texto === "0") {
           borrarTodoDelUsuario(conn, m);
           abrirSesion("nada", conn, m);   // y lo que tuviera abierto de otros menús
           await responder(conn, m, "🚪 Panel cerrado.");
@@ -439,11 +453,7 @@ function registrar(conn) {
           if (!/^\d$/.test(texto)) continue;
           const op = Number(texto);
 
-          if (op === 0) {
-            borrarTodoDelUsuario(conn, m);
-            abrirSesion("nada", conn, m);
-            await responder(conn, m, "🚪 Panel cerrado.");
-          } else if (op === 1) {
+          if (op === 1) {
             setPendiente(conn, m, { paso: "menu", grupo });
             await responder(conn, m, listaClientes(grupo));
           } else if (op === 2) {
@@ -476,7 +486,7 @@ function registrar(conn) {
               m,
               `🏪 *Escribe el nombre de tu tienda.*\n\n` +
                 `Es el que sale en las facturas que reciben tus clientes.\n\n` +
-                `❌ Escribe *cancelar* para salir.`
+                `❌ Escribe *volver* para el panel, o *0* para salir.`
             );
           } else if (op === 6) {
             setPendiente(conn, m, { paso: "logo", grupo });
@@ -486,7 +496,7 @@ function registrar(conn) {
               `🖼️ *Manda el logo de tu tienda.*\n\n` +
                 `Sale redondo arriba a la izquierda de cada factura.\n` +
                 `Puedes enviarlo directo o responder a una imagen.\n\n` +
-                `❌ Escribe *cancelar* para salir.`
+                `❌ Escribe *volver* para el panel, o *0* para salir.`
             );
           }
           continue;
@@ -564,6 +574,15 @@ function registrar(conn) {
 
         // ---------- Logo ----------
         if (pend.paso === "logo") {
+          if (/^\d$/.test(texto)) {
+            await responder(
+              conn,
+              m,
+              `↩️ *${texto}* es una opción del menú, así que no cambié el logo.`
+            );
+            await volver();
+            continue;
+          }
           const nodo = imagenDe(m);
           if (!nodo) {
             await responder(
