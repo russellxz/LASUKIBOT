@@ -115,47 +115,83 @@ export async function isAdminInGroup(conn, chatId, senderJid) {
 export async function isAdminByNumber(conn, chatId, number) {
   try {
     const meta = await conn.groupMetadata(chatId);
-    const rawParts = Array.isArray(meta?.participants) ? meta.participants : [];
-
-    const adminNums = new Set();
-
-    for (let i = 0; i < rawParts.length; i++) {
-      const p = rawParts[i];
-      const flagAdmin = p.admin === "admin" || p.admin === "superadmin";
-      if (!flagAdmin) continue;
-
-      const pid = String(p.id || "");
-      const pjid = String(p.jid || "");
-
-      // 1) el número viene tal cual
-      if (pid.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(pid.split(":")[0]));
-      if (pjid.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(pjid.split(":")[0]));
-
-      // 2) viene en @lid: se busca en el mapa global
-      if (pid.endsWith("@lid") && global.lidMap instanceof Map) {
-        const resolved = global.lidMap.get(pid);
-        if (resolved && resolved.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(resolved.split(":")[0]));
-      }
-      if (pjid.endsWith("@lid") && global.lidMap instanceof Map) {
-        const resolved2 = global.lidMap.get(pjid);
-        if (resolved2 && resolved2.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(resolved2.split(":")[0]));
-      }
-
-      // 3) el mapa no lo tenía: se lo preguntamos a Baileys
-      if (typeof conn.lidParser === "function") {
-        const normed = conn.lidParser([p]);
-        if (normed && normed[0]) {
-          const nid = String(normed[0].id || "");
-          if (nid.endsWith("@s.whatsapp.net")) adminNums.add(DIGITS(nid.split(":")[0]));
-        }
-      }
-    }
-
-    return adminNums.has(String(number));
+    return adminNumsDeMeta(conn, meta).has(String(number));
   } catch (e) {
     console.error("[adminCheck] Error leyendo admins:", e);
     return false;
   }
+}
+
+/**
+ * Números (solo dígitos) de los administradores de un grupo, sacados de sus
+ * metadatos. Es el corazón de isAdminByNumber, aparte para poder reutilizarlo
+ * cuando ya se tienen los metadatos y no hace falta volver a pedirlos —por
+ * ejemplo al listar de qué grupos es admin alguien desde el privado.
+ *
+ * Prueba las tres formas en las que WhatsApp entrega a un participante:
+ * el número tal cual, el @lid cacheado en el lidMap global, y —si el mapa
+ * todavía no lo tiene— preguntándoselo a Baileys con conn.lidParser. Sin ese
+ * tercer paso, a un admin con LID el bot lo trataba como si no lo fuera.
+ *
+ * @param {object} conn  conexión Baileys
+ * @param {object} meta  metadatos del grupo (groupMetadata o groupFetchAllParticipating)
+ * @returns {Set<string>}
+ */
+export function adminNumsDeMeta(conn, meta) {
+  const adminNums = new Set();
+  const rawParts = Array.isArray(meta?.participants) ? meta.participants : [];
+
+  // Los números de México se escriben con y sin el 1 después del 52. Se
+  // guardan las dos formas para que coincida venga como venga.
+  const anotar = (jid) => {
+    const n = DIGITS(String(jid || "").split(":")[0]);
+    if (!n) return;
+    adminNums.add(n);
+    if (n.startsWith("521") && n.length === 13) adminNums.add(`52${n.slice(3)}`);
+    else if (n.startsWith("52") && n.length === 12) adminNums.add(`521${n.slice(2)}`);
+  };
+
+  for (const p of rawParts) {
+    const flagAdmin = p?.admin === "admin" || p?.admin === "superadmin";
+    if (!flagAdmin) continue;
+
+    const pid = String(p.id || "");
+    const pjid = String(p.jid || p.phoneNumber || "");
+
+    // 0) tal cual viene, sea @lid o número.
+    //    Cuando alguien responde a un menú, WhatsApp manda su @lid y el lidMap
+    //    puede no tenerlo todavía: si aquí solo guardáramos números resueltos,
+    //    a ese admin el bot lo trataba como si no lo fuera y se quedaba mudo.
+    anotar(pid);
+    anotar(pjid);
+
+    // 1) el número viene tal cual
+    if (pid.endsWith("@s.whatsapp.net")) anotar(pid);
+    if (pjid.endsWith("@s.whatsapp.net")) anotar(pjid);
+
+    // 2) viene en @lid: se busca en el mapa global
+    if (pid.endsWith("@lid") && global.lidMap instanceof Map) {
+      const resolved = global.lidMap.get(pid);
+      if (resolved && resolved.endsWith("@s.whatsapp.net")) anotar(resolved);
+    }
+    if (pjid.endsWith("@lid") && global.lidMap instanceof Map) {
+      const resolved2 = global.lidMap.get(pjid);
+      if (resolved2 && resolved2.endsWith("@s.whatsapp.net")) anotar(resolved2);
+    }
+
+    // 3) el mapa no lo tenía: se lo preguntamos a Baileys
+    if (typeof conn?.lidParser === "function") {
+      try {
+        const normed = conn.lidParser([p]);
+        if (normed && normed[0]) {
+          const nid = String(normed[0].id || "");
+          if (nid.endsWith("@s.whatsapp.net")) anotar(nid);
+        }
+      } catch {}
+    }
+  }
+
+  return adminNums;
 }
 
 /**

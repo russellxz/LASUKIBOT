@@ -15,10 +15,19 @@
 
 import fs from "fs";
 
-import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "./libs/adminCheck.js";
 import {
-  registrarSesion,
-  abrirSesion,
+  isAdminByNumber,
+  isOwnerCheck,
+  numeroDelRemitente,
+  adminNumsDeMeta
+} from "./libs/adminCheck.js";
+import {
+  duenoDe,
+  identidades as identidadesDe,
+  abrirMenu,
+  leerMenu,
+  cerrarMenu,
+  esComandoDelBot,
   yaAtendido,
   recordarPropio,
   esMensajePropio,
@@ -54,7 +63,6 @@ export function esProductoSimple(clave) {
 }
 
 const ARCHIVO = "./ventas365.json";
-const ESPERA_MS = 10 * 60 * 1000;   // 10 minutos para terminar un paso
 const MAX_IMAGEN_MB = 8;
 
 // ------------------------------------------------------------
@@ -219,123 +227,48 @@ export function esComandoDeVentas(nombre) {
 // ------------------------------------------------------------
 // Estado de los menús abiertos
 // ------------------------------------------------------------
-const pendientes = new Map();
+// La conversación abierta ya NO vive aquí: vive en sesiones.js, que es común a
+// los tres menús. Así es imposible que un set y el panel estén abiertos a la
+// vez y que el mismo número dispare los dos.
 const idsPropios = new Set();
 
-const dueno = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
+const dueno = duenoDe;
+
+// Se re-exporta para que los plugins que ya la usaban sigan igual
+export const identidades = identidadesDe;
 
 /**
- * Todas las formas en las que puede llegar el número de quien escribe.
+ * Guarda en qué paso va la configuración.
  *
- * Este listener se engancha ANTES de que el bot resuelva los @lid, así que el
- * mismo admin llega como @lid aquí y como número real cuando ejecuta el
- * comando. Si guardáramos el menú abierto con una sola forma, al responder el
- * número no lo encontraríamos y el bot se quedaría callado.
- */
-export function identidades(conn, msg) {
-  const out = [];
-  const add = (v) => {
-    const n = normalizarNumero(v);
-    if (n && !out.includes(n)) out.push(n);
-  };
-
-  // ⚠️ Si el mensaje lo mandó el propio bot, quien escribe es el bot y punto.
-  // En un privado el remoteJid de un mensaje SALIENTE es el del otro, así que
-  // sumarlo aquí hacía que el bot se tomara por el admin y se respondiera a sí
-  // mismo, en bucle, entre un menú y otro.
-  if (msg?.key?.fromMe) {
-    add(conn?.user?.id);
-    return out;
-  }
-
-  add(msg?.realNumber);
-  add(msg?.realJid);
-  add(msg?.key?.participant);
-  if (!String(msg?.key?.remoteJid || "").endsWith("@g.us")) add(msg?.key?.remoteJid);
-
-  // Un @lid resuelto con el mapa que el bot va llenando
-  for (const j of [msg?.realJid, msg?.key?.participant, msg?.key?.remoteJid]) {
-    if (typeof j === "string" && j.endsWith("@lid") && global.lidMap instanceof Map) {
-      add(global.lidMap.get(j));
-    }
-  }
-  return out;
-}
-
-/**
- * El chat con el que se guarda el menú abierto.
+ * Abrirla cierra sola cualquier otra conversación de esta persona, sea del
+ * panel, de la personalización o de otro set: por eso ya no se pisan.
  *
- * En los privados NO se puede usar el jid tal cual: el bot reescribe los @lid
- * a número real, pero eso pasa DESPUÉS de este listener. Así, el comando veía
- * "50712345678@s.whatsapp.net" y la respuesta "9988@lid", la clave no
- * coincidía y el menú no reaccionaba al elegir el número.
- * Un privado es siempre la misma persona, así que basta con marcarlo.
- */
-function chatClave(msg, chat) {
-  const c = String(chat || msg?.key?.remoteJid || "");
-  return c.endsWith("@g.us") ? c : "privado";
-}
-
-const claves = (conn, msg, chat) =>
-  identidades(conn, msg).map((n) => `${dueno(conn)}|${chatClave(msg, chat)}|${n}`);
-
-/**
  * @param chatDestino  dónde sigue la conversación. Para los datos de las
  *                     cuentas se pasa el privado del admin, así las
  *                     credenciales no se escriben en el grupo.
  */
 function setPendiente(conn, msg, datos, chatDestino) {
-  const ahora = Date.now();
-  for (const [k, v] of pendientes) if (ahora - v.ts > ESPERA_MS) pendientes.delete(k);
-
-  // Un usuario solo puede tener UNA conversación abierta. Si no se borra lo
-  // anterior, al pasar del grupo al privado quedaban las dos vivas y luego
-  // cada número contestaba en un sitio distinto, o se quedaba pegado en el
-  // paso que ya habías terminado.
-  borrarTodoDelUsuario(conn, msg);
-
-  const ks = claves(conn, msg, chatDestino);
-  const p = { ...datos, ts: ahora, __claves: ks };
-  for (const k of ks) pendientes.set(k, p);
+  abrirMenu(
+    "ventas",
+    dueno(conn),
+    identidades(conn, msg),
+    chatDestino || msg?.key?.remoteJid,
+    datos
+  );
 }
 
+/** Lo que este usuario tiene a medias AQUÍ, si es de un set y no de otro menú */
 function getPendiente(conn, msg) {
-  for (const k of claves(conn, msg)) {
-    const p = pendientes.get(k);
-    if (!p) continue;
-    if (Date.now() - p.ts > ESPERA_MS) {
-      for (const x of p.__claves || [k]) pendientes.delete(x);
-      return null;
-    }
-    return p;
-  }
-  return null;
+  return leerMenu("ventas", dueno(conn), identidades(conn, msg), msg?.key?.remoteJid);
 }
 
 function borrarPendiente(conn, msg) {
-  for (const k of claves(conn, msg)) {
-    const p = pendientes.get(k);
-    for (const x of p?.__claves || [k]) pendientes.delete(x);
-  }
+  cerrarMenu(dueno(conn), identidades(conn, msg));
 }
 
-/**
- * Cierra TODO lo que este usuario tuviera abierto, esté en el chat que esté.
- *
- * Un mismo menú puede haber empezado en el grupo y haberse movido al privado
- * (los datos de las cuentas), así que borrar solo el del chat actual dejaba el
- * otro vivo y los dos contestaban al mismo número.
- */
+/** Cierra TODO lo que este usuario tuviera abierto, esté en el chat que esté */
 function borrarTodoDelUsuario(conn, msg) {
-  const bot = dueno(conn);
-  const mios = new Set(identidades(conn, msg));
-  if (!mios.size) return;
-
-  for (const k of [...pendientes.keys()]) {
-    const partes = k.split("|");
-    const numero = partes[partes.length - 1];
-    if (partes[0] === bot && mios.has(numero)) pendientes.delete(k);
-  }
+  cerrarMenu(dueno(conn), identidades(conn, msg));
 }
 
 /** Cierra el menú de un set que estuviera abierto para ese usuario */
@@ -343,9 +276,6 @@ export function cerrarSesionVentas(conn, msg) {
   borrarTodoDelUsuario(conn, msg);
 }
 
-// Otros paneles (totalventas) se apuntan aquí para que al abrir uno se cierre
-// el otro. Si no, el mismo número dispara las dos conversaciones a la vez y
-// cada una hace algo distinto.
 // El plugin de facturación se apunta aquí para poder mandar el comprobante
 // de la compra en cuanto alguien compra.
 let enviarFacturaFn = null;
@@ -354,15 +284,9 @@ export function registrarEnvioFactura(fn) {
   if (typeof fn === "function") enviarFacturaFn = fn;
 }
 
-// Este menú entra en el registro compartido: al abrirlo se cierran los demás
-registrarSesion("ventas", (conn, msg) => borrarTodoDelUsuario(conn, msg));
-
-const cerrarOtrasSesiones = (conn, msg) => abrirSesion("ventas", conn, msg);
-
-// Se mantiene por compatibilidad con quien ya lo usaba
-export function registrarCerrador(fn) {
-  registrarSesion(`extra${Math.random().toString(36).slice(2)}`, fn);
-}
+// Ya no hace falta avisar a los otros menús: abrir una conversación cierra la
+// anterior por sí sola. Se deja por compatibilidad con quien lo llamara.
+export function registrarCerrador() {}
 
 function recordar(res) {
   const id = res?.key?.id;
@@ -401,10 +325,17 @@ async function puedeConfigurar(conn, msg, grupo) {
 
 /**
  * Grupos en los que está el bot y el usuario es administrador.
- * El owner del bot los ve todos. Sirve para configurar desde el privado.
+ * Sirve para configurar y supervisar todo desde el privado.
+ *
+ * La lista salía vacía porque aquí se resolvían los admins a mano, y cuando
+ * WhatsApp entrega a la gente en @lid y el lidMap todavía no lo tiene cacheado
+ * no había forma de reconocerlos. Ahora se usa la MISMA lógica que .cerrar y
+ * .abrir (adminNumsDeMeta, que además le pregunta a Baileys), y si con los
+ * metadatos de la lista no sale nadie se vuelve a preguntar grupo por grupo.
  */
 export async function gruposDondeEsAdmin(conn, msg) {
   const mios = identidades(conn, msg);
+  if (!mios.length) return [];
 
   let todos = {};
   try {
@@ -414,25 +345,27 @@ export async function gruposDondeEsAdmin(conn, msg) {
     return [];
   }
 
+  const entradas = Object.entries(todos);
   const salida = [];
-  for (const [jid, meta] of Object.entries(todos)) {
-    const nombre = meta?.subject || jid;
 
-    // Solo donde el usuario es administrador de verdad, aunque sea el owner
-    // del bot: si no, salían todos los grupos donde está el bot.
-    const admins = new Set();
-    for (const p of meta?.participants || []) {
-      if (p?.admin !== "admin" && p?.admin !== "superadmin") continue;
-      for (const x of [p.id, p.jid]) {
-        const n = normalizarNumero(x);
-        if (n) admins.add(n);
-        if (typeof x === "string" && x.endsWith("@lid") && global.lidMap instanceof Map) {
-          const real = global.lidMap.get(x);
-          if (real) admins.add(normalizarNumero(real));
-        }
+  // Primera pasada: con los metadatos que ya tenemos
+  for (const [jid, meta] of entradas) {
+    const admins = adminNumsDeMeta(conn, meta);
+    if (mios.some((n) => admins.has(n))) salida.push({ jid, nombre: meta?.subject || jid });
+  }
+
+  // Segunda pasada: si no salió ninguno puede ser que esos metadatos vinieran
+  // sin resolver. Se le pregunta al grupo directamente, que es lo que sí
+  // acierta con las cuentas en @lid.
+  if (!salida.length) {
+    for (const [jid, meta] of entradas.slice(0, 60)) {
+      let esAdmin = false;
+      for (const n of mios) {
+        if (esAdmin) break;
+        esAdmin = await isAdminByNumber(conn, jid, n);
       }
+      if (esAdmin) salida.push({ jid, nombre: meta?.subject || jid });
     }
-    if (mios.some((n) => admins.has(n))) salida.push({ jid, nombre });
   }
 
   return salida.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
@@ -546,7 +479,6 @@ function textoMenuSet(chatId, clave, titulo, emoji, pref) {
 /** Abre el menú de configuración de un producto para un grupo concreto */
 async function abrirMenuSet(conn, msg, info, grupo) {
   const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
-  cerrarOtrasSesiones(conn, msg);
   setPendiente(conn, msg, { clave: info.clave, paso: "menu", grupo });
   return responder(conn, msg, textoMenuSet(grupo, info.clave, info.titulo, info.emoji, pref));
 }
@@ -574,12 +506,8 @@ export async function abrirSetVenta(msg, conn, info) {
     );
   }
 
-  if (grupos.length === 1) {
-    await responder(conn, msg, `🏘️ Configurando *${grupos[0].nombre}*`);
-    return abrirMenuSet(conn, msg, info, grupos[0].jid);
-  }
-
-  cerrarOtrasSesiones(conn, msg);
+  // Siempre se enseña la lista, aunque sea un solo grupo: así ves de qué grupo
+  // se trata antes de tocar nada y empiezas tú poniendo el *1*.
   setPendiente(conn, msg, {
     clave: info.clave,
     paso: "elegir_grupo",
@@ -591,6 +519,9 @@ export async function abrirSetVenta(msg, conn, info) {
     `${info.emoji} *CONFIGURAR ${info.titulo.toUpperCase()}*\n\n` +
       `*¿En qué grupo?* Responde con el número:\n\n` +
       grupos.map((g, i) => `*${i + 1}.* ${g.nombre}`).join("\n") +
+      (grupos.length === 1
+        ? `\n\n_Es el único grupo donde eres admin. Responde *1* para empezar._`
+        : ``) +
       `\n\n❌ Escribe *cancelar* para salir.`
   );
 }
@@ -957,7 +888,6 @@ export function registrarListenerVentas(conn) {
         const quienEs = identidades(conn, m)[0] || "?";
         if (frenoDeSpam("ventas", dueno(conn), quienEs)) {
           borrarTodoDelUsuario(conn, m);
-          abrirSesion("nada", conn, m);
           limpiarFreno("ventas", dueno(conn), quienEs);
           await responder(
             conn,
@@ -976,6 +906,13 @@ export function registrarListenerVentas(conn) {
 
         const texto = crudo.trim();
         const bajo = texto.toLowerCase();
+
+        // Un comando del bot NO es contenido. Si estabas en "escribe el texto"
+        // y escribías *.totalventas*, se guardaba ".totalventas" como texto del
+        // producto y encima se abría el panel: los dos a la vez. Ahora el
+        // comando se deja pasar tal cual y el menú ni lo mira.
+        if (esComandoDelBot(texto)) continue;
+
         const info = getProducto(pend.clave);
         if (!info) { borrarPendiente(conn, m); continue; }
 
@@ -1000,7 +937,6 @@ export function registrarListenerVentas(conn) {
         // imagen" y no había forma de salir más que escribiendo cancelar.
         if (bajo === "cancelar" || bajo === "salir" || texto === "0") {
           borrarTodoDelUsuario(conn, m);
-          abrirSesion("nada", conn, m);   // y también lo de los otros menús
           await responder(conn, m, "🚪 Configuración cerrada.");
           continue;
         }

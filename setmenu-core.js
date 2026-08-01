@@ -30,80 +30,47 @@ import {
   listaSegura
 } from "./disenos.js";
 import {
-  registrarSesion,
-  abrirSesion,
+  duenoDe,
+  identidades,
+  abrirMenu,
+  leerMenu,
+  cerrarMenu,
+  esComandoDelBot,
   yaAtendido,
   recordarPropio as apuntarComun,
   esMensajePropio
 } from "./sesiones.js";
 
-// La personalización también entra en el registro compartido de menús: si se
-// abre este, se cierran los de ventas, y al revés. Antes, con dos abiertos, el
-// mismo número disparaba los dos.
-registrarSesion("setmenu", (conn, msg) => borrarTodoDelUsuario(conn, msg));
-
 // Menús que se pueden personalizar de a uno (sin "descargas", que sigue al global)
 const MENUS_ELEGIBLES = MENU_KEYS.filter((k) => k !== "descargas");
 
 const MAX_MEDIA_MB = 20;
-const ESPERA_MS = 5 * 60 * 1000; // 5 minutos para completar un paso
 
 // ------------------------------------------------------------
-// Estado pendiente (compartido por todos los subbots del proceso,
-// separado por dueño + chat + usuario)
+// Estado pendiente
 // ------------------------------------------------------------
-const pendientes = new Map();
-
-const dueno = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
+// La conversación abierta vive en sesiones.js, que es común a los tres menús
+// numerados del bot (personalización, set de ventas y panel). Abrir uno cierra
+// el anterior por sí solo: antes, con dos abiertos, el mismo número disparaba
+// los dos y cada uno hacía algo distinto.
+const dueno = duenoDe;
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 
-function claveUsuario(conn, msg) {
-  const chatId = msg.key.remoteJid;
-  const quien = msg.key.fromMe
-    ? DIGITS(conn?.user?.id)
-    : DIGITS(msg.key.participant || msg.key.remoteJid);
-  return `${dueno(conn)}|${chatId}|${quien}`;
-}
-
 function setPendiente(conn, msg, datos) {
-  limpiarViejos();
-  pendientes.set(claveUsuario(conn, msg), { ...datos, ts: Date.now() });
+  abrirMenu("setmenu", dueno(conn), identidades(conn, msg), msg?.key?.remoteJid, datos);
 }
 
 function getPendiente(conn, msg) {
-  const k = claveUsuario(conn, msg);
-  const p = pendientes.get(k);
-  if (!p) return null;
-  if (Date.now() - p.ts > ESPERA_MS) {
-    pendientes.delete(k);
-    return null;
-  }
-  return p;
+  return leerMenu("setmenu", dueno(conn), identidades(conn, msg), msg?.key?.remoteJid);
 }
 
 function borrarPendiente(conn, msg) {
-  pendientes.delete(claveUsuario(conn, msg));
+  cerrarMenu(dueno(conn), identidades(conn, msg));
 }
 
-/** Cierra lo que este usuario tuviera abierto aquí, en cualquier chat */
+/** Cierra lo que este usuario tuviera abierto, en el chat que sea */
 function borrarTodoDelUsuario(conn, msg) {
-  const bot = dueno(conn);
-  const quien = msg?.key?.fromMe
-    ? DIGITS(conn?.user?.id)
-    : DIGITS(msg?.key?.participant || msg?.key?.remoteJid);
-  if (!quien) return;
-
-  for (const k of [...pendientes.keys()]) {
-    const partes = k.split("|");
-    if (partes[0] === bot && partes[partes.length - 1] === quien) pendientes.delete(k);
-  }
-}
-
-function limpiarViejos() {
-  const ahora = Date.now();
-  for (const [k, v] of pendientes.entries()) {
-    if (ahora - v.ts > ESPERA_MS) pendientes.delete(k);
-  }
+  cerrarMenu(dueno(conn), identidades(conn, msg));
 }
 
 // ------------------------------------------------------------
@@ -683,6 +650,10 @@ function registrarListener(conn, puedeUsar) {
         const textoCrudo = textoDe(m);
         if (esTextoPropio(textoCrudo)) continue;
 
+        // Un comando del bot NO es contenido: si estabas en "escribe el nombre"
+        // y escribías otro comando, se guardaba el comando como nombre.
+        if (esComandoDelBot(textoCrudo)) continue;
+
         const pend = getPendiente(conn, m);
         // El mismo mensaje puede llegar dos veces y comerse el paso siguiente
         if (pend && yaAtendido("setmenu", m, dueno(conn))) continue;
@@ -691,7 +662,6 @@ function registrarListener(conn, puedeUsar) {
         // Cancelar en cualquier paso
         if (pend && (texto === "cancelar" || texto === "cancel" || texto === "0")) {
           borrarTodoDelUsuario(conn, m);
-          abrirSesion("nada", conn, m);   // cierra también los menús de ventas
           await responder(conn, m, "🚪 Personalización cancelada.");
           continue;
         }
@@ -846,7 +816,6 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
 
   // Sesión abierta en ESTE bot: si la selección llega sin referencia al
   // mensaje del menú, solo actúa el bot que realmente lo abrió aquí.
-  abrirSesion("setmenu", conn, msg);
   setPendiente(conn, msg, { paso: "menu" });
 
   // iPhone: sin botones, con opciones numeradas
@@ -890,7 +859,6 @@ export async function abrirDelmenu(msg, conn, { puedeUsar } = {}) {
     );
   }
 
-  abrirSesion("setmenu", conn, msg);
   setPendiente(conn, msg, { paso: "delmenu" });
 
   const aviso =
