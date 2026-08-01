@@ -29,7 +29,13 @@ import {
   MARCA_FABRICA_SUB,
   listaSegura
 } from "./disenos.js";
-import { registrarSesion, abrirSesion, yaAtendido } from "./sesiones.js";
+import {
+  registrarSesion,
+  abrirSesion,
+  yaAtendido,
+  recordarPropio as apuntarComun,
+  esMensajePropio
+} from "./sesiones.js";
 
 // La personalización también entra en el registro compartido de menús: si se
 // abre este, se cierran los de ventas, y al revés. Antes, con dos abiertos, el
@@ -195,6 +201,7 @@ const idsPropios = new Map(); // dueño -> Set de ids enviados
 function recordarPropio(conn, res) {
   const id = res?.key?.id;
   if (!id) return res;
+  apuntarComun(res);          // lista común de los tres menús
   const k = dueno(conn);
   let set = idsPropios.get(k);
   if (!set) {
@@ -668,7 +675,7 @@ function registrarListener(conn, puedeUsar) {
         // 🚫 Nunca tomar como respuesta un mensaje que enviamos nosotros
         // (en subbots el dueño también es fromMe, por eso se comprueba el ID
         // y además el texto con el que empiezan nuestros avisos).
-        if (esIdPropio(conn, m.key?.id)) continue;
+        if (esIdPropio(conn, m.key?.id) || esMensajePropio(m)) continue;
 
         // Solo atendemos a quien tiene permiso (owner / el propio subbot)
         if (!puedeUsar(m, conn)) continue;

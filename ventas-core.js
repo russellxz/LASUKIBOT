@@ -16,7 +16,15 @@
 import fs from "fs";
 
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "./libs/adminCheck.js";
-import { registrarSesion, abrirSesion, yaAtendido } from "./sesiones.js";
+import {
+  registrarSesion,
+  abrirSesion,
+  yaAtendido,
+  recordarPropio,
+  esMensajePropio,
+  frenoDeSpam,
+  limpiarFreno
+} from "./sesiones.js";
 import {
   DIGITS,
   normalizarNumero,
@@ -231,7 +239,15 @@ export function identidades(conn, msg) {
     if (n && !out.includes(n)) out.push(n);
   };
 
-  if (msg?.key?.fromMe) add(conn?.user?.id);
+  // ⚠️ Si el mensaje lo mandó el propio bot, quien escribe es el bot y punto.
+  // En un privado el remoteJid de un mensaje SALIENTE es el del otro, así que
+  // sumarlo aquí hacía que el bot se tomara por el admin y se respondiera a sí
+  // mismo, en bucle, entre un menú y otro.
+  if (msg?.key?.fromMe) {
+    add(conn?.user?.id);
+    return out;
+  }
+
   add(msg?.realNumber);
   add(msg?.realJid);
   add(msg?.key?.participant);
@@ -345,6 +361,7 @@ export function registrarCerrador(fn) {
 function recordar(res) {
   const id = res?.key?.id;
   if (!id) return res;
+  recordarPropio(res);        // lista común de los tres menús
   idsPropios.add(id);
   if (idsPropios.size > 500) {
     const it = idsPropios.values();
@@ -921,10 +938,25 @@ export function registrarListenerVentas(conn) {
     for (const m of ev.messages || []) {
       try {
         if (!m?.message) continue;
-        if (idsPropios.has(m.key?.id)) continue;
+        if (idsPropios.has(m.key?.id) || esMensajePropio(m)) continue;
 
         const pend = getPendiente(conn, m);
         if (!pend) continue;
+
+        // Último seguro contra bucles: si se contesta demasiado seguido, se
+        // corta y se cierra la conversación en vez de llenar el chat.
+        const quienEs = identidades(conn, m)[0] || "?";
+        if (frenoDeSpam("ventas", dueno(conn), quienEs)) {
+          borrarTodoDelUsuario(conn, m);
+          abrirSesion("nada", conn, m);
+          limpiarFreno("ventas", dueno(conn), quienEs);
+          await responder(
+            conn,
+            m,
+            "🛑 Cerré la configuración: se estaba repitiendo sola.\n\nVuelve a abrirla cuando quieras."
+          );
+          continue;
+        }
 
         // WhatsApp a veces entrega el mismo mensaje dos veces: el segundo
         // se comería el paso siguiente
