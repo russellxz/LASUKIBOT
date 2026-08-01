@@ -14,6 +14,8 @@ import {
   getTienda,
   gruposConTienda,
   ventasQueTocanFactura,
+  facturasVencidas,
+  cancelarPorImpago,
   crearFactura,
   pagarFactura,
   pendientesDeCliente,
@@ -144,11 +146,64 @@ async function avisarPago(conn, grupo, factura) {
   }
 }
 
+/** El cliente no pagó a tiempo: se le cancela el servicio y se avisa */
+async function avisarImpago(conn, grupo, factura, venta) {
+  const t = getTienda(grupo);
+  const producto = tituloProducto(factura.producto);
+
+  try {
+    await conn.sendMessage(`${factura.cliente}@s.whatsapp.net`, {
+      text:
+        `⛔ *SERVICIO CANCELADO POR FALTA DE PAGO*\n\n` +
+        `Tu *${producto}* se canceló porque no se pagó la factura N.º ${factura.numero} ` +
+        `de *${factura.monto}* créditos.\n\n` +
+        `📅 Se emitió el ${fecha(factura.generada)}\n` +
+        `⏳ Vencía el ${fecha(factura.vence)}\n\n` +
+        `Ya no se te generarán más facturas de este producto.\n` +
+        `Si lo quieres de vuelta, pídele créditos a un administrador y cómpralo otra vez.`
+    });
+  } catch (e) {
+    console.error(`[factura] no se pudo avisar el impago a +${factura.cliente}:`, e.message);
+  }
+
+  const aviso =
+    `⛔ *CANCELADO POR FALTA DE PAGO*\n\n` +
+    `*+${factura.cliente}* no pagó a tiempo.\n\n` +
+    `📦 ${producto}\n` +
+    `💵 ${factura.monto} créditos\n` +
+    `🔖 Factura N.º ${factura.numero}\n` +
+    `⏳ Venció el ${fecha(factura.vence)}\n\n` +
+    `_La cuenta volvió a tu stock, ya la puedes vender otra vez._`;
+
+  const destinos = (t.avisos || []).map((n) => `${n}@s.whatsapp.net`);
+  if (!destinos.length) destinos.push(grupo);
+  for (const d of destinos) {
+    try { await conn.sendMessage(d, { text: aviso }); } catch {}
+  }
+}
+
 // ------------------------------------------------------------
 // Revisión periódica
 // ------------------------------------------------------------
 async function revisar(conn) {
   for (const grupo of gruposConTienda()) {
+    // 1) Primero los que ya se pasaron de fecha sin pagar: se cancelan.
+    //    Mientras una factura siga pendiente NO se le genera otra, así que
+    //    nunca se le acumulan cobros a un cliente que no ha pagado.
+    let vencidas = [];
+    try {
+      vencidas = facturasVencidas(grupo);
+    } catch (e) {
+      console.error("[factura] error mirando vencidas en", grupo, e.message);
+    }
+    for (const f of vencidas) {
+      const r = cancelarPorImpago(grupo, f.id);
+      if (!r) continue;
+      console.log(`⛔ [factura] ${grupo} → impago de +${f.cliente} (${f.producto})`);
+      await avisarImpago(conn, grupo, r.factura, r.venta);
+    }
+
+    // 2) Y después las que toca cobrar ahora
     let tocan = [];
     try {
       tocan = ventasQueTocanFactura(grupo);

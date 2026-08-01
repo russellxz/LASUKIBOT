@@ -257,6 +257,26 @@ function borrarPendiente(conn, msg) {
   }
 }
 
+/** Cierra el menú de un set que estuviera abierto para ese usuario */
+export function cerrarSesionVentas(conn, msg) {
+  borrarPendiente(conn, msg);
+}
+
+// Otros paneles (totalventas) se apuntan aquí para que al abrir uno se cierre
+// el otro. Si no, el mismo número dispara las dos conversaciones a la vez y
+// cada una hace algo distinto.
+const cerradores = [];
+
+export function registrarCerrador(fn) {
+  if (typeof fn === "function" && !cerradores.includes(fn)) cerradores.push(fn);
+}
+
+function cerrarOtrasSesiones(conn, msg) {
+  for (const fn of cerradores) {
+    try { fn(conn, msg); } catch (e) { console.error("[ventas] cerrador:", e.message); }
+  }
+}
+
 function recordar(res) {
   const id = res?.key?.id;
   if (!id) return res;
@@ -382,6 +402,7 @@ export async function abrirSetVenta(msg, conn, info) {
     return responder(conn, msg, "🚫 Solo administradores u owners pueden usar este comando.");
   }
 
+  cerrarOtrasSesiones(conn, msg);
   setPendiente(conn, msg, { clave: info.clave, paso: "menu", grupo: chatId });
   return responder(conn, msg, textoMenuSet(chatId, info.clave, info.titulo, info.emoji, pref));
 }

@@ -378,6 +378,38 @@ export function ventasQueTocanFactura(chatId) {
   );
 }
 
+/**
+ * Facturas que ya pasaron su fecha de vencimiento sin que el cliente pague.
+ * Al cliente se le cancela el servicio: llegó el siguiente ciclo y sigue
+ * debiendo el anterior.
+ */
+export function facturasVencidas(chatId) {
+  const ahora = Date.now();
+  return getTienda(chatId).facturas.filter(
+    (f) => f.estado === "pendiente" && f.vence <= ahora
+  );
+}
+
+/** Cancela la venta por no haber pagado, dejando constancia en la factura */
+export function cancelarPorImpago(chatId, facturaId) {
+  return editarTienda(chatId, (t) => {
+    const f = t.facturas.find((x) => x.id === facturaId);
+    if (!f || f.estado !== "pendiente") return null;
+
+    f.estado = "vencida";
+    f.vencida = Date.now();
+
+    const v = t.ventas.find((x) => x.id === f.ventaId);
+    if (v && v.estado === "activa") {
+      v.estado = "cancelada";
+      v.motivo = "impago";
+      const cuenta = t.productos[v.producto]?.cuentas?.find((c) => c.id === v.cuentaId);
+      if (cuenta) cuenta.vendidaA = null;   // la cuenta vuelve al stock
+    }
+    return { factura: f, venta: v };
+  });
+}
+
 export function crearFactura(chatId, ventaId) {
   return editarTienda(chatId, (t) => {
     const v = t.ventas.find((x) => x.id === ventaId);
