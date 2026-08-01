@@ -64,13 +64,12 @@ const GRUPOS = [
   }
 ];
 
-// Comandos de ventas que no siguen el patrón "x / setx"
+// Comandos del sistema, que no siguen el patrón "x / setx"
 const APARTE = [
-  ["sorteo", "sortea entre los que reaccionen"],
-  ["addfactura", "guarda una factura"],
-  ["delfactura", "borra una factura"],
-  ["facpaga", "marca una factura como pagada"],
-  ["verfac", "lista las facturas del grupo"]
+  ["crear <nombre>", "crea un producto nuevo con su comando"],
+  ["addcredit @cliente 50", "dale créditos a un cliente"],
+  ["totalventas", "panel: clientes, cobros y ganancias"],
+  ["sorteo", "sortea entre los que reaccionen"]
 ];
 
 const handler = async (msg, { conn }) => {
@@ -95,19 +94,32 @@ const handler = async (msg, { conn }) => {
   }));
 
   secciones.push({
-    titulo: "🧾 FACTURAS Y SORTEOS",
+    titulo: "⚙️ SISTEMA DE VENTAS",
     items: APARTE.map(([c, d]) => `${p}${c} — ${d}`)
   });
 
-  secciones.unshift({
-    titulo: "📝 CÓMO SE USA",
-    items: [
-      `${p}<comando> — muestra lo guardado`,
-      `${p}set<comando> <texto> — lo configura`,
-      `Responde a una imagen con ${p}set<comando> para ponerle foto`,
-      `Ejemplo: ${p}setstock 10 cuentas Netflix`
-    ]
-  });
+  secciones.unshift(
+    {
+      titulo: "📝 PARA EL ADMIN",
+      items: [
+        `${p}set<comando> — abre el menú de configuración`,
+        `Dentro eliges por número: foto, texto, cuentas...`,
+        `Cada cuenta lleva su precio y su ciclo de cobro`,
+        `${p}crear setojo — inventa un producto nuevo`,
+        `${p}addcredit @cliente 50 — dale saldo para comprar`
+      ]
+    },
+    {
+      titulo: "🛒 PARA EL CLIENTE",
+      items: [
+        `${p}<comando> — ve el producto y las cuentas`,
+        `${p}<comando> 1 — compra la cuenta número 1`,
+        `Los datos llegan al privado, nunca al grupo`,
+        `Cuando toque el cobro llega una factura`,
+        `Se paga respondiendo *pagar* a la factura`
+      ]
+    }
+  );
 
   return enviarMenu(conn, chatId, msg, "menuventas", {
     titulo: "MENÚ DE VENTAS",
