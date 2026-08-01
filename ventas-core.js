@@ -297,9 +297,28 @@ function borrarPendiente(conn, msg) {
   }
 }
 
+/**
+ * Cierra TODO lo que este usuario tuviera abierto, esté en el chat que esté.
+ *
+ * Un mismo menú puede haber empezado en el grupo y haberse movido al privado
+ * (los datos de las cuentas), así que borrar solo el del chat actual dejaba el
+ * otro vivo y los dos contestaban al mismo número.
+ */
+function borrarTodoDelUsuario(conn, msg) {
+  const bot = dueno(conn);
+  const mios = new Set(identidades(conn, msg));
+  if (!mios.size) return;
+
+  for (const k of [...pendientes.keys()]) {
+    const partes = k.split("|");
+    const numero = partes[partes.length - 1];
+    if (partes[0] === bot && mios.has(numero)) pendientes.delete(k);
+  }
+}
+
 /** Cierra el menú de un set que estuviera abierto para ese usuario */
 export function cerrarSesionVentas(conn, msg) {
-  borrarPendiente(conn, msg);
+  borrarTodoDelUsuario(conn, msg);
 }
 
 // Otros paneles (totalventas) se apuntan aquí para que al abrir uno se cierre
@@ -314,7 +333,7 @@ export function registrarEnvioFactura(fn) {
 }
 
 // Este menú entra en el registro compartido: al abrirlo se cierran los demás
-registrarSesion("ventas", (conn, msg) => borrarPendiente(conn, msg));
+registrarSesion("ventas", (conn, msg) => borrarTodoDelUsuario(conn, msg));
 
 const cerrarOtrasSesiones = (conn, msg) => abrirSesion("ventas", conn, msg);
 
@@ -857,8 +876,11 @@ async function pedirCuentaEnPrivado(conn, msg, clave, grupo, aqui, info) {
 
   const privado = jidPrivadoDe(conn, msg);
 
-  // Ya estamos en su privado: se sigue aquí mismo
-  if (privado && aqui === privado) {
+  // Ya estamos en un privado: se sigue aquí mismo. Se mira si NO es grupo, no
+  // el jid: antes de normalizarse llega como @lid y no coincidía, así que el
+  // bot se mandaba otro mensaje a sí mismo y la segunda cuenta se atascaba.
+  const enGrupo = String(msg?.key?.remoteJid || "").endsWith("@g.us");
+  if (!enGrupo) {
     setPendiente(conn, msg, { clave, paso: "cuenta_datos", grupo }, aqui);
     return responder(conn, msg, texto);
   }
@@ -933,7 +955,8 @@ export function registrarListenerVentas(conn) {
         if (!(await puedeConfigurar(conn, m, pend.grupo))) continue;
 
         if (bajo === "cancelar" || bajo === "salir") {
-          borrarPendiente(conn, m);
+          borrarTodoDelUsuario(conn, m);
+          abrirSesion("nada", conn, m);   // y también lo de los otros menús
           await responder(conn, m, "🚪 Configuración cerrada.");
           continue;
         }
@@ -963,7 +986,8 @@ export function registrarListenerVentas(conn) {
           }
 
           if (op === 0) {
-            borrarPendiente(conn, m);
+            borrarTodoDelUsuario(conn, m);
+            abrirSesion("nada", conn, m);
             await responder(conn, m, "🚪 Configuración cerrada.");
           } else if (op === 1) {
             setPendiente(conn, m, { clave: pend.clave, paso: "foto", grupo: chatId }, aqui);
