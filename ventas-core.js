@@ -16,6 +16,7 @@
 import fs from "fs";
 
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "./libs/adminCheck.js";
+import { registrarSesion, abrirSesion, yaAtendido } from "./sesiones.js";
 import {
   DIGITS,
   normalizarNumero,
@@ -284,16 +285,14 @@ export function registrarEnvioFactura(fn) {
   if (typeof fn === "function") enviarFacturaFn = fn;
 }
 
-const cerradores = [];
+// Este menú entra en el registro compartido: al abrirlo se cierran los demás
+registrarSesion("ventas", (conn, msg) => borrarPendiente(conn, msg));
 
+const cerrarOtrasSesiones = (conn, msg) => abrirSesion("ventas", conn, msg);
+
+// Se mantiene por compatibilidad con quien ya lo usaba
 export function registrarCerrador(fn) {
-  if (typeof fn === "function" && !cerradores.includes(fn)) cerradores.push(fn);
-}
-
-function cerrarOtrasSesiones(conn, msg) {
-  for (const fn of cerradores) {
-    try { fn(conn, msg); } catch (e) { console.error("[ventas] cerrador:", e.message); }
-  }
+  registrarSesion(`extra${Math.random().toString(36).slice(2)}`, fn);
 }
 
 function recordar(res) {
@@ -877,6 +876,10 @@ export function registrarListenerVentas(conn) {
         const pend = getPendiente(conn, m);
         if (!pend) continue;
 
+        // WhatsApp a veces entrega el mismo mensaje dos veces: el segundo
+        // se comería el paso siguiente
+        if (yaAtendido("ventas", m, dueno(conn))) continue;
+
         const crudo = textoDe(m);
         if (esTextoPropio(crudo)) continue;
 
@@ -1057,6 +1060,23 @@ export function registrarListenerVentas(conn) {
             conn,
             m,
             `✅ *Foto guardada.*\n\nYa sale con *${pref}${info.clave}*.\n\n` +
+              textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
+          );
+          continue;
+        }
+
+        // Un número suelto mientras se pide un dato casi siempre es que
+        // quisieron pulsar una opción del menú. Se vuelve al menú en vez de
+        // guardar "6" como texto o como datos de una cuenta.
+        if (
+          /^\d$/.test(texto) &&
+          ["texto", "cuenta_datos", "editar_datos"].includes(pend.paso)
+        ) {
+          volverAlMenu();
+          await responder(
+            conn,
+            m,
+            `↩️ *${texto}* es una opción del menú, así que no lo guardé.\n\n` +
               textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
           );
           continue;

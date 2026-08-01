@@ -29,6 +29,12 @@ import {
   MARCA_FABRICA_SUB,
   listaSegura
 } from "./disenos.js";
+import { registrarSesion, abrirSesion, yaAtendido } from "./sesiones.js";
+
+// La personalización también entra en el registro compartido de menús: si se
+// abre este, se cierran los de ventas, y al revés. Antes, con dos abiertos, el
+// mismo número disparaba los dos.
+registrarSesion("setmenu", (conn, msg) => borrarPendiente(conn, msg));
 
 // Menús que se pueden personalizar de a uno (sin "descargas", que sigue al global)
 const MENUS_ELEGIBLES = MENU_KEYS.filter((k) => k !== "descargas");
@@ -657,6 +663,8 @@ function registrarListener(conn, puedeUsar) {
         if (esTextoPropio(textoCrudo)) continue;
 
         const pend = getPendiente(conn, m);
+        // El mismo mensaje puede llegar dos veces y comerse el paso siguiente
+        if (pend && yaAtendido("setmenu", m, dueno(conn))) continue;
         const texto = textoCrudo.toLowerCase();
 
         // Cancelar en cualquier paso
@@ -816,6 +824,7 @@ export async function abrirSetmenu(msg, conn, { puedeUsar, args = [] } = {}) {
 
   // Sesión abierta en ESTE bot: si la selección llega sin referencia al
   // mensaje del menú, solo actúa el bot que realmente lo abrió aquí.
+  abrirSesion("setmenu", conn, msg);
   setPendiente(conn, msg, { paso: "menu" });
 
   // iPhone: sin botones, con opciones numeradas
@@ -859,6 +868,7 @@ export async function abrirDelmenu(msg, conn, { puedeUsar } = {}) {
     );
   }
 
+  abrirSesion("setmenu", conn, msg);
   setPendiente(conn, msg, { paso: "delmenu" });
 
   const aviso =

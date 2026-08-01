@@ -24,17 +24,18 @@ import {
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "../../libs/adminCheck.js";
 import {
   identidades,
-  cerrarSesionVentas,
-  registrarCerrador,
   getProducto,
   gruposDondeEsAdmin
 } from "../../ventas-core.js";
+import { registrarSesion, abrirSesion, yaAtendido } from "../../sesiones.js";
 
 // Nombre bonito del producto; si es uno creado a mano, su propia clave
 const tituloProducto = (clave) => getProducto(clave)?.titulo || clave;
 
-// Al abrir el panel se cierra cualquier menú de set abierto, y al revés
-registrarCerrador((conn, msg) => borrarPendiente(conn, msg));
+// Este panel entra en el registro compartido de menús: al abrirlo se cierran
+// los demás (los set de ventas y la personalización), para que un número no
+// dispare dos conversaciones a la vez.
+registrarSesion("panel", (conn, msg) => borrarPendiente(conn, msg));
 
 const ESPERA_MS = 10 * 60 * 1000;
 const pendientes = new Map();
@@ -259,7 +260,7 @@ function listaVentasNumeradas(chatId, titulo, aviso) {
 // Apertura del panel
 // ------------------------------------------------------------
 async function abrirPanel(conn, msg, chatId) {
-  cerrarSesionVentas(conn, msg);   // que no queden dos conversaciones abiertas
+  abrirSesion("panel", conn, msg);   // que no queden dos conversaciones abiertas
   setPendiente(conn, msg, { paso: "menu", grupo: chatId });
   return responder(conn, msg, textoPanel(chatId, await nombreGrupo(conn, chatId)));
 }
@@ -286,7 +287,7 @@ async function elegirGrupo(conn, msg) {
   // Marcamos los que ya tienen ventas, para encontrarlos rápido
   const conVentas = new Set(gruposConTienda());
 
-  cerrarSesionVentas(conn, msg);
+  abrirSesion("panel", conn, msg);
   setPendiente(conn, msg, { paso: "grupo", grupos: grupos.map((g) => g.jid) });
   return responder(
     conn,
@@ -336,6 +337,10 @@ function registrar(conn) {
 
         const pend = getPendiente(conn, m);
         if (!pend) continue;
+
+        // El mismo mensaje puede llegar dos veces; el segundo se comería el
+        // paso siguiente (era lo que hacía que el nombre acabara siendo "5")
+        if (yaAtendido("panel", m, conn?.user?.id || "main")) continue;
 
         const crudo = textoDe(m);
         const texto = crudo.trim();
@@ -481,6 +486,19 @@ function registrar(conn) {
         // ---------- Nombre de la tienda ----------
         if (pend.paso === "nombre") {
           if (!texto) continue;
+
+          // Nadie llama a su tienda "6": es que quisieron pulsar una opción
+          if (/^\d$/.test(texto)) {
+            await responder(
+              conn,
+              m,
+              `↩️ *${texto}* es una opción del menú, así que no cambié el nombre.\n\n` +
+                `Si de verdad quieres que tu tienda se llame así, ponle algo más,\n` +
+                `por ejemplo *Tienda ${texto}*.`
+            );
+            await volver();
+            continue;
+          }
           editarTienda(grupo, (t) => { t.nombre = texto.slice(0, 40); });
           await responder(conn, m, `✅ *Nombre guardado:* ${texto.slice(0, 40)}`);
           await volver();
