@@ -10,3 +10,7 @@ warns.json
 subbots/
 subplugins/tmp/
 addper3-historial.json
+
+# Datos del sistema de ventas y facturación (cada instalación tiene los suyos)
+facturacion.json
+ventas-creados.json

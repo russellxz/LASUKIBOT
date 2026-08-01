@@ -55,6 +55,23 @@ import { revisarNsfw } from "./libs/antiporno.js";
 import { revisarSpam } from "./libs/antispam.js";
 import { startWebServer } from "./webserver.js";
 import { limpiarRespuestaBoton } from "./disenos.js";
+import { tienePendienteDePago } from "./facturacion-core.js";
+
+// 🧾 Texto llano de un mensaje, para la excepción de "pagar" en privados
+const textoPlano = (m) => {
+  const c = m?.message || {};
+  return String(
+    c.conversation ||
+      c.extendedTextMessage?.text ||
+      c.imageMessage?.caption ||
+      c.ephemeralMessage?.message?.conversation ||
+      c.ephemeralMessage?.message?.extendedTextMessage?.text ||
+      ""
+  ).trim();
+};
+
+// Las mismas palabras que acepta el cobro de facturas
+const esPalabraDePago = (t) => /^\s*(pagar|pagado|pague|pagué|pago ya)\s*$/i.test(String(t || ""));
 import "./config.js";
 
 // 🌐 Prefijos personalizados desde prefijos.json o por defecto
@@ -2768,7 +2785,17 @@ try {
     Esto aplica aunque modoprivado esté apagado.
   */
   if (!isGroup) {
-    const permitidoPrivado = isBot || isOwner || isInPrivateWhitelist;
+    // 🧾 Excepción SOLO para pagar facturas: si a este número le llegó una
+    // factura y responde "pagar", se le deja pasar aunque no esté en la lista.
+    // No abre nada más: cualquier otro texto suyo se sigue bloqueando igual.
+    let pagandoFactura = false;
+    try {
+      if (esPalabraDePago(textoPlano(m)) && tienePendienteDePago(senderNum)) {
+        pagandoFactura = true;
+      }
+    } catch {}
+
+    const permitidoPrivado = isBot || isOwner || isInPrivateWhitelist || pagandoFactura;
 
     if (!permitidoPrivado) {
       console.log("⛔ PRIVADO BLOQUEADO");
