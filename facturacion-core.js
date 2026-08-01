@@ -25,20 +25,19 @@ const ARCHIVO = path.join(RAIZ, "facturacion.json");
 export const INTERVALO_REVISION_MS = 20 * 1000;
 
 // Margen que tiene el cliente para pagar una factura antes de que se le
-// cancele el producto. Son 3 días; en los ciclos de minutos (que están para
-// probar el sistema) se usa el triple del ciclo, para poder verlo al momento.
-export const GRACIA_DIAS = 3;
+// cancele el producto. Son 2 días SIEMPRE, sea cual sea el ciclo: aunque la
+// cuenta se cobre cada minuto (los ciclos de minutos están para probar el
+// sistema), al cliente se le dan sus 2 días completos para pagar. Pasados los
+// 2 días sin pagar, el sistema le cancela el producto solo.
+export const GRACIA_DIAS = 2;
 
-export function margenPago(ciclo) {
-  if (ciclo?.u === "m") return Math.max(3 * msCiclo(ciclo), 60 * 1000);
-  return GRACIA_DIAS * 24 * 60 * 60 * 1000;
+const GRACIA_MS = GRACIA_DIAS * 24 * 60 * 60 * 1000;
+
+export function margenPago() {
+  return GRACIA_MS;
 }
 
-export function textoMargen(ciclo) {
-  if (ciclo?.u === "m") {
-    const n = Math.max(3 * (ciclo.n || 1), 1);
-    return `${n} minuto${n === 1 ? "" : "s"}`;
-  }
+export function textoMargen() {
   return `${GRACIA_DIAS} días`;
 }
 
