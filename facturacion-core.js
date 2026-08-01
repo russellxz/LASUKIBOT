@@ -551,6 +551,31 @@ export function pendientesDeCliente(numero) {
   return salida.sort((a, b) => a.factura.generada - b.factura.generada);
 }
 
+/**
+ * Ventas activas de un producto en TODAS las tiendas.
+ * Sirve para no dejar borrar un comando que todavía tiene clientes pagando.
+ */
+export function ventasDeProducto(clave) {
+  const datos = leer();
+  const salida = [];
+  for (const chatId of Object.keys(datos)) {
+    for (const v of datos[chatId]?.ventas || []) {
+      if (v.producto === clave && v.estado === "activa") salida.push({ chatId, venta: v });
+    }
+  }
+  return salida;
+}
+
+/** Cuántas cuentas tiene cargadas un producto en todas las tiendas */
+export function cuentasDeProducto(clave) {
+  const datos = leer();
+  let n = 0;
+  for (const chatId of Object.keys(datos)) {
+    n += (datos[chatId]?.productos?.[clave]?.cuentas || []).length;
+  }
+  return n;
+}
+
 // ------------------------------------------------------------
 // Resumen para .totalventas
 // ------------------------------------------------------------
