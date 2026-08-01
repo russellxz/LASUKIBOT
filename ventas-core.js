@@ -30,8 +30,19 @@ import {
   agregarAviso,
   quitarAviso,
   getCreditos,
+  editarCuenta,
+  textoMargen,
   comprar
 } from "./facturacion-core.js";
+
+/**
+ * Productos que NO entran en el sistema de cuentas y facturación: ahí solo se
+ * pone información (foto y texto). Todo lo de pago va así, porque solo son
+ * datos de pago, y también los que se creen con .crear setpago10.
+ */
+export function esProductoSimple(clave) {
+  return /^pagos?\d*$/i.test(String(clave || ""));
+}
 
 const ARCHIVO = "./ventas365.json";
 const ESPERA_MS = 10 * 60 * 1000;   // 10 minutos para terminar un paso
@@ -265,6 +276,14 @@ export function cerrarSesionVentas(conn, msg) {
 // Otros paneles (totalventas) se apuntan aquí para que al abrir uno se cierre
 // el otro. Si no, el mismo número dispara las dos conversaciones a la vez y
 // cada una hace algo distinto.
+// El plugin de facturación se apunta aquí para poder mandar el comprobante
+// de la compra en cuanto alguien compra.
+let enviarFacturaFn = null;
+
+export function registrarEnvioFactura(fn) {
+  if (typeof fn === "function") enviarFacturaFn = fn;
+}
+
 const cerradores = [];
 
 export function registrarCerrador(fn) {
@@ -312,6 +331,45 @@ async function puedeConfigurar(conn, msg, grupo) {
 }
 
 /**
+ * Grupos en los que está el bot y el usuario es administrador.
+ * El owner del bot los ve todos. Sirve para configurar desde el privado.
+ */
+export async function gruposDondeEsAdmin(conn, msg) {
+  const mios = identidades(conn, msg);
+  const owner = mios.some((n) => isOwnerCheck(n));
+
+  let todos = {};
+  try {
+    todos = (await conn.groupFetchAllParticipating?.()) || {};
+  } catch (e) {
+    console.error("[ventas] no se pudieron listar los grupos:", e.message);
+    return [];
+  }
+
+  const salida = [];
+  for (const [jid, meta] of Object.entries(todos)) {
+    const nombre = meta?.subject || jid;
+    if (owner) { salida.push({ jid, nombre }); continue; }
+
+    const admins = new Set();
+    for (const p of meta?.participants || []) {
+      if (p?.admin !== "admin" && p?.admin !== "superadmin") continue;
+      for (const x of [p.id, p.jid]) {
+        const n = normalizarNumero(x);
+        if (n) admins.add(n);
+        if (typeof x === "string" && x.endsWith("@lid") && global.lidMap instanceof Map) {
+          const real = global.lidMap.get(x);
+          if (real) admins.add(normalizarNumero(real));
+        }
+      }
+    }
+    if (mios.some((n) => admins.has(n))) salida.push({ jid, nombre });
+  }
+
+  return salida.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
+}
+
+/**
  * El chat privado de quien escribe, para pedirle ahí las credenciales.
  * Devuelve null si solo tenemos un @lid sin resolver: en ese caso el flujo
  * se queda en el grupo en vez de fallar.
@@ -342,7 +400,31 @@ function numeroPrincipal(conn, msg) {
 // ------------------------------------------------------------
 // El menú de configuración
 // ------------------------------------------------------------
+function textoMenuSetSimple(chatId, clave, titulo, emoji, pref) {
+  const guardado = getVenta(chatId, clave) || {};
+  return [
+    `${emoji} *CONFIGURAR ${titulo.toUpperCase()}*`,
+    ``,
+    `📷 Foto: ${guardado.imagen ? "puesta ✅" : "sin poner"}`,
+    `📝 Texto: ${guardado.texto ? "puesto ✅" : "sin poner"}`,
+    ``,
+    `*Responde a este mensaje con el número:*`,
+    ``,
+    `*1.* 📷 Poner foto`,
+    `*2.* 📝 Poner texto`,
+    `*0.* 🚪 Salir`,
+    ``,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    `ℹ️ Este comando es solo para *información*: pones la foto y el texto y`,
+    `los clientes lo ven con *${pref}${clave}*.`,
+    `No lleva cuentas ni cobros, porque aquí solo van los datos de pago.`
+  ].join("\n");
+}
+
 function textoMenuSet(chatId, clave, titulo, emoji, pref) {
+  if (esProductoSimple(clave)) {
+    return textoMenuSetSimple(chatId, clave, titulo, emoji, pref);
+  }
   const guardado = getVenta(chatId, clave) || {};
   const cuentas = getCuentas(chatId, clave);
   const libres = cuentas.filter((c) => !c.vendidaA).length;
@@ -365,6 +447,7 @@ function textoMenuSet(chatId, clave, titulo, emoji, pref) {
     `*5.* 🔔 Números que reciben TODAS las facturas`,
     `*6.* 🗑️ Quitar una cuenta`,
     `*7.* 👀 Ver las cuentas`,
+    `*8.* ✏️ Editar los datos de una cuenta`,
     `*0.* 🚪 Salir`,
     ``,
     `━━━━━━━━━━━━━━━━━━━━`,
@@ -391,26 +474,63 @@ function textoMenuSet(chatId, clave, titulo, emoji, pref) {
   ].join("\n");
 }
 
+/** Abre el menú de configuración de un producto para un grupo concreto */
+async function abrirMenuSet(conn, msg, info, grupo) {
+  const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
+  cerrarOtrasSesiones(conn, msg);
+  setPendiente(conn, msg, { clave: info.clave, paso: "menu", grupo });
+  return responder(conn, msg, textoMenuSet(grupo, info.clave, info.titulo, info.emoji, pref));
+}
+
 export async function abrirSetVenta(msg, conn, info) {
   const chatId = msg.key.remoteJid;
-  const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
 
-  if (!chatId.endsWith("@g.us")) {
-    return responder(conn, msg, "❌ Este comando solo funciona en grupos.");
+  // --- En un grupo: se configura ese grupo ---
+  if (chatId.endsWith("@g.us")) {
+    if (!(await puedeConfigurar(conn, msg))) {
+      return responder(conn, msg, "🚫 Solo administradores u owners pueden usar este comando.");
+    }
+    return abrirMenuSet(conn, msg, info, chatId);
   }
-  if (!(await puedeConfigurar(conn, msg))) {
-    return responder(conn, msg, "🚫 Solo administradores u owners pueden usar este comando.");
+
+  // --- En privado: se elige de qué grupo ---
+  const grupos = await gruposDondeEsAdmin(conn, msg);
+
+  if (!grupos.length) {
+    return responder(
+      conn,
+      msg,
+      `🚫 No eres administrador de ningún grupo donde esté el bot.\n\n` +
+        `Usa este comando dentro de tu grupo, o pide que te hagan admin.`
+    );
+  }
+
+  if (grupos.length === 1) {
+    await responder(conn, msg, `🏘️ Configurando *${grupos[0].nombre}*`);
+    return abrirMenuSet(conn, msg, info, grupos[0].jid);
   }
 
   cerrarOtrasSesiones(conn, msg);
-  setPendiente(conn, msg, { clave: info.clave, paso: "menu", grupo: chatId });
-  return responder(conn, msg, textoMenuSet(chatId, info.clave, info.titulo, info.emoji, pref));
+  setPendiente(conn, msg, {
+    clave: info.clave,
+    paso: "elegir_grupo",
+    grupos: grupos.map((g) => g.jid)
+  });
+  return responder(
+    conn,
+    msg,
+    `${info.emoji} *CONFIGURAR ${info.titulo.toUpperCase()}*\n\n` +
+      `*¿En qué grupo?* Responde con el número:\n\n` +
+      grupos.map((g, i) => `*${i + 1}.* ${g.nombre}`).join("\n") +
+      `\n\n❌ Escribe *cancelar* para salir.`
+  );
 }
 
 // ------------------------------------------------------------
 // Lo que ve el cliente
 // ------------------------------------------------------------
 function listaCuentasCliente(chatId, clave, pref) {
+  if (esProductoSimple(clave)) return null;   // los de pago son solo información
   const libres = cuentasLibres(chatId, clave);
   if (!libres.length) return null;
   return [
@@ -512,7 +632,10 @@ async function comprarCuenta(msg, conn, info, indice) {
     `━━━━━━━━━━━━━━━━━━━━`,
     ``,
     `🧾 Cuando toque el cobro te llegará una factura aquí mismo.`,
-    `Para pagarla responde a la factura escribiendo *pagar*.`
+    `Para pagarla responde a la factura escribiendo *pagar*.`,
+    ``,
+    `⏳ Tendrás *${textoMargen(cuenta.ciclo)}* para pagarla. Si no la pagas`,
+    `en ese plazo, el producto se cancela.`
   ].join("\n");
 
   let entregado = true;
@@ -521,6 +644,15 @@ async function comprarCuenta(msg, conn, info, indice) {
   } catch (e) {
     entregado = false;
     console.error("[ventas] no se pudo mandar la cuenta al privado:", e.message);
+  }
+
+  // Comprobante de la compra: al cliente y a los números de aviso
+  if (r.comprobante && enviarFacturaFn) {
+    try {
+      await enviarFacturaFn(conn, chatId, r.comprobante);
+    } catch (e) {
+      console.error("[ventas] no se pudo mandar el comprobante:", e.message);
+    }
   }
 
   return responder(
@@ -560,7 +692,9 @@ export function crearVenta({ clave, comandos, setComandos, titulo, emoji = "🛒
     if (!nombres.has(cmd)) return;
 
     const n = parseInt(String(args?.[0] || "").trim(), 10);
-    if (Number.isInteger(n) && n > 0) return comprarCuenta(msg, conn, info, n);
+    if (!esProductoSimple(clave) && Number.isInteger(n) && n > 0) {
+      return comprarCuenta(msg, conn, info, n);
+    }
 
     return mostrarProducto(msg, conn, info);
   };
@@ -751,6 +885,19 @@ export function registrarListenerVentas(conn) {
         const info = getProducto(pend.clave);
         if (!info) { borrarPendiente(conn, m); continue; }
 
+        // ---------- Elegir grupo (configurando desde privado) ----------
+        if (pend.paso === "elegir_grupo") {
+          const i = parseInt(texto, 10);
+          const grupo = (pend.grupos || [])[i - 1];
+          if (!grupo) continue;
+          if (!(await puedeConfigurar(conn, m, grupo))) {
+            await responder(conn, m, "🚫 No eres administrador de ese grupo.");
+            continue;
+          }
+          await abrirMenuSet(conn, m, info, grupo);
+          continue;
+        }
+
         // Solo atendemos a quien puede configurar
         if (!(await puedeConfigurar(conn, m, pend.grupo))) continue;
 
@@ -772,6 +919,17 @@ export function registrarListenerVentas(conn) {
         if (pend.paso === "menu") {
           if (!/^\d$/.test(texto)) continue;
           const op = Number(texto);
+
+          // Los de pago solo llevan foto y texto
+          if (esProductoSimple(pend.clave) && ![0, 1, 2].includes(op)) {
+            await responder(
+              conn,
+              m,
+              `ℹ️ *${info.titulo}* solo lleva foto y texto.\n\n` +
+                `Elige *1*, *2* o *0* para salir.`
+            );
+            continue;
+          }
 
           if (op === 0) {
             borrarPendiente(conn, m);
@@ -843,6 +1001,30 @@ export function registrarListenerVentas(conn) {
           } else if (op === 7) {
             await verCuentas(conn, m, info);
             volverAlMenu();
+          } else if (op === 8) {
+            const cuentas = getCuentas(chatId, pend.clave);
+            if (!cuentas.length) {
+              await responder(conn, m, "⚠️ Todavía no hay cuentas que editar.");
+              volverAlMenu();
+              continue;
+            }
+            setPendiente(conn, m, { clave: pend.clave, paso: "editar_cual", grupo: chatId }, aqui);
+            await responder(
+              conn,
+              m,
+              `✏️ *¿QUÉ CUENTA EDITAS?*\n\n` +
+                cuentas
+                  .map(
+                    (c, i) =>
+                      `*${i + 1}.* ${c.vendidaA ? `🔴 vendida a +${c.vendidaA}` : "🟢 libre"}\n` +
+                      `     💵 ${c.precio} · 🔁 ${textoCiclo(c.ciclo)}\n` +
+                      `     _${String(c.datos || "").split("\n")[0].slice(0, 40)}_`
+                  )
+                  .join("\n\n") +
+                `\n\n_Sirve para cambiarle los datos cuando una cuenta se recupera,_\n` +
+                `_en vez de borrarla y volver a crearla._\n` +
+                `❌ Escribe *cancelar* para salir.`
+            );
           }
           continue;
         }
@@ -980,6 +1162,82 @@ export function registrarListenerVentas(conn) {
             cuenta
               ? `✅ *Ciclo cambiado* a *${textoCiclo(ciclo)}*.\n\n` +
                   `Si la cuenta ya estaba vendida, la próxima factura sale con el ciclo nuevo.\n\n` +
+                  textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
+              : "❌ Esa cuenta ya no existe."
+          );
+          continue;
+        }
+
+        // ---------- Editar una cuenta ----------
+        if (pend.paso === "editar_cual") {
+          const cuentas = getCuentas(chatId, pend.clave);
+          const i = parseInt(texto, 10);
+          const cuenta = cuentas[i - 1];
+          if (!cuenta) {
+            await responder(conn, m, `⚠️ Elige un número del *1* al *${cuentas.length}*.`);
+            continue;
+          }
+          setPendiente(
+            conn, m,
+            { clave: pend.clave, paso: "editar_datos", cuentaId: cuenta.id, grupo: chatId },
+            aqui
+          );
+          await responder(
+            conn,
+            m,
+            `✏️ *DATOS NUEVOS DE LA CUENTA ${i}*\n\n` +
+              `Así están ahora:\n\n${cuenta.datos}\n\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `Escribe los datos nuevos tal cual los quieres.\n` +
+              `Si solo quieres cambiarle el precio, escribe *saltar*.\n\n` +
+              `❌ Escribe *cancelar* para salir.`
+          );
+          continue;
+        }
+
+        if (pend.paso === "editar_datos") {
+          const datos = bajo === "saltar" ? null : (crudo || "").replace(/^\s*\n/, "");
+          if (datos !== null && !datos.trim()) {
+            await responder(conn, m, "⚠️ Escribe los datos nuevos o *saltar*.");
+            continue;
+          }
+          setPendiente(
+            conn, m,
+            { clave: pend.clave, paso: "editar_precio", cuentaId: pend.cuentaId, datos, grupo: chatId },
+            aqui
+          );
+          await responder(
+            conn,
+            m,
+            `💵 *¿Precio nuevo?*\n\n` +
+              `Escribe el número de créditos, o *saltar* para dejarlo igual.\n\n` +
+              `❌ Escribe *cancelar* para salir.`
+          );
+          continue;
+        }
+
+        if (pend.paso === "editar_precio") {
+          let precio;
+          if (bajo !== "saltar") {
+            precio = Number(texto.replace(",", "."));
+            if (!Number.isFinite(precio) || precio < 0) {
+              await responder(conn, m, "⚠️ Pon solo un número, o *saltar* para dejarlo igual.");
+              continue;
+            }
+          }
+          const cuenta = editarCuenta(chatId, pend.clave, pend.cuentaId, {
+            datos: pend.datos ?? undefined,
+            precio
+          });
+          volverAlMenu();
+          await responder(
+            conn,
+            m,
+            cuenta
+              ? `✅ *Cuenta actualizada.*\n\n` +
+                  `💵 Precio: *${cuenta.precio}* créditos\n` +
+                  `🔁 ${textoCiclo(cuenta.ciclo)}\n\n` +
+                  `${cuenta.vendidaA ? `El cliente +${cuenta.vendidaA} sigue con esta cuenta, ahora con los datos nuevos.\n\n` : ""}` +
                   textoMenuSet(chatId, pend.clave, info.titulo, info.emoji, pref)
               : "❌ Esa cuenta ya no existe."
           );

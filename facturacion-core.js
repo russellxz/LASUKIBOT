@@ -24,6 +24,24 @@ const ARCHIVO = path.join(RAIZ, "facturacion.json");
 // Cada cuánto revisa el sistema si toca generar facturas
 export const INTERVALO_REVISION_MS = 20 * 1000;
 
+// Margen que tiene el cliente para pagar una factura antes de que se le
+// cancele el producto. Son 3 días; en los ciclos de minutos (que están para
+// probar el sistema) se usa el triple del ciclo, para poder verlo al momento.
+export const GRACIA_DIAS = 3;
+
+export function margenPago(ciclo) {
+  if (ciclo?.u === "m") return Math.max(3 * msCiclo(ciclo), 60 * 1000);
+  return GRACIA_DIAS * 24 * 60 * 60 * 1000;
+}
+
+export function textoMargen(ciclo) {
+  if (ciclo?.u === "m") {
+    const n = Math.max(3 * (ciclo.n || 1), 1);
+    return `${n} minuto${n === 1 ? "" : "s"}`;
+  }
+  return `${GRACIA_DIAS} días`;
+}
+
 // ------------------------------------------------------------
 // Lectura y escritura
 // ------------------------------------------------------------
@@ -248,6 +266,27 @@ export function quitarCuenta(chatId, clave, cuentaId) {
   });
 }
 
+/** Cambia los datos y/o el precio de una cuenta ya creada */
+export function editarCuenta(chatId, clave, cuentaId, cambios = {}) {
+  return editarTienda(chatId, (t) => {
+    const cuenta = producto(t, clave).cuentas.find((c) => c.id === cuentaId);
+    if (!cuenta) return null;
+
+    if (typeof cambios.datos === "string" && cambios.datos.trim()) {
+      cuenta.datos = cambios.datos;
+    }
+    if (Number.isFinite(cambios.precio) && cambios.precio >= 0) {
+      cuenta.precio = Number(cambios.precio);
+      // La venta en curso pasa a cobrarse con el precio nuevo
+      for (const v of t.ventas) {
+        if (v.cuentaId === cuentaId && v.estado === "activa") v.precio = cuenta.precio;
+      }
+    }
+    cuenta.editada = Date.now();
+    return cuenta;
+  });
+}
+
 export function cambiarCicloCuenta(chatId, clave, cuentaId, ciclo) {
   return editarTienda(chatId, (t) => {
     const p = producto(t, clave);
@@ -328,7 +367,26 @@ export function comprar(chatId, clave, cuentaId, cliente) {
       totalPagado: cuenta.precio
     };
     t.ventas.push(venta);
-    return { venta, cuenta, saldo: t.creditos[num] };
+
+    // Comprobante de la compra: queda como factura ya pagada, para que el
+    // cliente y los números de aviso reciban el papel desde el primer día.
+    const comprobante = {
+      id: nuevoId(t, "f"),
+      ventaId: venta.id,
+      producto: clave,
+      cliente: num,
+      monto: cuenta.precio,
+      ciclo: cuenta.ciclo,
+      generada: Date.now(),
+      vence: venta.proxima,
+      estado: "pagada",
+      pagada: Date.now(),
+      primera: true,
+      numero: t.facturas.length + 1
+    };
+    t.facturas.push(comprobante);
+
+    return { venta, cuenta, comprobante, saldo: t.creditos[num] };
   });
 }
 
@@ -422,7 +480,7 @@ export function crearFactura(chatId, ventaId) {
       monto: v.precio,
       ciclo: v.ciclo,
       generada: Date.now(),
-      vence: Date.now() + msCiclo(v.ciclo),
+      vence: Date.now() + margenPago(v.ciclo),
       estado: "pendiente",
       numero: t.facturas.length + 1
     };

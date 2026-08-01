@@ -26,7 +26,8 @@ import {
   identidades,
   cerrarSesionVentas,
   registrarCerrador,
-  getProducto
+  getProducto,
+  gruposDondeEsAdmin
 } from "../../ventas-core.js";
 
 // Nombre bonito del producto; si es uno creado a mano, su propia clave
@@ -264,26 +265,38 @@ async function abrirPanel(conn, msg, chatId) {
 }
 
 async function elegirGrupo(conn, msg) {
-  const grupos = gruposConTienda();
+  // Todos los grupos donde está el bot y el usuario es admin (el owner, todos)
+  let grupos = await gruposDondeEsAdmin(conn, msg);
+
+  // Si no se pudieron listar, al menos los que ya tienen tienda
+  if (!grupos.length) {
+    const conTienda = gruposConTienda().filter((g) => g.endsWith("@g.us"));
+    grupos = [];
+    for (const g of conTienda) grupos.push({ jid: g, nombre: await nombreGrupo(conn, g) });
+  }
+
   if (!grupos.length) {
     return responder(
       conn,
       msg,
-      "📊 *TOTAL VENTAS*\n\nTodavía no hay ninguna tienda configurada en ningún grupo."
+      "📊 *TOTAL VENTAS*\n\nNo eres administrador de ningún grupo donde esté el bot."
     );
   }
 
-  const nombres = [];
-  for (const g of grupos) nombres.push(await nombreGrupo(conn, g));
+  // Marcamos los que ya tienen ventas, para encontrarlos rápido
+  const conVentas = new Set(gruposConTienda());
 
   cerrarSesionVentas(conn, msg);
-  setPendiente(conn, msg, { paso: "grupo", grupos });
+  setPendiente(conn, msg, { paso: "grupo", grupos: grupos.map((g) => g.jid) });
   return responder(
     conn,
     msg,
     `📊 *TOTAL VENTAS*\n\n*¿De qué grupo quieres ver la información?*\n\n` +
-      grupos.map((g, i) => `*${i + 1}.* ${nombres[i]}`).join("\n") +
-      `\n\n❌ Escribe *cancelar* para salir.`
+      grupos
+        .map((g, i) => `*${i + 1}.* ${g.nombre}${conVentas.has(g.jid) ? "  🛒" : ""}`)
+        .join("\n") +
+      `\n\n_El 🛒 marca los que ya tienen tienda montada._\n` +
+      `❌ Escribe *cancelar* para salir.`
   );
 }
 
@@ -303,14 +316,8 @@ const handler = async (msg, { conn }) => {
     return abrirPanel(conn, msg, chatId);
   }
 
-  // En privado solo el owner, y eligiendo grupo
-  if (!msg.key.fromMe && !identidades(conn, msg).some((n) => isOwnerCheck(n))) {
-    return responder(
-      conn,
-      msg,
-      "🚫 En privado este panel es solo para el owner. Úsalo dentro del grupo de tu tienda."
-    );
-  }
+  // En privado: se listan los grupos donde el usuario es admin y se elige uno.
+  // gruposDondeEsAdmin ya deja pasar al owner con todos los grupos.
   return elegirGrupo(conn, msg);
 };
 
@@ -343,8 +350,19 @@ function registrar(conn) {
         // ---------- Elegir grupo (privado) ----------
         if (pend.paso === "grupo") {
           const i = parseInt(texto, 10);
-          const grupo = pend.grupos[i - 1];
+          const grupo = (pend.grupos || [])[i - 1];
           if (!grupo) continue;
+
+          const mios = identidades(conn, m);
+          let permitido = !!m.key.fromMe || mios.some((n) => isOwnerCheck(n));
+          for (const n of mios) {
+            if (permitido) break;
+            permitido = await isAdminByNumber(conn, grupo, n);
+          }
+          if (!permitido) {
+            await responder(conn, m, "🚫 No eres administrador de ese grupo.");
+            continue;
+          }
           await abrirPanel(conn, m, grupo);
           continue;
         }

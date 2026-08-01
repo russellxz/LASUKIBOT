@@ -10,7 +10,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { crearVenta } from "../../ventas-core.js";
+import { crearVenta, esProductoSimple } from "../../ventas-core.js";
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "../../libs/adminCheck.js";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -160,13 +160,31 @@ const handler = async (msg, { conn, args }) => {
     comandos: [clave],
     setComandos: [`set${clave}`],
     titulo,
-    emoji: "🛒"
+    emoji: esProductoSimple(clave) ? "💳" : "🛒"
   };
 
   const lista = leer();
   lista.push(def);
   guardar(lista);
   registrarEnCaliente(def);
+
+  if (esProductoSimple(clave)) {
+    return responder(
+      [
+        `✅ *COMANDO CREADO*`,
+        ``,
+        `💳 *${titulo}* ya está funcionando, sin reiniciar nada.`,
+        ``,
+        `Como es de *pago*, va a la antigua: solo lleva *foto* y *texto*.`,
+        `No entra en el sistema de cuentas ni de facturación.`,
+        ``,
+        `*Para el admin:* *${pref}set${clave}* — pones la foto y el texto`,
+        `*Para los clientes:* *${pref}${clave}* — ven esa información`,
+        ``,
+        `Empieza ahora con *${pref}set${clave}*`
+      ].join("\n")
+    );
+  }
 
   return responder(
     [
