@@ -28,8 +28,11 @@ import {
   gruposDondeEsAdmin
 } from "../../ventas-core.js";
 import {
-  registrarSesion,
-  abrirSesion,
+  duenoDe,
+  abrirMenu,
+  leerMenu,
+  cerrarMenu,
+  esComandoDelBot,
   yaAtendido,
   recordarPropio,
   esMensajePropio,
@@ -40,73 +43,23 @@ import {
 // Nombre bonito del producto; si es uno creado a mano, su propia clave
 const tituloProducto = (clave) => getProducto(clave)?.titulo || clave;
 
-// Este panel entra en el registro compartido de menús: al abrirlo se cierran
-// los demás (los set de ventas y la personalización), para que un número no
-// dispare dos conversaciones a la vez.
-registrarSesion("panel", (conn, msg) => borrarTodoDelUsuario(conn, msg));
-
-const ESPERA_MS = 10 * 60 * 1000;
-const pendientes = new Map();
 const idsPropios = new Set();
 
-// Igual que en ventas-core: este listener corre antes de que el bot resuelva
-// los @lid, así que el panel se guarda y se busca con todas las formas del
-// número. Y en los privados no se usa el jid del chat, porque el comando lo ve
-// ya normalizado y la respuesta todavía como @lid: la clave no coincidía y el
-// panel no reaccionaba al elegir el grupo.
-const chatClave = (msg) => {
-  const c = String(msg?.key?.remoteJid || "");
-  return c.endsWith("@g.us") ? c : "privado";
-};
-
-const clavesDe = (conn, msg) =>
-  identidades(conn, msg).map((n) => `${conn?.user?.id || "main"}|${chatClave(msg)}|${n}`);
-
+// La conversación abierta vive en sesiones.js, que es común a los tres menús:
+// abrir el panel cierra solo cualquier set o personalización que tuviera esta
+// persona, y al revés. Por eso ya no se pisan entre ellos.
 function setPendiente(conn, msg, datos) {
-  const ahora = Date.now();
-  for (const [k, v] of pendientes) if (ahora - v.ts > ESPERA_MS) pendientes.delete(k);
-  const ks = clavesDe(conn, msg);
-  const p = { ...datos, ts: ahora, __claves: ks };
-  for (const k of ks) pendientes.set(k, p);
+  abrirMenu("panel", duenoDe(conn), identidades(conn, msg), msg?.key?.remoteJid, datos);
 }
 
 function getPendiente(conn, msg) {
-  for (const k of clavesDe(conn, msg)) {
-    const p = pendientes.get(k);
-    if (!p) continue;
-    if (Date.now() - p.ts > ESPERA_MS) {
-      for (const x of p.__claves || [k]) pendientes.delete(x);
-      return null;
-    }
-    return p;
-  }
-  return null;
+  return leerMenu("panel", duenoDe(conn), identidades(conn, msg), msg?.key?.remoteJid);
 }
 
-const borrarPendiente = (conn, msg) => {
-  for (const k of clavesDe(conn, msg)) {
-    const p = pendientes.get(k);
-    for (const x of p?.__claves || [k]) pendientes.delete(x);
-  }
-};
+const borrarPendiente = (conn, msg) => cerrarMenu(duenoDe(conn), identidades(conn, msg));
 
-/**
- * Cierra el panel que este usuario tuviera abierto en CUALQUIER chat.
- * Si solo se borrara el del chat actual, un panel abierto en el grupo seguía
- * vivo mientras se configuraba por privado y los dos contestaban al mismo
- * número.
- */
-const borrarTodoDelUsuario = (conn, msg) => {
-  const bot = String(conn?.user?.id || "main");
-  const mios = new Set(identidades(conn, msg));
-  if (!mios.size) return;
-
-  for (const k of [...pendientes.keys()]) {
-    const partes = k.split("|");
-    const numero = partes[partes.length - 1];
-    if (partes[0] === bot && mios.has(numero)) pendientes.delete(k);
-  }
-};
+/** Cierra lo que este usuario tuviera abierto, en el chat que sea */
+const borrarTodoDelUsuario = (conn, msg) => cerrarMenu(duenoDe(conn), identidades(conn, msg));
 
 function recordar(res) {
   if (res?.key?.id) {
@@ -300,7 +253,6 @@ async function volverAlPanel(conn, msg, grupo) {
 }
 
 async function abrirPanel(conn, msg, chatId) {
-  abrirSesion("panel", conn, msg);   // que no queden dos conversaciones abiertas
   setPendiente(conn, msg, { paso: "menu", grupo: chatId });
   return responder(conn, msg, textoPanel(chatId, await nombreGrupo(conn, chatId)));
 }
@@ -324,16 +276,11 @@ async function elegirGrupo(conn, msg) {
     );
   }
 
-  // Si solo es admin de un grupo, no hay nada que elegir
-  if (grupos.length === 1) {
-    await responder(conn, msg, `🏘️ Panel de *${grupos[0].nombre}*`);
-    return abrirPanel(conn, msg, grupos[0].jid);
-  }
-
   // Marcamos los que ya tienen ventas, para encontrarlos rápido
   const conVentas = new Set(gruposConTienda());
 
-  abrirSesion("panel", conn, msg);
+  // Siempre se enseña la lista, aunque sea un solo grupo: así ves cuál es
+  // antes de nada y entras tú poniendo el *1*.
   setPendiente(conn, msg, { paso: "grupo", grupos: grupos.map((g) => g.jid) });
   return responder(
     conn,
@@ -342,8 +289,10 @@ async function elegirGrupo(conn, msg) {
       grupos
         .map((g, i) => `*${i + 1}.* ${g.nombre}${conVentas.has(g.jid) ? "  🛒" : ""}`)
         .join("\n") +
-      `\n\n_El 🛒 marca los que ya tienen tienda montada._\n` +
-      `❌ Escribe *volver* para el panel, o *0* para salir.`
+      (grupos.length === 1
+        ? `\n\n_Es el único grupo donde eres admin. Responde *1* para entrar._`
+        : `\n\n_El 🛒 marca los que ya tienen tienda montada._`) +
+      `\n❌ Escribe *0* para salir.`
   );
 }
 
@@ -385,11 +334,10 @@ function registrar(conn) {
         if (!pend) continue;
 
         // Último seguro contra bucles
-        const bot = String(conn?.user?.id || "main");
+        const bot = duenoDe(conn);
         const quienEs = identidades(conn, m)[0] || "?";
         if (frenoDeSpam("panel", bot, quienEs)) {
           borrarTodoDelUsuario(conn, m);
-          abrirSesion("nada", conn, m);
           limpiarFreno("panel", bot, quienEs);
           await responder(
             conn,
@@ -401,11 +349,16 @@ function registrar(conn) {
 
         // El mismo mensaje puede llegar dos veces; el segundo se comería el
         // paso siguiente (era lo que hacía que el nombre acabara siendo "5")
-        if (yaAtendido("panel", m, conn?.user?.id || "main")) continue;
+        if (yaAtendido("panel", m, duenoDe(conn))) continue;
 
         const crudo = textoDe(m);
         const texto = crudo.trim();
         const bajo = texto.toLowerCase();
+
+        // Un comando del bot NO es contenido. Si estabas en "escribe el nombre
+        // de la tienda" y escribías *.setnetflix*, el panel guardaba
+        // ".setnetflix" como nombre y encima se abría el set: los dos a la vez.
+        if (esComandoDelBot(texto)) continue;
 
         // "volver" sube al panel sin cerrarlo
         if (bajo === "volver" && pend.paso !== "menu" && pend.grupo) {
@@ -417,7 +370,6 @@ function registrar(conn) {
         // pidiendo el logo el 0 solo contestaba "eso no es una imagen".
         if (bajo === "cancelar" || bajo === "salir" || texto === "0") {
           borrarTodoDelUsuario(conn, m);
-          abrirSesion("nada", conn, m);   // y lo que tuviera abierto de otros menús
           await responder(conn, m, "🚪 Panel cerrado.");
           continue;
         }

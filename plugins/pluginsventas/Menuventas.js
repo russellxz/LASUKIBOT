@@ -100,7 +100,7 @@ const handler = async (msg, { conn }) => {
   // Y van en su propio apartado del menú
   if (creados.length) {
     secciones.push({
-      titulo: "🧩 CREADOS POR TI",
+      titulo: "🧩 COMANDOS NUEVOS DE LOS ADMINS",
       items: creados.map(
         (c) => `${p}${c.clave}${puestos.has(c.clave) ? "  ✅" : ""}`
       )
