@@ -27,7 +27,15 @@ import {
   getProducto,
   gruposDondeEsAdmin
 } from "../../ventas-core.js";
-import { registrarSesion, abrirSesion, yaAtendido } from "../../sesiones.js";
+import {
+  registrarSesion,
+  abrirSesion,
+  yaAtendido,
+  recordarPropio,
+  esMensajePropio,
+  frenoDeSpam,
+  limpiarFreno
+} from "../../sesiones.js";
 
 // Nombre bonito del producto; si es uno creado a mano, su propia clave
 const tituloProducto = (clave) => getProducto(clave)?.titulo || clave;
@@ -102,6 +110,7 @@ const borrarTodoDelUsuario = (conn, msg) => {
 
 function recordar(res) {
   if (res?.key?.id) {
+    recordarPropio(res);       // lista común de los tres menús
     idsPropios.add(res.key.id);
     if (idsPropios.size > 400) {
       const it = idsPropios.values();
@@ -364,10 +373,25 @@ function registrar(conn) {
     for (const m of ev.messages || []) {
       try {
         if (!m?.message) continue;
-        if (idsPropios.has(m.key?.id)) continue;
+        if (idsPropios.has(m.key?.id) || esMensajePropio(m)) continue;
 
         const pend = getPendiente(conn, m);
         if (!pend) continue;
+
+        // Último seguro contra bucles
+        const bot = String(conn?.user?.id || "main");
+        const quienEs = identidades(conn, m)[0] || "?";
+        if (frenoDeSpam("panel", bot, quienEs)) {
+          borrarTodoDelUsuario(conn, m);
+          abrirSesion("nada", conn, m);
+          limpiarFreno("panel", bot, quienEs);
+          await responder(
+            conn,
+            m,
+            "🛑 Cerré el panel: se estaba repitiendo solo.\n\nVuelve a abrirlo cuando quieras."
+          );
+          continue;
+        }
 
         // El mismo mensaje puede llegar dos veces; el segundo se comería el
         // paso siguiente (era lo que hacía que el nombre acabara siendo "5")
