@@ -18,6 +18,7 @@ import fs from "fs";
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "./libs/adminCheck.js";
 import {
   DIGITS,
+  normalizarNumero,
   parseCiclo,
   textoCiclo,
   getCuentas,
@@ -189,30 +190,66 @@ const idsPropios = new Set();
 
 const dueno = (conn) => String(conn?.subbotNumber || conn?.user?.id || "main");
 
-function clave(conn, msg) {
-  const quien = msg.key.fromMe ? DIGITS(conn?.user?.id) : numeroDelRemitente(msg);
-  return `${dueno(conn)}|${msg.key.remoteJid}|${quien}`;
+/**
+ * Todas las formas en las que puede llegar el número de quien escribe.
+ *
+ * Este listener se engancha ANTES de que el bot resuelva los @lid, así que el
+ * mismo admin llega como @lid aquí y como número real cuando ejecuta el
+ * comando. Si guardáramos el menú abierto con una sola forma, al responder el
+ * número no lo encontraríamos y el bot se quedaría callado.
+ */
+export function identidades(conn, msg) {
+  const out = [];
+  const add = (v) => {
+    const n = normalizarNumero(v);
+    if (n && !out.includes(n)) out.push(n);
+  };
+
+  if (msg?.key?.fromMe) add(conn?.user?.id);
+  add(msg?.realNumber);
+  add(msg?.realJid);
+  add(msg?.key?.participant);
+  if (!String(msg?.key?.remoteJid || "").endsWith("@g.us")) add(msg?.key?.remoteJid);
+
+  // Un @lid resuelto con el mapa que el bot va llenando
+  for (const j of [msg?.realJid, msg?.key?.participant, msg?.key?.remoteJid]) {
+    if (typeof j === "string" && j.endsWith("@lid") && global.lidMap instanceof Map) {
+      add(global.lidMap.get(j));
+    }
+  }
+  return out;
 }
+
+const claves = (conn, msg) =>
+  identidades(conn, msg).map((n) => `${dueno(conn)}|${msg.key.remoteJid}|${n}`);
 
 function setPendiente(conn, msg, datos) {
   const ahora = Date.now();
   for (const [k, v] of pendientes) if (ahora - v.ts > ESPERA_MS) pendientes.delete(k);
-  pendientes.set(clave(conn, msg), { ...datos, ts: ahora });
+
+  const ks = claves(conn, msg);
+  const p = { ...datos, ts: ahora, __claves: ks };
+  for (const k of ks) pendientes.set(k, p);
 }
 
 function getPendiente(conn, msg) {
-  const k = clave(conn, msg);
-  const p = pendientes.get(k);
-  if (!p) return null;
-  if (Date.now() - p.ts > ESPERA_MS) {
-    pendientes.delete(k);
-    return null;
+  for (const k of claves(conn, msg)) {
+    const p = pendientes.get(k);
+    if (!p) continue;
+    if (Date.now() - p.ts > ESPERA_MS) {
+      for (const x of p.__claves || [k]) pendientes.delete(x);
+      return null;
+    }
+    return p;
   }
-  return p;
+  return null;
 }
 
 function borrarPendiente(conn, msg) {
-  pendientes.delete(clave(conn, msg));
+  for (const k of claves(conn, msg)) {
+    const p = pendientes.get(k);
+    for (const x of p?.__claves || [k]) pendientes.delete(x);
+  }
 }
 
 function recordar(res) {
@@ -239,9 +276,19 @@ async function puedeConfigurar(conn, msg) {
   const chatId = msg.key.remoteJid;
   if (!chatId.endsWith("@g.us")) return false;
   if (msg.key.fromMe) return true;
-  const quien = numeroDelRemitente(msg);
-  if (isOwnerCheck(quien)) return true;
-  return isAdminByNumber(conn, chatId, quien);
+
+  // Se prueban todas las formas del número por lo mismo que en identidades():
+  // aquí el admin puede llegar todavía como @lid
+  for (const n of identidades(conn, msg)) {
+    if (isOwnerCheck(n)) return true;
+    if (await isAdminByNumber(conn, chatId, n)) return true;
+  }
+  return false;
+}
+
+/** El número con el que se le apunta el saldo y las compras a alguien */
+function numeroPrincipal(conn, msg) {
+  return identidades(conn, msg)[0] || numeroDelRemitente(msg);
 }
 
 // ------------------------------------------------------------
@@ -345,7 +392,7 @@ async function mostrarProducto(msg, conn, info) {
   if (guardado?.texto) partes.push(guardado.texto);
   if (lista) {
     partes.push(lista);
-    const saldo = getCreditos(chatId, numeroDelRemitente(msg));
+    const saldo = getCreditos(chatId, numeroPrincipal(conn, msg));
     partes.push(`💰 Tus créditos: *${saldo}*`);
     if (!saldo) partes.push(`_Pídele créditos a un admin con_ *${pref}addcredit*`);
   }
@@ -378,7 +425,7 @@ async function comprarCuenta(msg, conn, info, indice) {
     );
   }
 
-  const cliente = numeroDelRemitente(msg);
+  const cliente = numeroPrincipal(conn, msg);
   const r = comprar(chatId, info.clave, cuenta.id, cliente);
 
   if (r?.error === "sin_creditos") {
