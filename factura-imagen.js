@@ -24,7 +24,8 @@ async function cargarCanvas() {
 const COLORES = {
   pendiente: { fuerte: "#f59e0b", suave: "#fef3c7", sello: "PENDIENTE" },
   pagada:    { fuerte: "#16a34a", suave: "#dcfce7", sello: "PAGADA" },
-  anulada:   { fuerte: "#6b7280", suave: "#f3f4f6", sello: "ANULADA" }
+  anulada:   { fuerte: "#6b7280", suave: "#f3f4f6", sello: "ANULADA" },
+  vencida:   { fuerte: "#dc2626", suave: "#fee2e2", sello: "VENCIDA" }
 };
 
 /** Recorta el texto para que quepa en el ancho dado */
@@ -232,7 +233,10 @@ export function textoFactura(factura, opciones = {}) {
       `Responde a este mensaje escribiendo *pagar*.`,
       `Se descuenta de tus créditos automáticamente.`,
       ``,
-      `Si no te alcanza, pídele créditos a un administrador del grupo.`
+      `Si no te alcanza, pídele créditos a un administrador del grupo.`,
+      ``,
+      `⚠️ Tienes hasta el *${fecha(factura.vence)}*. Si no pagas para entonces,`,
+      `el servicio se cancela y la cuenta se libera.`
     );
   } else if (factura.estado === "pagada") {
     lineas.push(``, `Gracias por tu compra 🙌`);

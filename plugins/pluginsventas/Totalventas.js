@@ -22,7 +22,19 @@ import {
   fecha
 } from "../../facturacion-core.js";
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "../../libs/adminCheck.js";
-import { identidades } from "../../ventas-core.js";
+import {
+  identidades,
+  cerrarSesionVentas,
+  registrarCerrador,
+  getProducto,
+  gruposDondeEsAdmin
+} from "../../ventas-core.js";
+
+// Nombre bonito del producto; si es uno creado a mano, su propia clave
+const tituloProducto = (clave) => getProducto(clave)?.titulo || clave;
+
+// Al abrir el panel se cierra cualquier menú de set abierto, y al revés
+registrarCerrador((conn, msg) => borrarPendiente(conn, msg));
 
 const ESPERA_MS = 10 * 60 * 1000;
 const pendientes = new Map();
@@ -98,13 +110,34 @@ const textoDe = (msg) => {
 function imagenDe(msg) {
   const m = desenvolver(msg?.message) || {};
   if (m.imageMessage) return m.imageMessage;
-  const q = m.extendedTextMessage?.contextInfo?.quotedMessage;
-  return q ? desenvolver(q)?.imageMessage || null : null;
+
+  // Imagen mandada como documento (pasa al enviarla "sin comprimir")
+  if (m.documentMessage && /^image\//.test(m.documentMessage.mimetype || "")) {
+    return m.documentMessage;
+  }
+
+  const ctx =
+    m.extendedTextMessage?.contextInfo ||
+    m.imageMessage?.contextInfo ||
+    m.videoMessage?.contextInfo ||
+    null;
+  const q = ctx?.quotedMessage ? desenvolver(ctx.quotedMessage) : null;
+  if (!q) return null;
+  if (q.imageMessage) return q.imageMessage;
+  if (q.documentMessage && /^image\//.test(q.documentMessage.mimetype || "")) {
+    return q.documentMessage;
+  }
+  return null;
 }
 
 async function aBase64(conn, nodo) {
-  const WA = conn?.wa || global?.wa;
-  if (!WA?.downloadContentFromMessage) throw new Error("sin descargador");
+  // El descargador se inyecta en varios sitios según cómo arranque el bot
+  let WA = null;
+  for (const fuente of [conn?.wa, global?.wa, conn]) {
+    if (typeof fuente?.downloadContentFromMessage === "function") { WA = fuente; break; }
+  }
+  if (!WA) throw new Error("no hay downloadContentFromMessage disponible");
+
   const stream = await WA.downloadContentFromMessage(nodo, "image");
   let buffer = Buffer.alloc(0);
   for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
@@ -141,7 +174,7 @@ function textoPanel(chatId, tituloGrupo) {
     Object.keys(r.productos).length
       ? `*Por producto:*\n` +
         Object.entries(r.productos)
-          .map(([p, n]) => `• ${p} → ${n} cliente${n === 1 ? "" : "s"}`)
+          .map(([p, n]) => `• ${tituloProducto(p)} → ${n} cliente${n === 1 ? "" : "s"}`)
           .join("\n") +
         `\n`
       : ``,
@@ -160,78 +193,110 @@ function textoPanel(chatId, tituloGrupo) {
     .replace(/\n{3,}/g, "\n\n");
 }
 
+const VOLVER = "\n\n━━━━━━━━━━━━━━━━━━━━\n_Responde otro número del menú, o *0* para salir._";
+
 function listaClientes(chatId) {
   const activas = ventasActivas(chatId);
-  if (!activas.length) return "👥 *CLIENTES*\n\n_Todavía no hay ninguna venta activa._";
+  if (!activas.length) {
+    return "👥 *CLIENTES*\n\n_Todavía no hay ninguna venta activa._" + VOLVER;
+  }
+
+  const pendientesPorVenta = new Set(
+    facturasPendientes(chatId).map((f) => f.ventaId)
+  );
 
   const lineas = activas.map((v, i) =>
     [
       `*${i + 1}.* 👤 +${v.cliente}`,
-      `     📦 ${v.producto}  ·  💵 ${v.precio} créditos`,
+      `     📦 ${tituloProducto(v.producto)}  ·  💵 ${v.precio} créditos`,
       `     🔁 ${textoCiclo(v.ciclo)}`,
-      `     ⏳ Próxima factura ${tiempoRestante(v.proxima)}`,
+      pendientesPorVenta.has(v.id)
+        ? `     🔴 *Tiene una factura sin pagar*`
+        : `     ⏳ Próxima factura ${tiempoRestante(v.proxima)}`,
       `     💰 Lleva pagado ${v.totalPagado || 0} en ${v.pagos || 0} cobro(s)`
     ].join("\n")
   );
-  return `👥 *CLIENTES Y SUS PRODUCTOS*\n\n${lineas.join("\n\n")}`;
+  return `👥 *CLIENTES Y SUS PRODUCTOS*\n\n${lineas.join("\n\n")}` + VOLVER;
 }
 
 function listaPendientes(chatId) {
   const f = facturasPendientes(chatId);
-  if (!f.length) return "🧾 *FACTURAS PENDIENTES*\n\n_Ninguna. Todo al día ✅_";
+  if (!f.length) return "🧾 *FACTURAS PENDIENTES*\n\n_Ninguna. Todo al día ✅_" + VOLVER;
   return (
     `🧾 *FACTURAS PENDIENTES*\n\n` +
     f
       .map(
         (x, i) =>
           `*${i + 1}.* N.º ${x.numero} · 👤 +${x.cliente}\n` +
-          `     📦 ${x.producto} · 💵 ${x.monto} créditos\n` +
-          `     📅 ${fecha(x.generada)}`
+          `     📦 ${tituloProducto(x.producto)} · 💵 ${x.monto} créditos\n` +
+          `     📅 Emitida ${fecha(x.generada)}\n` +
+          `     ⏳ Se cancela si no paga ${tiempoRestante(x.vence)}`
       )
-      .join("\n\n")
+      .join("\n\n") +
+    VOLVER
   );
 }
 
 function listaVentasNumeradas(chatId, titulo, aviso) {
   const activas = ventasActivas(chatId);
   if (!activas.length) return null;
-  return (
-    `${titulo}\n\n` +
-    activas
-      .map((v, i) => `*${i + 1}.* 👤 +${v.cliente} · 📦 ${v.producto} · 💵 ${v.precio}`)
-      .join("\n") +
-    `\n\n${aviso}\n❌ Escribe *cancelar* para salir.`
-  );
+  return {
+    ids: activas.map((v) => v.id),
+    texto:
+      `${titulo}\n\n` +
+      activas
+        .map(
+          (v, i) =>
+            `*${i + 1}.* 👤 +${v.cliente}\n` +
+            `     📦 ${tituloProducto(v.producto)} · 💵 ${v.precio} · 🔁 ${textoCiclo(v.ciclo)}`
+        )
+        .join("\n\n") +
+      `\n\n${aviso}\n\n_Responde con el número._\n❌ Escribe *cancelar* para salir.`
+  };
 }
 
 // ------------------------------------------------------------
 // Apertura del panel
 // ------------------------------------------------------------
 async function abrirPanel(conn, msg, chatId) {
+  cerrarSesionVentas(conn, msg);   // que no queden dos conversaciones abiertas
   setPendiente(conn, msg, { paso: "menu", grupo: chatId });
   return responder(conn, msg, textoPanel(chatId, await nombreGrupo(conn, chatId)));
 }
 
 async function elegirGrupo(conn, msg) {
-  const grupos = gruposConTienda();
+  // Todos los grupos donde está el bot y el usuario es admin (el owner, todos)
+  let grupos = await gruposDondeEsAdmin(conn, msg);
+
+  // Si no se pudieron listar, al menos los que ya tienen tienda
+  if (!grupos.length) {
+    const conTienda = gruposConTienda().filter((g) => g.endsWith("@g.us"));
+    grupos = [];
+    for (const g of conTienda) grupos.push({ jid: g, nombre: await nombreGrupo(conn, g) });
+  }
+
   if (!grupos.length) {
     return responder(
       conn,
       msg,
-      "📊 *TOTAL VENTAS*\n\nTodavía no hay ninguna tienda configurada en ningún grupo."
+      "📊 *TOTAL VENTAS*\n\nNo eres administrador de ningún grupo donde esté el bot."
     );
   }
 
-  const nombres = [];
-  for (const g of grupos) nombres.push(await nombreGrupo(conn, g));
+  // Marcamos los que ya tienen ventas, para encontrarlos rápido
+  const conVentas = new Set(gruposConTienda());
 
-  setPendiente(conn, msg, { paso: "grupo", grupos });
+  cerrarSesionVentas(conn, msg);
+  setPendiente(conn, msg, { paso: "grupo", grupos: grupos.map((g) => g.jid) });
   return responder(
     conn,
     msg,
     `📊 *TOTAL VENTAS*\n\n*¿De qué grupo quieres ver la información?*\n\n` +
-      grupos.map((g, i) => `*${i + 1}.* ${nombres[i]}`).join("\n") +
-      `\n\n❌ Escribe *cancelar* para salir.`
+      grupos
+        .map((g, i) => `*${i + 1}.* ${g.nombre}${conVentas.has(g.jid) ? "  🛒" : ""}`)
+        .join("\n") +
+      `\n\n_El 🛒 marca los que ya tienen tienda montada._\n` +
+      `❌ Escribe *cancelar* para salir.`
   );
 }
 
@@ -251,14 +316,8 @@ const handler = async (msg, { conn }) => {
     return abrirPanel(conn, msg, chatId);
   }
 
-  // En privado solo el owner, y eligiendo grupo
-  if (!msg.key.fromMe && !identidades(conn, msg).some((n) => isOwnerCheck(n))) {
-    return responder(
-      conn,
-      msg,
-      "🚫 En privado este panel es solo para el owner. Úsalo dentro del grupo de tu tienda."
-    );
-  }
+  // En privado: se listan los grupos donde el usuario es admin y se elige uno.
+  // gruposDondeEsAdmin ya deja pasar al owner con todos los grupos.
   return elegirGrupo(conn, msg);
 };
 
@@ -291,8 +350,19 @@ function registrar(conn) {
         // ---------- Elegir grupo (privado) ----------
         if (pend.paso === "grupo") {
           const i = parseInt(texto, 10);
-          const grupo = pend.grupos[i - 1];
+          const grupo = (pend.grupos || [])[i - 1];
           if (!grupo) continue;
+
+          const mios = identidades(conn, m);
+          let permitido = !!m.key.fromMe || mios.some((n) => isOwnerCheck(n));
+          for (const n of mios) {
+            if (permitido) break;
+            permitido = await isAdminByNumber(conn, grupo, n);
+          }
+          if (!permitido) {
+            await responder(conn, m, "🚫 No eres administrador de ese grupo.");
+            continue;
+          }
           await abrirPanel(conn, m, grupo);
           continue;
         }
@@ -312,11 +382,11 @@ function registrar(conn) {
             borrarPendiente(conn, m);
             await responder(conn, m, "🚪 Panel cerrado.");
           } else if (op === 1) {
+            setPendiente(conn, m, { paso: "menu", grupo });
             await responder(conn, m, listaClientes(grupo));
-            await volver();
           } else if (op === 2) {
+            setPendiente(conn, m, { paso: "menu", grupo });
             await responder(conn, m, listaPendientes(grupo));
-            await volver();
           } else if (op === 3 || op === 4) {
             const esCancelar = op === 3;
             const lista = listaVentasNumeradas(
@@ -331,8 +401,12 @@ function registrar(conn) {
               await volver();
               continue;
             }
-            setPendiente(conn, m, { paso: esCancelar ? "cancelar" : "borrar", grupo });
-            await responder(conn, m, lista);
+            setPendiente(conn, m, {
+              paso: esCancelar ? "cancelar" : "borrar",
+              grupo,
+              ids: lista.ids
+            });
+            await responder(conn, m, lista.texto);
           } else if (op === 5) {
             setPendiente(conn, m, { paso: "nombre", grupo });
             await responder(
@@ -358,11 +432,22 @@ function registrar(conn) {
 
         // ---------- Cancelar / borrar ----------
         if (pend.paso === "cancelar" || pend.paso === "borrar") {
-          const activas = ventasActivas(grupo);
+          const ids = pend.ids || [];
           const i = parseInt(texto, 10);
-          const venta = activas[i - 1];
+          const ventaId = Number.isInteger(i) ? ids[i - 1] : null;
+          // Se elige por el id que se enseñó, no por la posición de ahora: si
+          // entre medias cambió algo, no se cancela la venta equivocada.
+          const venta = ventaId
+            ? ventasActivas(grupo).find((v) => v.id === ventaId)
+            : null;
           if (!venta) {
-            await responder(conn, m, `⚠️ Elige un número del *1* al *${activas.length}*.`);
+            await responder(
+              conn,
+              m,
+              ids.length
+                ? `⚠️ Elige un número del *1* al *${ids.length}* de la lista de arriba.`
+                : "⚠️ Ya no hay ventas activas."
+            );
             continue;
           }
           if (pend.paso === "cancelar") {
@@ -370,14 +455,14 @@ function registrar(conn) {
             await responder(
               conn,
               m,
-              `❌ *Venta cancelada.*\n\n👤 +${venta.cliente} · 📦 ${venta.producto}\n` +
-                `La cuenta vuelve al stock disponible.`
+              `❌ *Venta cancelada.*\n\n👤 +${venta.cliente} · 📦 ${tituloProducto(venta.producto)}\n` +
+                `La cuenta vuelve al stock disponible y se anularon sus facturas pendientes.`
             );
             try {
               await conn.sendMessage(`${venta.cliente}@s.whatsapp.net`, {
                 text:
                   `❌ *SERVICIO CANCELADO*\n\n` +
-                  `Tu *${venta.producto}* fue cancelado por la tienda.\n` +
+                  `Tu *${tituloProducto(venta.producto)}* fue cancelado por la tienda.\n` +
                   `Ya no se te generarán más facturas.`
               });
             } catch {}
@@ -386,7 +471,7 @@ function registrar(conn) {
             await responder(
               conn,
               m,
-              `🗑️ *Venta borrada* junto con su historial.\n\n👤 +${venta.cliente} · 📦 ${venta.producto}`
+              `🗑️ *Venta borrada* junto con su historial.\n\n👤 +${venta.cliente} · 📦 ${tituloProducto(venta.producto)}`
             );
           }
           await volver();
@@ -406,7 +491,11 @@ function registrar(conn) {
         if (pend.paso === "logo") {
           const nodo = imagenDe(m);
           if (!nodo) {
-            await responder(conn, m, "⚠️ Eso no es una imagen. Manda el logo o escribe *cancelar*.");
+            await responder(
+              conn,
+              m,
+              "⚠️ Eso no es una imagen.\n\nMándame el logo (o responde a una imagen del chat), o escribe *cancelar*."
+            );
             continue;
           }
           let b64 = null;
@@ -416,11 +505,19 @@ function registrar(conn) {
             console.error("[totalventas] error leyendo el logo:", e.message);
           }
           if (!b64) {
-            await responder(conn, m, "❌ No se pudo leer la imagen. Inténtalo otra vez.");
+            await responder(
+              conn,
+              m,
+              "❌ No pude leer esa imagen.\n\nPrueba a mandarla otra vez, o responde a una que ya esté en el chat."
+            );
             continue;
           }
           editarTienda(grupo, (t) => { t.logo = b64; });
-          await responder(conn, m, "✅ *Logo guardado.* Ya sale en tus facturas.");
+          await responder(
+            conn,
+            m,
+            "✅ *Logo guardado.*\n\nYa sale redondo arriba a la izquierda de tus facturas."
+          );
           await volver();
           continue;
         }
