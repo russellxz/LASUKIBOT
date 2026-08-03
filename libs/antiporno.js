@@ -19,7 +19,7 @@ import { setConfig, getConfig } from "../db.js";
 import { analizarBuffer, UMBRAL_GORE } from "./nsfwsky.js";
 import { muestrasDeMedia } from "./muestras.js";
 
-const UMBRAL = 70;          // % a partir del cual se considera +18
+const UMBRAL = 85;          // % a partir del cual se considera +18
 const AVISOS_MAX = 5;       // al quinto, fuera del grupo
 const MAX_MB = 25;          // límite que acepta la API
 const MAX_MB_DESCARGA = 120; // por encima de esto ni lo bajamos, para no reventar la RAM
