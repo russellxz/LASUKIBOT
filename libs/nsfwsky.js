@@ -9,7 +9,7 @@
 export const API_NSFW = "https://nsfwsky.ultraplus.click/api/v1";
 
 const TIMEOUT = 90000;
-export const UMBRAL_GORE = 75;   // subido de 25 a 75: con 25 marcaba de más
+export const UMBRAL_GORE = 85;   // subido de 25 a 75: con 25 marcaba de más
 const REINTENTOS = 3;
 const ESPERA_REINTENTO = 3000;
 
