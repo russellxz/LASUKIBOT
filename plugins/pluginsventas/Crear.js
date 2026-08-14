@@ -13,6 +13,7 @@ import { fileURLToPath } from "url";
 import { crearVenta, esProductoSimple } from "../../ventas-core.js";
 import { ventasDeProducto, cuentasDeProducto } from "../../facturacion-core.js";
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "../../libs/adminCheck.js";
+import { tiendaActiva } from "../../tienda.js";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ARCHIVO = path.join(RAIZ, "ventas-creados.json");
@@ -109,8 +110,12 @@ const handler = async (msg, { conn, args }) => {
         `*${pref}crear setojo*`,
         ``,
         `Y quedan listos al momento:`,
-        `• *${pref}setojo* — para el admin: foto, texto, cuentas, precios y ciclo`,
-        `• *${pref}ojo* — para el cliente: ve el producto y compra`,
+        tiendaActiva(chatId)
+          ? `• *${pref}setojo* — para el admin: foto, texto, cuentas, precios y ciclo`
+          : `• *${pref}setojo <texto>* — para el admin: guarda el texto (y la foto si respondes a una imagen)`,
+        tiendaActiva(chatId)
+          ? `• *${pref}ojo* — para el cliente: ve el producto y compra`
+          : `• *${pref}ojo* — para el cliente: ve la foto y la información`,
         ``,
         `También vale escribirlo sin el "set": *${pref}crear ojo* hace lo mismo.`,
         ``,
@@ -211,20 +216,28 @@ const handler = async (msg, { conn, args }) => {
   guardar(lista);
   registrarEnCaliente(def);
 
-  if (esProductoSimple(clave)) {
+  // Los comandos nuevos nacen en el modo que tenga el grupo. Como la tienda
+  // viene apagada, lo normal es que nazcan a la antigua: foto y texto y ya.
+  if (esProductoSimple(clave) || !tiendaActiva(chatId)) {
     return responder(
       [
         `✅ *COMANDO CREADO*`,
         ``,
-        `💳 *${titulo}* ya está funcionando, sin reiniciar nada.`,
+        `${esProductoSimple(clave) ? "💳" : "🛒"} *${titulo}* ya está funcionando, sin reiniciar nada.`,
         ``,
-        `Como es de *pago*, va a la antigua: solo lleva *foto* y *texto*.`,
-        `No entra en el sistema de cuentas ni de facturación.`,
+        `*Para el admin:*`,
+        `*${pref}set${clave} <texto>* — guarda el texto`,
+        `Responde a una *imagen* con ese comando y guarda también la foto`,
         ``,
-        `*Para el admin:* *${pref}set${clave}* — pones la foto y el texto`,
-        `*Para los clientes:* *${pref}${clave}* — ven esa información`,
+        `*Para los clientes:*`,
+        `*${pref}${clave}* — ven la foto y la información`,
         ``,
-        `Empieza ahora con *${pref}set${clave}*`
+        esProductoSimple(clave)
+          ? `_Los comandos de *pago* son solo informativos: no llevan cuentas ni cobros._`
+          : `_Si algún día quieres venderlo con cuentas, precios y cobro automático,_\n` +
+            `_enciende la tienda de este grupo con_ *${pref}sistienda on*`,
+        ``,
+        `Empieza ahora con *${pref}set${clave} <texto>*`
       ].join("\n")
     );
   }

@@ -16,6 +16,7 @@ import {
   getTienda
 } from "../../facturacion-core.js";
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "../../libs/adminCheck.js";
+import { tiendaActiva } from "../../tienda.js";
 
 function desenvolver(m) {
   let n = m;
@@ -91,6 +92,16 @@ const handler = async (msg, { conn, args }) => {
 
   if (!chatId.endsWith("@g.us")) {
     return responder("❌ Los créditos se manejan por grupo, así que este comando va en el grupo.");
+  }
+
+  if (!tiendaActiva(chatId)) {
+    return responder(
+      `💳 *CRÉDITOS*\n\n` +
+        `La tienda está *apagada* en este grupo, y los créditos solo sirven con\n` +
+        `la tienda encendida (que es lo que deja comprar y cobrar).\n\n` +
+        `👉 Enciéndela con *${pref}sistienda on*\n` +
+        `_Mira qué cambia con_ *${pref}sistienda*`
+    );
   }
 
   const quien = numeroDelRemitente(msg);

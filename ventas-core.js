@@ -21,6 +21,7 @@ import {
   numeroDelRemitente,
   adminNumsDeMeta
 } from "./libs/adminCheck.js";
+import { tiendaActiva } from "./tienda.js";
 import {
   duenoDe,
   identidades as identidadesDe,
@@ -476,6 +477,86 @@ function textoMenuSet(chatId, clave, titulo, emoji, pref) {
   ].join("\n");
 }
 
+/**
+ * El modo de siempre: *.setnetflix <texto>*, o responder a una imagen con
+ * *.setnetflix*, y queda guardado. Sin menús ni pasos.
+ *
+ * Es como funciona mientras la tienda esté apagada, que es lo normal.
+ */
+async function guardarALaAntigua(msg, conn, info, texto, wa) {
+  const chatId = msg.key.remoteJid;
+  const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
+  const cmd = info.setComandos?.[0] || `set${info.clave}`;
+
+  if (!chatId.endsWith("@g.us")) {
+    return responder(
+      conn,
+      msg,
+      `❌ Este comando solo funciona en grupos.\n\n` +
+        `_Para poder configurar desde el privado, enciende la tienda en tu grupo_\n` +
+        `_con_ *${pref}sistienda on*`
+    );
+  }
+
+  if (!(await puedeConfigurar(conn, msg))) {
+    return responder(conn, msg, "🚫 Solo administradores u owners pueden usar este comando.");
+  }
+
+  const escrito = typeof texto === "string" ? texto : "";
+  const citado = escrito ? null : textoCitado(msg);
+  const nodo = imagenDe(msg);
+
+  if (!escrito && !citado && !nodo) {
+    return responder(
+      conn,
+      msg,
+      `${info.emoji} *CONFIGURAR ${info.titulo.toUpperCase()}*\n\n` +
+        `Úsalo así:\n\n` +
+        `• *${pref}${cmd} <texto>* — guarda el texto (puedes usar varias líneas)\n` +
+        `• Responde a una *imagen* con *${pref}${cmd} <texto>* — guarda las dos cosas\n\n` +
+        `Y tus clientes lo ven con *${pref}${info.clave}*\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🛒 ¿Quieres venderlo con cuentas, precios y cobro automático?\n` +
+        `Enciende la tienda en este grupo con *${pref}sistienda on*`
+    );
+  }
+
+  let b64 = null;
+  if (nodo) {
+    const tam = Number(nodo.fileLength || 0);
+    if (tam && tam > MAX_IMAGEN_MB * 1024 * 1024) {
+      return responder(conn, msg, `❌ La imagen pesa más de ${MAX_IMAGEN_MB} MB. Manda una más liviana.`);
+    }
+    try {
+      b64 = await aBase64(conn, wa, nodo);
+    } catch (e) {
+      console.error("[ventas] error leyendo la imagen:", e.message);
+    }
+    if (!b64) {
+      return responder(conn, msg, "❌ No se pudo leer la imagen. Inténtalo otra vez.");
+    }
+  }
+
+  const guardado = getVenta(chatId, info.clave) || {};
+  const textoFinal = escrito || citado || "";
+
+  // Si solo mandas imagen, se respeta el texto que ya estaba, y al revés
+  guardarCampo(chatId, info.clave, "texto", textoFinal || guardado.texto || "");
+  guardarCampo(chatId, info.clave, "imagen", b64 || guardado.imagen || null);
+
+  const puesto = [];
+  if (textoFinal) puesto.push("texto");
+  if (b64) puesto.push("foto");
+
+  return responder(
+    conn,
+    msg,
+    `✅ *${info.titulo.toUpperCase()} actualizado con éxito.*\n\n` +
+      `Se guardó: ${puesto.join(" y ")}.\n` +
+      `Tus clientes ya lo ven con *${pref}${info.clave}*`
+  );
+}
+
 /** Abre el menú de configuración de un producto para un grupo concreto */
 async function abrirMenuSet(conn, msg, info, grupo) {
   const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
@@ -495,14 +576,18 @@ export async function abrirSetVenta(msg, conn, info) {
   }
 
   // --- En privado: se elige de qué grupo ---
-  const grupos = await gruposDondeEsAdmin(conn, msg);
+  // Solo salen los grupos que tengan la tienda encendida: en los demás la
+  // configuración es a la antigua y esa se hace dentro del grupo.
+  const grupos = (await gruposDondeEsAdmin(conn, msg)).filter((g) => tiendaActiva(g.jid));
 
   if (!grupos.length) {
+    const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
     return responder(
       conn,
       msg,
-      `🚫 No eres administrador de ningún grupo donde esté el bot.\n\n` +
-        `Usa este comando dentro de tu grupo, o pide que te hagan admin.`
+      `🚫 No tienes ningún grupo con la tienda encendida.\n\n` +
+        `Entra a tu grupo y enciéndela con *${pref}sistienda on*, y desde ese\n` +
+        `momento podrás configurarlo todo desde aquí.`
     );
   }
 
@@ -531,6 +616,7 @@ export async function abrirSetVenta(msg, conn, info) {
 // ------------------------------------------------------------
 function listaCuentasCliente(chatId, clave, pref) {
   if (esProductoSimple(clave)) return null;   // los de pago son solo información
+  if (!tiendaActiva(chatId)) return null;     // con la tienda apagada solo hay foto y texto
   const libres = cuentasLibres(chatId, clave);
   if (!libres.length) return null;
   return [
@@ -551,11 +637,14 @@ async function mostrarProducto(msg, conn, info) {
   const lista = listaCuentasCliente(chatId, info.clave, pref);
 
   if (!guardado && !lista) {
+    const como = tiendaActiva(chatId)
+      ? `Un admin puede ponerlo con *${pref}set${info.clave}*`
+      : `Un admin puede ponerlo con *${pref}set${info.clave} <texto>*,\n` +
+        `o respondiendo a una imagen con ese mismo comando.`;
     return responder(
       conn,
       msg,
-      `${info.emoji} No hay *${info.titulo}* configurado en este chat.\n\n` +
-        `Un admin puede ponerlo con *${pref}set${info.clave}*`
+      `${info.emoji} No hay *${info.titulo}* configurado en este chat.\n\n${como}`
     );
   }
 
@@ -585,6 +674,10 @@ async function mostrarProducto(msg, conn, info) {
 async function comprarCuenta(msg, conn, info, indice) {
   const chatId = msg.key.remoteJid;
   const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
+
+  // Sin tienda encendida no hay compras: aquí el comando solo enseña info
+  if (!tiendaActiva(chatId)) return mostrarProducto(msg, conn, info);
+
   const libres = cuentasLibres(chatId, info.clave);
   const cuenta = libres[indice - 1];
 
@@ -685,10 +778,22 @@ export function crearVenta({ clave, comandos, setComandos, titulo, emoji = "🛒
   const nombres = new Set(comandos.map((c) => c.toLowerCase()));
   const nombresSet = new Set(setComandos.map((c) => c.toLowerCase()));
 
-  const handler = async (msg, { conn, args, command } = {}) => {
+  const handler = async (msg, { conn, args, text, command, wa } = {}) => {
     const cmd = String(command || "").toLowerCase();
+    const chatId = msg?.key?.remoteJid;
 
-    if (nombresSet.has(cmd)) return abrirSetVenta(msg, conn, info);
+    if (nombresSet.has(cmd)) {
+      // Mientras nadie encienda la tienda en este grupo, se configura como
+      // siempre: el comando con el texto detrás, o respondiendo a una imagen.
+      // En un privado todavía no sabemos de qué grupo hablamos, así que de eso
+      // se encarga abrirSetVenta, que enseña los grupos con tienda.
+      const enGrupo = String(chatId || "").endsWith("@g.us");
+      if (enGrupo && !tiendaActiva(chatId)) {
+        const escrito = typeof text === "string" ? text : (args || []).join(" ");
+        return guardarALaAntigua(msg, conn, info, escrito, wa);
+      }
+      return abrirSetVenta(msg, conn, info);
+    }
     if (!nombres.has(cmd)) return;
 
     const n = parseInt(String(args?.[0] || "").trim(), 10);
