@@ -3,6 +3,7 @@
 import { enviarMenu } from "../../disenos.js";
 import { ventasConfiguradas } from "../../ventas-core.js";
 import { comandosCreados } from "./Crear.js";
+import { tiendaActiva } from "../../tienda.js";
 
 // Cada grupo lleva el comando que MUESTRA el contenido. Para configurarlo se
 // usa el mismo nombre con "set" delante (stock → setstock).
@@ -67,6 +68,7 @@ const GRUPOS = [
 
 // Comandos del sistema, que no siguen el patrón "x / setx"
 const APARTE = [
+  ["sistienda on/off", "enciende o apaga la tienda de este grupo"],
   ["crear <nombre>", "crea un producto nuevo con su comando"],
   ["crear borrar <nombre>", "borra uno creado, si no tiene clientes"],
   ["addcredit @cliente 50", "dale créditos a un cliente"],
@@ -79,6 +81,8 @@ const handler = async (msg, { conn }) => {
   const p = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
 
   try { await conn.sendMessage2(chatId, { react: { text: "🛒", key: msg.key } }, msg); } catch {}
+
+  const conTienda = tiendaActiva(chatId);
 
   // Lo que este chat ya tiene configurado, para marcarlo con ✅
   let puestos = new Set();
@@ -112,27 +116,50 @@ const handler = async (msg, { conn }) => {
     items: APARTE.map(([c, d]) => `${p}${c} — ${d}`)
   });
 
+  // Lo de arriba cambia según cómo esté este grupo: sin tienda son carteles
+  // de información, con tienda es una venta con cobro automático.
   secciones.unshift(
-    {
-      titulo: "📝 PARA EL ADMIN",
-      items: [
-        `${p}set<comando> — abre el menú de configuración`,
-        `Dentro eliges por número: foto, texto, cuentas...`,
-        `Cada cuenta lleva su precio y su ciclo de cobro`,
-        `${p}crear setojo — inventa un producto nuevo`,
-        `${p}addcredit @cliente 50 — dale saldo para comprar`
-      ]
-    },
-    {
-      titulo: "🛒 PARA EL CLIENTE",
-      items: [
-        `${p}<comando> — ve el producto y las cuentas`,
-        `${p}<comando> 1 — compra la cuenta número 1`,
-        `Los datos llegan al privado, nunca al grupo`,
-        `Cuando toque el cobro llega una factura`,
-        `Se paga respondiendo *pagar* a la factura`
-      ]
-    }
+    conTienda
+      ? {
+          titulo: "📝 PARA EL ADMIN · tienda ON",
+          items: [
+            `${p}set<comando> — abre el menú de configuración`,
+            `Dentro eliges por número: foto, texto, cuentas...`,
+            `Cada cuenta lleva su precio y su ciclo de cobro`,
+            `${p}addcredit @cliente 50 — dale saldo para comprar`,
+            `${p}sistienda off — volver al modo sencillo`
+          ]
+        }
+      : {
+          titulo: "📝 PARA EL ADMIN · modo sencillo",
+          items: [
+            `${p}set<comando> <texto> — guarda el texto`,
+            `Responde a una imagen con ese comando y guarda la foto`,
+            `${p}crear setojo — inventa un producto nuevo`,
+            `${p}sistienda on — enciende la tienda de este grupo`,
+            `${p}sistienda — te explica qué cambia`
+          ]
+        },
+    conTienda
+      ? {
+          titulo: "🛒 PARA EL CLIENTE · tienda ON",
+          items: [
+            `${p}<comando> — ve el producto y las cuentas`,
+            `${p}<comando> 1 — compra la cuenta número 1`,
+            `Los datos llegan al privado, nunca al grupo`,
+            `Cuando toque el cobro llega una factura`,
+            `Se paga respondiendo *pagar* a la factura`
+          ]
+        }
+      : {
+          titulo: "🛒 PARA EL CLIENTE",
+          items: [
+            `${p}<comando> — ve la foto y la información`,
+            `Aquí no se compra por el bot: se habla con el admin`,
+            `Un admin puede encender la venta automática`,
+            `con ${p}sistienda on`
+          ]
+        }
   );
 
   return enviarMenu(conn, chatId, msg, "menuventas", {
@@ -140,12 +167,15 @@ const handler = async (msg, { conn }) => {
     info: [
       ["Comandos de ventas", total],
       ["Configurados aquí", `${listos} de ${total}`],
+      ["Tienda", conTienda ? "encendida ✅" : `apagada · ${p}sistienda on`],
       ["Prefijo", p]
     ],
     secciones,
     nota:
       listos === 0
-        ? `Todavía no hay nada configurado en este chat. Empieza con *${p}setstock <texto>*`
+        ? conTienda
+          ? `Todavía no hay nada configurado aquí. Empieza con *${p}setstock*`
+          : `Todavía no hay nada configurado aquí. Empieza con *${p}setstock <texto>*`
         : "Los ✅ son los que ya tienen contenido guardado en este chat 🛒"
   });
 };

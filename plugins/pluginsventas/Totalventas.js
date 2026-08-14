@@ -22,6 +22,7 @@ import {
   fecha
 } from "../../facturacion-core.js";
 import { isAdminByNumber, isOwnerCheck, numeroDelRemitente } from "../../libs/adminCheck.js";
+import { tiendaActiva } from "../../tienda.js";
 import {
   identidades,
   getProducto,
@@ -257,22 +258,40 @@ async function abrirPanel(conn, msg, chatId) {
   return responder(conn, msg, textoPanel(chatId, await nombreGrupo(conn, chatId)));
 }
 
+/** El panel solo tiene sentido con la tienda encendida */
+function avisarApagada(conn, msg) {
+  const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
+  return responder(
+    conn,
+    msg,
+    `📊 *TOTAL VENTAS*\n\n` +
+      `La tienda está *apagada* en este grupo, así que todavía no hay nada que\n` +
+      `enseñar: ni clientes, ni cobros, ni facturas.\n\n` +
+      `Aquí los comandos de venta funcionan a la antigua, solo con foto y texto.\n\n` +
+      `👉 Para vender con cuentas y cobro automático: *${pref}sistienda on*\n` +
+      `_Mira qué cambia con_ *${pref}sistienda*`
+  );
+}
+
 async function elegirGrupo(conn, msg) {
-  // Todos los grupos donde está el bot y el usuario es admin (el owner, todos)
-  let grupos = await gruposDondeEsAdmin(conn, msg);
+  // Solo los grupos donde es admin Y tiene la tienda encendida: en los demás
+  // no hay panel que ver.
+  let grupos = (await gruposDondeEsAdmin(conn, msg)).filter((g) => tiendaActiva(g.jid));
 
   // Si no se pudieron listar, al menos los que ya tienen tienda
   if (!grupos.length) {
-    const conTienda = gruposConTienda().filter((g) => g.endsWith("@g.us"));
+    const conTienda = gruposConTienda().filter((g) => g.endsWith("@g.us") && tiendaActiva(g));
     grupos = [];
     for (const g of conTienda) grupos.push({ jid: g, nombre: await nombreGrupo(conn, g) });
   }
 
   if (!grupos.length) {
+    const pref = (Array.isArray(global.prefixes) && global.prefixes[0]) || ".";
     return responder(
       conn,
       msg,
-      "📊 *TOTAL VENTAS*\n\nNo eres administrador de ningún grupo donde esté el bot."
+      `📊 *TOTAL VENTAS*\n\nNo tienes ningún grupo con la tienda encendida.\n\n` +
+        `Entra a tu grupo y enciéndela con *${pref}sistienda on*.`
     );
   }
 
@@ -309,6 +328,7 @@ const handler = async (msg, { conn }) => {
     if (!permitido) {
       return responder(conn, msg, "🚫 Solo administradores u owners pueden ver el panel de ventas.");
     }
+    if (!tiendaActiva(chatId)) return avisarApagada(conn, msg);
     return abrirPanel(conn, msg, chatId);
   }
 

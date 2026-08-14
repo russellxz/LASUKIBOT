@@ -24,6 +24,7 @@ import {
   fecha
 } from "../../facturacion-core.js";
 import { generarFacturaImagen, textoFactura } from "../../factura-imagen.js";
+import { tiendaActiva } from "../../tienda.js";
 import {
   registrarListenerVentas,
   getProducto,
@@ -226,6 +227,11 @@ async function avisarImpago(conn, grupo, factura, venta, cuenta) {
 // ------------------------------------------------------------
 async function revisar(conn) {
   for (const grupo of gruposConTienda()) {
+    // Con la tienda apagada el grupo queda en pausa: ni se generan facturas ni
+    // se cancela nada por impago. No se borra nada, todo sigue ahí para cuando
+    // la vuelvan a encender con .sistienda on.
+    if (!tiendaActiva(grupo)) continue;
+
     // 1) Primero los que ya se pasaron de fecha sin pagar: se cancelan.
     //    Mientras una factura siga pendiente NO se le genera otra, así que
     //    nunca se le acumulan cobros a un cliente que no ha pagado.
