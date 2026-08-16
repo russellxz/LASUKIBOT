@@ -98,5 +98,5 @@ const handler = async (msg, { conn }) => {
   }
 };
 
-handler.command = ["abrirgrupo"];
+handler.command = ["abrirgrupo", "open"];
 export default handler;
