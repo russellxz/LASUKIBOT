@@ -97,5 +97,5 @@ const handler = async (msg, { conn }) => {
   }
 };
 
-handler.command = ["cerrargrupo"];
+handler.command = ["cerrargrupo", "close"];
 export default handler;
