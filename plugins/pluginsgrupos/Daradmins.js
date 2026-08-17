@@ -1,9 +1,11 @@
+// plugins/daradmins.js
 import fs from 'fs';
 import path from 'path';
-import { isAdminInGroup } from '../../libs/adminCheck.js';
 
+// ✅ Patrón seguro para extraer solo números
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
 
+/** Verifica admin por NÚMERO usando la lógica robusta (LID y no-LID) */
 async function isAdminByNumber(conn, chatId, number) {
   try {
     const meta = await conn.groupMetadata(chatId);
@@ -18,9 +20,11 @@ async function isAdminByNumber(conn, chatId, number) {
       let pid  = String(p.id  || "");
       let pjid = String(p.jid || "");
 
+      // 1) Extracción directa de @s.whatsapp.net
       if (pid.endsWith("@s.whatsapp.net")) adminNums.add(pid.split(":")[0].replace(/[^0-9]/g, ""));
       if (pjid.endsWith("@s.whatsapp.net")) adminNums.add(pjid.split(":")[0].replace(/[^0-9]/g, ""));
 
+      // 2) Resolución a través del lidMap
       if (pid.endsWith("@lid") && global.lidMap instanceof Map) {
         let resolved = global.lidMap.get(pid);
         if (resolved && resolved.endsWith("@s.whatsapp.net")) adminNums.add(resolved.split(":")[0].replace(/[^0-9]/g, ""));
@@ -30,6 +34,7 @@ async function isAdminByNumber(conn, chatId, number) {
         if (resolved2 && resolved2.endsWith("@s.whatsapp.net")) adminNums.add(resolved2.split(":")[0].replace(/[^0-9]/g, ""));
       }
 
+      // 3) Fallback usando conn.lidParser (si existe)
       if (typeof conn.lidParser === "function") {
         let normed = conn.lidParser([p]);
         if (normed && normed[0]) {
@@ -40,11 +45,12 @@ async function isAdminByNumber(conn, chatId, number) {
     }
     return adminNums.has(number);
   } catch (e) {
-    console.error("[quitaradmins] Error reading admins:", e);
+    console.error("[daradmins] Error reading admins:", e);
     return false;
   }
 }
 
+/** Convierte una lista de JIDs (posible @lid) a JIDs reales @s.whatsapp.net */
 async function mapJidsToReal(conn, chatId, jids = []) {
   const out = [];
   try {
@@ -56,6 +62,7 @@ async function mapJidsToReal(conn, chatId, jids = []) {
       if (jid.endsWith("@s.whatsapp.net")) { out.push(jid); continue; }
       
       if (jid.endsWith("@lid")) {
+        // Resolver LID a través de metadata o lidMap
         let resolved = null;
         const pInfo = raw.find(p => p.id === jid);
         
@@ -69,18 +76,21 @@ async function mapJidsToReal(conn, chatId, jids = []) {
         if (resolved) { out.push(resolved); continue; }
       }
       
+      // si no se pudo resolver, empuja tal cual (último recurso)
       out.push(jid);
     }
   } catch {
+    // si falla metadata, devolver lo que tengamos
     return jids;
   }
-  return Array.from(new Set(out));
+  return Array.from(new Set(out)); // dedup
 }
 
 const handler = async (msg, { conn }) => {
   const chatId   = msg.key.remoteJid;
   const isGroup  = chatId.endsWith("@g.us");
   
+  // ✅ Obtener senderNo de forma robusta
   const senderId = msg.realJid || msg.key.participant || msg.key.remoteJid;
   const senderNo = String(msg.realNumber || DIGITS(senderId.split(":")[0]));
   
@@ -91,8 +101,10 @@ const handler = async (msg, { conn }) => {
     return;
   }
 
+  // Permisos: admin (LID-aware robusto)
   const isAdmin = await isAdminByNumber(conn, chatId, senderNo);
 
+  // Owners desde owner.json (fallback a global.owner) + validación robusta
   const ownerPath = path.resolve("owner.json");
   const owners = fs.existsSync(ownerPath)
     ? JSON.parse(fs.readFileSync(ownerPath, "utf-8"))
@@ -110,84 +122,69 @@ const handler = async (msg, { conn }) => {
     return;
   }
 
+  // Objetivos: menciones o respuesta
   const ctx = msg.message?.extendedTextMessage?.contextInfo;
   const mentioned = Array.isArray(ctx?.mentionedJid) ? ctx.mentionedJid : [];
   const replied   = ctx?.participant ? [ctx.participant] : [];
-  let targets     = Array.from(new Set([...mentioned, ...replied]));
+  let targets     = [...mentioned, ...replied];
 
   if (!targets.length) {
     await conn.sendMessage(chatId, {
-      text: "📌 *Debes mencionar o citar al usuario que quieres quitar como administrador.*"
+      text: "📌 *Debes mencionar o citar al usuario que quieres volver administrador.*"
     }, { quoted: msg });
     return;
   }
 
-  let meta = {};
-  try { meta = await conn.groupMetadata(chatId); } catch {}
-  
-  const creatorNum = meta?.owner ? DIGITS(meta.owner) : null;
-  const botNum = conn.user?.id ? DIGITS(conn.user.id.split(":")[0]) : null;
+  // Resolver objetivos a JIDs reales (LID → real)
+  const realTargets = await mapJidsToReal(conn, chatId, targets);
 
-  const toDemote = [];
-  const protectedOnes = [];
+  // Separar "ya son admin"
+  const toPromote = [];
+  const already   = [];
 
-  for (const jid of targets) {
+  for (const jid of realTargets) {
     const d = DIGITS(jid);
+    const targetIsAdmin = await isAdminByNumber(conn, chatId, d);
     
-    let isProtected = false;
-    if (d === botNum) isProtected = true;
-    if (creatorNum && d === creatorNum) isProtected = true;
-    if (Array.isArray(owners) && owners.some(e => String(Array.isArray(e) ? e[0] : e).replace(/[^0-9]/g, "") === d)) {
-      isProtected = true;
-    }
-
-    if (isProtected) { 
-      protectedOnes.push(jid); 
-      continue; 
-    }
-
-    toDemote.push(jid);
-  }
-
-  let ok = [];
-  let notAdmin = [];
-  let fail = [];
-
-  for (const jid of toDemote) {
-    const wasAdmin = await isAdminInGroup(conn, chatId, jid);
-
-    const [realJid] = await mapJidsToReal(conn, chatId, [jid]);
-    const apiTarget = realJid || jid;
-
-    try {
-      await conn.groupParticipantsUpdate(chatId, [apiTarget], "demote");
-    } catch (e) {
-      console.error("❌ Error al quitar admin:", e);
-    }
-
-    const stillAdmin = await isAdminInGroup(conn, chatId, jid);
-
-    if (stillAdmin) {
-      fail.push(jid);
-    } else if (!wasAdmin) {
-      notAdmin.push(jid);
+    if (targetIsAdmin) {
+      already.push(jid);
     } else {
-      ok.push(jid);
+      toPromote.push(jid);
     }
   }
 
+  // Promover
+  let ok = [];
+  let fail = [];
+  if (toPromote.length) {
+    try {
+      // Baileys usa el id original del grupo, por lo que podríamos necesitar enviar el LID si el grupo lo requiere, 
+      // pero groupParticipantsUpdate suele manejar bien el @s.whatsapp.net. 
+      // Si falla, en el array "toPromote" están listos los realTargets.
+      await conn.groupParticipantsUpdate(chatId, toPromote, "promote");
+      ok = toPromote;
+    } catch (e) {
+      console.error("❌ Error al dar admin:", e);
+      fail = toPromote;
+    }
+  }
+
+  // Mensaje de resultado
   const tag = (jid) => `@${DIGITS(jid)}`;
   const lines = [];
-  if (ok.length)            lines.push(`✅ *Se quitó admin a:* ${ok.map(tag).join(", ")}`);
-  if (notAdmin.length)      lines.push(`ℹ️ *No eran admin:* ${notAdmin.map(tag).join(", ")}`);
-  if (protectedOnes.length) lines.push(`🛡️ *Protegidos (no se quita):* ${protectedOnes.map(tag).join(", ")}`);
-  if (fail.length)          lines.push(`❌ *No se pudo quitar admin a:* ${fail.map(tag).join(", ")}`);
+  if (ok.length)      lines.push(`✅ *Se otorgó admin a:* ${ok.map(tag).join(", ")}`);
+  if (already.length) lines.push(`ℹ️ *Ya eran admin:* ${already.map(tag).join(", ")}`);
+  if (fail.length)    lines.push(`❌ *No se pudo otorgar admin a:* ${fail.map(tag).join(", ")}`);
 
   await conn.sendMessage(chatId, {
     text: lines.join("\n"),
-    mentions: [...ok, ...notAdmin, ...protectedOnes, ...fail]
+    mentions: [...ok, ...already, ...fail]
   }, { quoted: msg });
+
+  await conn.sendMessage(chatId, { react: { text: ok.length ? "✅" : "⚠️", key: msg.key } })
+    .catch(() => {});
 };
 
-handler.command = ["quitaradmins", "demote"];
+// ✅ Añadido el alias "promote"
+handler.command = ["daradmins", "promote"];
 export default handler;
