@@ -13,7 +13,7 @@ import axios from "axios";
 import FormData from "form-data";
 
 const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
-const API_KEY = process.env.API_KEY || "Russellxz";
+const API_KEY = process.env.API_KEY;
 const CDN = process.env.CDN_UPLOAD || "https://cdn.russellxz.click/upload.php";
 
 const NAVEGADOR =
