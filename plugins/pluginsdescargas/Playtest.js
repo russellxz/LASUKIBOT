@@ -13,7 +13,7 @@ import { pipeline } from 'stream';
 const streamPipe = promisify(pipeline);
 
 // ==== CONFIG DE TU API ====
-const API_BASE = process.env.API_BASE || "https://api-sky.ultraplus.click";
+const API_BASE = process.env.API_BASE || "https://api.orbitxspace.com";
 const API_KEY  = process.env.API_KEY  || "Russellxz"; // <-- tu API Key
 
 // Almacena tareas pendientes por previewMessageId

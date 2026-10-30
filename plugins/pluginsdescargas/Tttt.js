@@ -4,7 +4,7 @@
 import { canal } from "../../disenos.js";
 import axios from 'axios';
 
-const ENDPOINT = "https://api-sky.ultraplus.click/tiktok";
+const ENDPOINT = "https://api.orbitxspace.com/tiktok";
 const API_KEY = "Russellxz";
 const TIMEOUT = 25000;
 

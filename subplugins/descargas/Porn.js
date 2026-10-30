@@ -11,7 +11,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 
-const API_BASE = "https://api-sky.ultraplus.click";
+const API_BASE = "https://api.orbitxspace.com";
 const API_KEY = "Russellxz";
 const ENDPOINT = "/phfans";
 

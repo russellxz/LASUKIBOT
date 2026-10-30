@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 
 // === Config API ===
-const API_BASE = "https://api-sky.ultraplus.click";
+const API_BASE = "https://api.orbitxspace.com";
 const API_KEY  = "Russellxz";
 const MAX_MB = 200;
 

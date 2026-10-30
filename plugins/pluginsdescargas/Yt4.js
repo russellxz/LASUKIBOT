@@ -10,7 +10,7 @@ import { pipeline } from 'stream';
 const streamPipe = promisify(pipeline);
 
 // ==== CONFIG API ====
-const API_BASE = "https://api-sky.ultraplus.click"; // Tu dominio
+const API_BASE = "https://api.orbitxspace.com"; // Tu dominio
 const API_KEY  = "Russellxz"; // Tu API Key real
 
 // Configuración de Axios para archivos grandes

@@ -21,7 +21,7 @@ import { pipeline } from 'stream';
 const streamPipe = promisify(pipeline);
 
 // ==== API SKY ULTRA PLUS ====
-const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
+const API_BASE = (process.env.API_BASE || "https://api.orbitxspace.com").replace(/\/+$/, "");
 const API_KEY = process.env.API_KEY || "Russellxz";
 const API_RESOLVE = `${API_BASE}/youtube/resolve`;
 

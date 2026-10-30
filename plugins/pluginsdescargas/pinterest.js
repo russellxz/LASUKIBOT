@@ -13,7 +13,7 @@ import { pipeline } from 'stream';
 const streamPipe = promisify(pipeline);
 
 // ==== CONFIG API ====
-const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
+const API_BASE = (process.env.API_BASE || "https://api.orbitxspace.com").replace(/\/+$/, "");
 const API_KEY  = process.env.API_KEY  || "Russellxz";
 
 // límites (WhatsApp suele limitar, pero aquí controlas tu lado)
