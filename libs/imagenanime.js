@@ -10,11 +10,10 @@
 "use strict";
 
 import axios from "axios";
-import FormData from "form-data";
+import { subirCdn } from "./cdn.js";
 
-const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
+const API_BASE = (process.env.API_BASE || "https://api.orbitxspace.com").replace(/\/+$/, "");
 const API_KEY = process.env.API_KEY || "Russellxz";
-const CDN = process.env.CDN_UPLOAD || "https://cdn.russellxz.click/upload.php";
 
 const NAVEGADOR =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -100,26 +99,7 @@ export async function bajarImagen(url) {
 
 /** Sube el buffer al CDN y devuelve la URL. */
 export async function subirAlCdn(buffer, nombre = "imagen.jpg") {
-  const form = new FormData();
-  form.append("file", buffer, { filename: nombre });
-
-  const r = await axios.post(CDN, form, {
-    headers: form.getHeaders(),
-    timeout: 120000,
-    maxContentLength: Infinity,
-    maxBodyLength: Infinity
-  });
-
-  const url =
-    r.data?.url || r.data?.file?.url || r.data?.data?.url || r.data?.result?.url ||
-    (typeof r.data === "string" && /^https?:\/\/\S+$/.test(r.data.trim()) ? r.data.trim() : null);
-
-  if (!url) {
-    const visto = typeof r.data === "string" ? r.data.slice(0, 150) : JSON.stringify(r.data || {}).slice(0, 150);
-    throw new Error(`el CDN no devolvió URL. Contestó: ${visto}`);
-  }
-
-  return url;
+  return subirCdn(buffer, { filename: nombre, timeout: 120000 });
 }
 
 /**

@@ -4,8 +4,8 @@ const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
 // plugins/hd.js
 import fs from 'fs';
 import path from 'path';
-import FormData from 'form-data';
 import axios from 'axios';
+import { subirCdn } from '../../libs/cdn.js';
 
 // Desencapsula viewOnce/ephemeral
 function unwrapMessage(m) {
@@ -70,25 +70,7 @@ const handler = async (msg, { conn, command, wa }) => {
     await new Promise((r) => ws.end(r));
 
     // 2) Subir al CDN
-    const form = new FormData();
-    form.append("file", fs.createReadStream(tmpFile));
-    const up = await axios.post("https://cdn.russellxz.click/upload.php", form, {
-      headers: form.getHeaders(),
-      timeout: 30000,
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      validateStatus: s => s >= 200 && s < 500
-    });
-
-    const imageUrl =
-      up?.data?.url ||
-      up?.data?.data?.url ||
-      up?.data?.result?.url ||
-      null;
-
-    if (!imageUrl) {
-      throw new Error("No se obtuvo URL del CDN (upload).");
-    }
+    const imageUrl = await subirCdn(tmpFile);
 
     // 3) Llamar a Remini (neoxr)
     const API_KEY    = "russellxz"; // tu key

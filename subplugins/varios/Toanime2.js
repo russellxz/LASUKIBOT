@@ -1,6 +1,6 @@
 import axios from 'axios';
-import FormData from 'form-data';
 import { downloadContentFromMessage } from '@whiskeysockets/baileys';
+import { subirCdn } from '../../libs/cdn.js';
 
 const handler = async (msg, { conn }) => {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -23,18 +23,8 @@ const handler = async (msg, { conn }) => {
     let buffer = Buffer.alloc(0);
     for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
 
-    // Subir a russell.click
-    const form = new FormData();
-    form.append("file", buffer, { filename: "anime.jpg" });
-
-    const uploadRes = await axios.post("https://cdn.russellxz.click/upload.php", form, {
-      headers: form.getHeaders()
-    });
-
-    const imageUrl = uploadRes.data?.url;
-    if (!imageUrl) {
-      throw new Error("No se pudo subir la imagen.");
-    }
+    // Subir al CDN de ORBITX SPACE
+    const imageUrl = await subirCdn(buffer, { filename: "anime.jpg", contentType: "image/jpeg" });
 
     // Enviar a API de neoxr
     const api = `https://api.neoxr.eu/api/toanime?image=${encodeURIComponent(imageUrl)}&apikey=russellxz`;

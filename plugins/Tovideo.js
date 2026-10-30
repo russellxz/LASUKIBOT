@@ -7,13 +7,12 @@ const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import FormData from 'form-data';
 import { spawn } from 'child_process';
 import { promisify } from 'util';
 import { pipeline } from 'stream';
+import { subirCdn } from '../libs/cdn.js';
 const streamPipeline = promisify(pipeline);
 
-const CDN_ENDPOINT = "https://cdn.russellxz.click";
 const NEOXR_URL    = "https://api.neoxr.eu/api/webp2mp4";
 const NEOXR_KEY    = "russellxz";
 
@@ -122,12 +121,9 @@ const handler = async (msg, { conn, command, wa }) => {
       await ffmpegWebpToMp4(input, output, animated);
     } catch (eLocal) {
       // 3) Fallback: subir al CDN y convertir via API
-      const form = new FormData();
-      form.append("file", fs.createReadStream(input));
-      const up = await axios.post(CDN_ENDPOINT, form, { headers: form.getHeaders(), timeout: 120000 });
-      if (!up.data?.url) throw new Error("No se pudo subir el sticker al CDN");
+      const stickerUrl = await subirCdn(input, { timeout: 120000 });
 
-      const conv = await axios.get(`${NEOXR_URL}?url=${encodeURIComponent(up.data.url)}&apikey=${NEOXR_KEY}`, { timeout: 120000 });
+      const conv = await axios.get(`${NEOXR_URL}?url=${encodeURIComponent(stickerUrl)}&apikey=${NEOXR_KEY}`, { timeout: 120000 });
       const videoUrl = conv.data?.data?.url;
       if (!videoUrl) throw new Error("No se pudo convertir el sticker a video (API)");
 

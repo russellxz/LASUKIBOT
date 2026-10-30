@@ -5,6 +5,11 @@
 // nombres y las habilidades salen de catalogo-anime.json, así que no hay que
 // escribir nada a mano.
 //
+// Los personajes que ya estaban en la tienda con la foto en el CDN viejo (que
+// ya no funciona) van primero: se les busca foto nueva y se cambia en la
+// tienda y en las copias de los usuarios, sin tocar precio ni habilidades.
+// Cuando no queda ninguno, sigue con personajes nuevos del catálogo.
+//
 //   .addper3           →  cómo va la cosa
 //   .addper3 1         →  agrega uno
 //   .addper3 10        →  agrega diez, con 5 s entre cada uno
@@ -13,6 +18,7 @@
 
 import {
   disponibles, resumen, elegirAlAzar, precioDe, nombreDeTienda,
+  porRenovar, cambiarImagen, animeDe, partirNombre,
   guardarEnRpg, quitarDelRpg, apuntarTanda, sacarUltimaTanda,
   olvidarDelHistorial, normName
 } from "../../libs/catalogo.js";
@@ -105,6 +111,7 @@ Todos vuelven a estar disponibles.`
 
 📚 En el catálogo: *${r.enCatalogo}* de *${r.animes}* animes
 🏪 En la tienda: *${r.enRpg}*
+♻️ Con foto del CDN viejo (van primero): *${r.porRenovar}*
 🆕 Quedan por agregar: *${r.disponibles}*
 
 ✳️ Usa:
@@ -133,9 +140,67 @@ Busca la foto en Pinterest, la sube al CDN y lo mete en la tienda con sus habili
     }, { quoted: msg });
   }
 
+  // ————————————————————— primero, los de la tienda con la foto rota
+  const viejos = porRenovar().slice(0, cuantos);
+  const renovados = [];
+  const puestos = [];
+  const fallados = [];
+
+  if (viejos.length) {
+    await conn.sendMessage(chatId, {
+      text:
+`♻️ *Primero los que ya están en la tienda*
+
+Hay *${r.porRenovar}* con la foto en el CDN viejo, que ya no funciona.
+Ahora renuevo *${viejos.length}*: foto nueva, mismo precio y habilidades.
+⏳ Unos ${Math.max(1, Math.round(viejos.length * (ESPERA_MS + 4000) / 1000 / 60))} minuto(s).`
+    }, { quoted: msg });
+  }
+
+  for (let i = 0; i < viejos.length; i++) {
+    const p = viejos[i];
+    const [, limpio] = partirNombre(p.nombre);
+    const anime = animeDe(p.nombre);
+    const etiqueta = `(${i + 1}/${viejos.length})`;
+
+    try {
+      const { url } = await fotoDePersonaje(limpio, anime);
+      const copias = cambiarImagen(p.imagen, url);
+
+      renovados.push(limpio);
+
+      await conn.sendMessage(chatId, {
+        image: { url },
+        caption:
+`♻️ *Foto renovada* ${etiqueta}
+
+⚔️ *Nombre:* ${bonito(limpio)}${anime ? `\n🎬 *Anime:* ${anime}` : ""}
+💳 *Precio:* ${p.precio} créditos
+☠️ *Habilidad 1:* ${bonito(p.habilidades?.[0]?.nombre || "-")}
+🐉 *Habilidad 2:* ${bonito(p.habilidades?.[1]?.nombre || "-")}
+🔁 Cambiada en ${copias} sitio(s) (tienda y usuarios)`
+      }, { quoted: msg });
+    } catch (e) {
+      console.error(`[addper3] renovar ${limpio}:`, e?.message || e);
+      fallados.push({ nombre: limpio, porque: e?.message || "error desconocido" });
+
+      await conn.sendMessage(chatId, {
+        text: `⚠️ ${etiqueta} *${bonito(limpio)}* no se pudo renovar: ${e?.message || "error"}`
+      }, { quoted: msg });
+    }
+
+    if (i < viejos.length - 1 || cuantos > viejos.length) await dormir(ESPERA_MS);
+  }
+
+  // Lo que sobre de la cantidad pedida va a personajes nuevos del catálogo.
+  const faltan = cuantos - viejos.length;
+  if (faltan < 1) return terminar();
+
   const libres = disponibles();
 
   if (!libres.length) {
+    if (viejos.length) return terminar();
+
     return conn.sendMessage(chatId, {
       text:
 `🎉 *No queda ninguno por agregar*
@@ -145,7 +210,7 @@ Para seguir, añade más a *catalogo-anime.json*.`
     }, { quoted: msg });
   }
 
-  const elegidos = elegirAlAzar(Math.min(cuantos, libres.length), libres);
+  const elegidos = elegirAlAzar(Math.min(faltan, libres.length), libres);
   const minutos = Math.round(elegidos.length * (ESPERA_MS + 4000) / 1000 / 60);
 
   await conn.sendMessage(chatId, {
@@ -157,9 +222,6 @@ Para seguir, añade más a *catalogo-anime.json*.`
 
 _Si alguno no te gusta: *.addper3 reset*_`
   }, { quoted: msg });
-
-  const puestos = [];
-  const fallados = [];
 
   for (let i = 0; i < elegidos.length; i++) {
     const p = elegidos[i];
@@ -212,23 +274,29 @@ _Si alguno no te gusta: *.addper3 reset*_`
     if (i < elegidos.length - 1) await dormir(ESPERA_MS);
   }
 
-  if (puestos.length) apuntarTanda(puestos, numero);
+  return terminar();
 
-  const fin = resumen();
+  // Los renovados no entran en la tanda: un reset los borraría de la tienda.
+  async function terminar() {
+    if (puestos.length) apuntarTanda(puestos, numero);
 
-  await conn.sendMessage(chatId, {
-    text:
+    const fin = resumen();
+    const nuevos = puestos.length;
+
+    await conn.sendMessage(chatId, {
+      text:
 `🎴 *Terminado*
 
-✅ Agregados: *${puestos.length}*
+${renovados.length ? `♻️ Fotos renovadas: *${renovados.length}*\n` : ""}✅ Agregados nuevos: *${nuevos}*
 ${fallados.length ? `⚠️ Fallaron: *${fallados.length}*\n${fallados.slice(0, 10).map((f) => `  • ${bonito(f.nombre)} — ${f.porque}`).join("\n")}\n` : ""}
 🏪 La tienda tiene ahora *${fin.enRpg}* personajes
+♻️ Quedan con foto vieja: *${fin.porRenovar}*
 🆕 Quedan por agregar: *${fin.disponibles}*
+${nuevos ? "\n_Para deshacer los nuevos: *.addper3 reset*_" : ""}`
+    }, { quoted: msg });
 
-_Para deshacer esta tanda: *.addper3 reset*_`
-  }, { quoted: msg });
-
-  await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }).catch(() => {});
+    await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }).catch(() => {});
+  }
 };
 
 handler.command = ["addper3"];

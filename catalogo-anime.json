@@ -1,6 +1,309 @@
 {
   "_formato": "Cada personaje es [nombre, emoji, rango, habilidad1, habilidad2]. El rango marca el precio: S=caro (famoso), A=normal, B=barato. El nombre va con _ en vez de espacios, como en sukirpg.json.",
   "_como_ampliar": "Añade otro bloque a 'animes' con la misma forma. El comando .addper3 lo coge solo, no hay que tocar codigo.",
+  "_alias": {
+    "Broly_Legendario": "Broly",
+    "Goku_Black": "Son_Goku_Black",
+    "Toppo_Dios_Del_Destr": "Toppo",
+    "Sukuna": "Ryomen_Sukuna",
+    "Kohaku": "Kohaku_Ishigami",
+    "Hyoga": "Hyoga_Lanza",
+    "King": "Harlequin_King",
+    "Mare_Bello_Fiora": "Mare_Bello_Fiore",
+    "Pandora’s_Actor": "Pandora_Actor",
+    "Baam": "Bam",
+    "Khun_Aguero_Agnis": "Khun_Aguero",
+    "Androssi_Zahard": "Endorsi_Jahad",
+    "Ha_Yuri_Zahard": "Yuri_Jahad",
+    "Veldora_Tempest": "Veldora",
+    "Hakuro": "Hakurou",
+    "Daggrull": "Dagruel",
+    "Eraser_Head": "Shota_Aizawa",
+    "Iris": "Iris_Hermana",
+    "Yamada_Asaemon_Sagiri": "Sagiri_Yamada",
+    "Aza_Chobe": "Chobei_Aza",
+    "Aza_Toma": "Toma_Aza",
+    "William_Massachusets": "William_Massachusetts",
+    "Doma": "Douma",
+    "Garfield_Tinsel": "Garfiel_Tinsel",
+    "Roswaal_L_Mathers": "Roswaal",
+    "Rem": "Rem_Oni",
+    "Luck_Volta": "Luck_Voltia"
+  },
+  "_anime_de_la_tienda": {
+    "Jiren": "Dragon Ball Z",
+    "Broly_Legendario": "Dragon Ball Z",
+    "Gohan_Beast": "Dragon Ball Z",
+    "Goku_Black": "Dragon Ball Z",
+    "Hit": "Dragon Ball Z",
+    "Toppo_Dios_Del_Destr": "Dragon Ball Z",
+    "Caulifla": "Dragon Ball Z",
+    "Kefla": "Dragon Ball Z",
+    "Satoru_Gojo": "Jujutsu Kaisen",
+    "Sukuna": "Jujutsu Kaisen",
+    "Yuji_Itadori": "Jujutsu Kaisen",
+    "Megumi_Fushiguro": "Jujutsu Kaisen",
+    "Nobara_Kugisaki": "Jujutsu Kaisen",
+    "Yuta_Okkotsu": "Jujutsu Kaisen",
+    "Toji_Fushiguro": "Jujutsu Kaisen",
+    "Kenjaku": "Jujutsu Kaisen",
+    "Choso": "Jujutsu Kaisen",
+    "Mahito": "Jujutsu Kaisen",
+    "Senku_Ishigami": "Dr Stone",
+    "Chrome": "Dr Stone",
+    "Tsukasa_Shishio": "Dr Stone",
+    "Kohaku": "Dr Stone",
+    "Ryusui_Nanami": "Dr Stone",
+    "Gen_Asagiri": "Dr Stone",
+    "Kaseki": "Dr Stone",
+    "Francois": "Dr Stone",
+    "Ukyo_Saionji": "Dr Stone",
+    "Hyoga": "Dr Stone",
+    "Monkey_D_Luffy": "One Piece",
+    "Roronoa_Zoro": "One Piece",
+    "Sanji": "One Piece",
+    "Nami": "One Piece",
+    "Usopp": "One Piece",
+    "Nico_Robin": "One Piece",
+    "Franky": "One Piece",
+    "Brook": "One Piece",
+    "Jinbe": "One Piece",
+    "Meliodas": "Seven Deadly Sins",
+    "Ban": "Seven Deadly Sins",
+    "King": "Seven Deadly Sins",
+    "Diane": "Seven Deadly Sins",
+    "Gowther": "Seven Deadly Sins",
+    "Merlin": "Seven Deadly Sins",
+    "Escanor": "Seven Deadly Sins",
+    "Zeldris": "Seven Deadly Sins",
+    "Melascula": "Seven Deadly Sins",
+    "Galand": "Seven Deadly Sins",
+    "Monspeet": "Seven Deadly Sins",
+    "Derriere": "Seven Deadly Sins",
+    "Fraudrin": "Seven Deadly Sins",
+    "Grayroad": "Seven Deadly Sins",
+    "Drole": "Seven Deadly Sins",
+    "Gloxinia": "Seven Deadly Sins",
+    "Elizabeth_Liones": "Seven Deadly Sins",
+    "Ludociel": "Nanatsu no Taizai",
+    "Mael": "Nanatsu no Taizai",
+    "Hendrickson": "Nanatsu no Taizai",
+    "Dreyfus": "Nanatsu no Taizai",
+    "Gilthunder": "Nanatsu no Taizai",
+    "Howzer": "Nanatsu no Taizai",
+    "Percival": "Seven Deadly Sins",
+    "Lancelot": "Seven Deadly Sins",
+    "Tristan": "Seven Deadly Sins",
+    "Gawain": "Seven Deadly Sins",
+    "Hajime_Nagumo": "Arifureta",
+    "Yue": "Arifureta",
+    "Shea_Haulia": "Arifureta",
+    "Tio_Klarus": "Arifureta",
+    "Kaori_Shurasaka": "Arifureta",
+    "Shizuku_Yaegashi": "Arifureta",
+    "Myu": "Arifureta",
+    "Freid_Bagwa": "Arifureta",
+    "Ainz_Ooal_Gown": "Overlord",
+    "Albedo": "Overlord",
+    "Shalltear_Bloodfallen": "Overlord",
+    "Demiurge": "Overlord",
+    "Cocytus": "Overlord",
+    "Aura_Bella_Fiora": "Overlord",
+    "Mare_Bello_Fiora": "Overlord",
+    "Sebas_Tian": "Overlord",
+    "Pandora’s_Actor": "Overlord",
+    "Narberal_Gamma": "Overlord",
+    "Issei_Hyoudou": "High School DxD",
+    "Rias_Gremory": "High School DxD",
+    "Akeno_Himejima": "High School DxD",
+    "Koneko_Toujou": "High School DxD",
+    "Xenovia_Quarta": "High School DxD",
+    "Irina_Shidou": "High School DxD",
+    "Asia_Argento": "High School DxD",
+    "Sirzechs_Lucifer": "High School DxD",
+    "Azazel": "High School DxD",
+    "Vali_Lucifer": "High School DxD",
+    "Tannin": "High School DxD",
+    "Cao_Cao": "High School DxD",
+    "Arthur_Pendragon": "High School DxD",
+    "Rossweisse": "High School DxD",
+    "Rizevim_Livian_Lucifer": "High School DxD",
+    "Kiba_Yuuto": "High School DxD",
+    "Sairaorg_Baal": "High School DxD",
+    "Katerea_Leviathan": "High School DxD",
+    "Baam": "Tower of God",
+    "Khun_Aguero_Agnis": "Tower of God",
+    "Rak_Wraithraiser": "Tower of God",
+    "Rachel": "Tower of God",
+    "Androssi_Zahard": "Tower of God",
+    "Ha_Yuri_Zahard": "Tower of God",
+    "Evan_Edrok": "Tower of God",
+    "Hwa_Ryun": "Tower of God",
+    "Kallavan": "Tower of God",
+    "Rimuru_Tempest": "Tensei Shitara Slime",
+    "Veldora_Tempest": "Tensei Shitara Slime",
+    "Benimaru": "Tensei Shitara Slime",
+    "Shion": "Tensei Shitara Slime",
+    "Shuna": "Tensei Shitara Slime",
+    "Diablo": "Tensei Shitara Slime",
+    "Milim_Nava": "Tensei Shitara Slime",
+    "Ranga": "Tensei Shitara Slime",
+    "Hakuro": "Tensei Shitara Slime",
+    "Souei": "Tensei Shitara Slime",
+    "Guy_Crimson": "Tensei Shitara Slime",
+    "Leon_Cromwell": "Tensei Shitara Slime",
+    "Daggrull": "Tensei Shitara Slime",
+    "Luminous_Valentine": "Tensei Shitara Slime",
+    "Zegion": "Tensei Shitara Slime",
+    "Hinata_Sakaguchi": "Tensei Shitara Slime",
+    "Testarossa": "Tensei Shitara Slime",
+    "Ultima": "Tensei Shitara Slime",
+    "Carrera": "Tensei Shitara Slime",
+    "Kafka_Hibino": "Kaiju No 8",
+    "Mina_Ashiro": "Kaiju No 8",
+    "Reno_Ichikawa": "Kaiju No 8",
+    "Kaiju_No_9": "Kaiju No 8",
+    "Soshiro_Hoshina": "Kaiju No 8",
+    "Kaiju_No_10": "Kaiju No 8",
+    "Isao_Shinomiya": "Kaiju No 8",
+    "Chisato_Nishikigi": "Lycoris Recoil",
+    "Takina_Inoue": "Lycoris Recoil",
+    "Mizuki_Nakahara": "Lycoris Recoil",
+    "Kurumi": "Lycoris Recoil",
+    "Majima": "Lycoris Recoil",
+    "Mika": "Lycoris Recoil",
+    "Izuku_Midoriya": "My Hero Academia",
+    "Katsuki_Bakugo": "My Hero Academia",
+    "Shoto_Todoroki": "My Hero Academia",
+    "All_Might": "My Hero Academia",
+    "Tomura_Shigaraki": "My Hero Academia",
+    "Dabi": "My Hero Academia",
+    "Endeavor": "My Hero Academia",
+    "Hawks": "My Hero Academia",
+    "Eraser_Head": "My Hero Academia",
+    "Mirio_Togata": "My Hero Academia",
+    "Naruto_Uzumaki": "Naruto Shippuden",
+    "Sasuke_Uchiha": "Naruto Shippuden",
+    "Kakashi_Hatake": "Naruto Shippuden",
+    "Itachi_Uchiha": "Naruto Shippuden",
+    "Minato_Namikaze": "Naruto Shippuden",
+    "Madara_Uchiha": "Naruto Shippuden",
+    "Obito_Uchiha": "Naruto Shippuden",
+    "Jiraiya": "Naruto Shippuden",
+    "Orochimaru": "Naruto Shippuden",
+    "Pain": "Naruto Shippuden",
+    "Mash_Burnedead": "Mashle",
+    "Lance_Crown": "Mashle",
+    "Dot_Barrett": "Mashle",
+    "Finn_Ames": "Mashle",
+    "Rayne_Ames": "Mashle",
+    "Cell_War": "Mashle",
+    "Orter_Madl": "Mashle",
+    "Innocent_Zero": "Mashle",
+    "Margarette_Macaron": "Mashle",
+    "Agent_Six": "Combatants Will Be Dispatched",
+    "Alice_Kisaragi": "Combatants Will Be Dispatched",
+    "Takemichi_Hanagaki": "Tokyo Revengers",
+    "Mikey_Sano": "Tokyo Revengers",
+    "Draken_Ryuguji": "Tokyo Revengers",
+    "Baji_Keisuke": "Tokyo Revengers",
+    "Chifuyu_Matsuno": "Tokyo Revengers",
+    "Kazutora_Hanemiya": "Tokyo Revengers",
+    "Hanma_Shuji": "Tokyo Revengers",
+    "Inui_Seishu": "Tokyo Revengers",
+    "Koko_Hajime": "Tokyo Revengers",
+    "Shinra_Kusakabe": "Fire Force",
+    "Arthur_Boyle": "Fire Force",
+    "Iris": "Fire Force",
+    "Maki_Oze": "Fire Force",
+    "Takehisa_Hinawa": "Fire Force",
+    "Benimaru_Shinmon": "Fire Force",
+    "Joker": "Fire Force",
+    "Tamaki_Kotatsu": "Fire Force",
+    "Viktor_Licht": "Fire Force",
+    "Sho_Kusakabe": "Fire Force",
+    "Gabimaru": "Hell s Paradise",
+    "Yamada_Asaemon_Sagiri": "Hell s Paradise",
+    "Aza_Chobe": "Hell s Paradise",
+    "Aza_Toma": "Hell s Paradise",
+    "Tensen_Ran": "Hell s Paradise",
+    "Tensen_Tao_Fa": "Hell s Paradise",
+    "Shion_Yamada_Asaemon": "Hell s Paradise",
+    "Nurugai": "Hell s Paradise",
+    "Yuzuriha": "Hell s Paradise",
+    "Mu_Dan": "Hell s Paradise",
+    "Will_Serfort": "Wistoria Wand and Sword",
+    "Elfaria_Alvis_Serfort": "Wistoria Wand and Sword",
+    "Colette_Loire": "Wistoria Wand and Sword",
+    "Sion_Ulster": "Wistoria Wand and Sword",
+    "Julius_Reinberg": "Wistoria Wand and Sword",
+    "Wignall_Lindor": "Wistoria Wand and Sword",
+    "Lihanna_Owenzaus": "Wistoria Wand and Sword",
+    "Rosty_Nowman": "Wistoria Wand and Sword",
+    "Workner_Norgram": "Wistoria Wand and Sword",
+    "Shiroe": "Log Horizon",
+    "Naotsugu": "Log Horizon",
+    "Nyanta": "Log Horizon",
+    "Regan": "Log Horizon",
+    "Krusty": "Log Horizon",
+    "Marielle": "Log Horizon",
+    "Isaac": "Log Horizon",
+    "William_Massachusets": "Log Horizon",
+    "Henrietta": "Log Horizon",
+    "Kazuma_Satou": "Konosuba",
+    "Aqua": "Konosuba",
+    "Megumin": "Konosuba",
+    "Darkness": "Konosuba",
+    "Yunyun": "Konosuba",
+    "Wiz": "Konosuba",
+    "Vanir": "Konosuba",
+    "Eris": "Konosuba",
+    "Sylphina": "Konosuba",
+    "Tanjiro_Kamado": "Demon Slayer",
+    "Zenitsu_Agatsuma": "Demon Slayer",
+    "Inosuke_Hashibira": "Demon Slayer",
+    "Nezuko_Kamado": "Demon Slayer",
+    "Muzan_Kibutsuji": "Demon Slayer",
+    "Giyu_Tomioka": "Demon Slayer",
+    "Kyojuro_Rengoku": "Demon Slayer",
+    "Sanemi_Shinazugawa": "Demon Slayer",
+    "Gyomei_Himejima": "Demon Slayer",
+    "Mitsuri_Kanroji": "Demon Slayer",
+    "Shinobu_Kocho": "Demon Slayer",
+    "Tengen_Uzui": "Demon Slayer",
+    "Obanai_Iguro": "Demon Slayer",
+    "Muichiro_Tokito": "Demon Slayer",
+    "Akaza": "Demon Slayer",
+    "Doma": "Demon Slayer",
+    "Kokushibo": "Demon Slayer",
+    "Gyutaro": "Demon Slayer",
+    "Daki": "Demon Slayer",
+    "Hantengu": "Demon Slayer",
+    "Subaru_Natsuki": "Re Zero",
+    "Emilia": "Re Zero",
+    "Rem": "Re Zero",
+    "Ram": "Re Zero",
+    "Beatrice": "Re Zero",
+    "Garfield_Tinsel": "Re Zero",
+    "Roswaal_L_Mathers": "Re Zero",
+    "Echidna": "Re Zero",
+    "Asta": "Black Clover",
+    "Yuno": "Black Clover",
+    "Noelle_Silva": "Black Clover",
+    "Yami_Sukehiro": "Black Clover",
+    "Julius_Novachrono": "Black Clover",
+    "Mereoleona_Vermillion": "Black Clover",
+    "Nacht_Faust": "Black Clover",
+    "Fuegoleon_Vermillion": "Black Clover",
+    "Zagred": "Black Clover",
+    "Luck_Volta": "Black Clover",
+    "Vanessa_Enoteca": "Black Clover",
+    "Finral_Roulacase": "Black Clover",
+    "Charlotte_Roselei": "Black Clover",
+    "Rill_Boismortier": "Black Clover",
+    "Liebe": "Black Clover"
+  },
+  "_tienda": "'_anime_de_la_tienda' dice de qué anime es cada personaje que ya estaba en sukirpg.json, para que .addper3 le busque la foto bien. '_alias' son personajes de la tienda que en el catálogo se llaman de otra forma: si uno está en la tienda, el otro no se vuelve a agregar.",
   "animes": {
     "Dragon Ball Z": [
       [
@@ -7893,6 +8196,13 @@
         "S",
         "🌲Magia_del_Árbol_Demoníaco",
         "🌀Manipulación_Temporal"
+      ],
+      [
+        "Liebe",
+        "👹",
+        "A",
+        "🖤Demonio_de_Antimagia",
+        "🔥Modo_Unión"
       ]
     ],
     "Mob Psycho 100": [
@@ -14178,6 +14488,90 @@
         "A",
         "🌿Lanza_Chastiefol",
         "🧚Rey_de_las_Hadas"
+      ],
+      [
+        "Melascula",
+        "🔥",
+        "B",
+        "🐍Mandamiento_de_la_Fe",
+        "🩸Control_de_Almas"
+      ],
+      [
+        "Galand",
+        "🔥",
+        "B",
+        "🗡️Mandamiento_de_la_Verdad",
+        "🔥Explosión_Demoníaca"
+      ],
+      [
+        "Monspeet",
+        "🔥",
+        "B",
+        "🔥Mandamiento_de_la_Reticencia",
+        "🌋Llamas_Infernales"
+      ],
+      [
+        "Derriere",
+        "🔥",
+        "B",
+        "👊Mandamiento_de_la_Pureza",
+        "🦵Combo_Star"
+      ],
+      [
+        "Fraudrin",
+        "🔥",
+        "B",
+        "🛡️Mandamiento_del_Altruismo",
+        "🔄Control_de_Cuerpos"
+      ],
+      [
+        "Grayroad",
+        "🔥",
+        "B",
+        "👤Mandamiento_de_la_Paciencia",
+        "🕰️Aceleración_de_Tiempo"
+      ],
+      [
+        "Drole",
+        "🔥",
+        "B",
+        "⚒️Mandamiento_de_la_Respiración",
+        "🏔️Control_de_Tierra"
+      ],
+      [
+        "Gloxinia",
+        "🔥",
+        "B",
+        "🍃Mandamiento_de_la_Reposo",
+        "🌀Manipulación_Espiritual"
+      ],
+      [
+        "Percival",
+        "🐉",
+        "A",
+        "⚔️Caballero_del_Apocalipsis",
+        "🌀Magia_Milagrosa"
+      ],
+      [
+        "Lancelot",
+        "🦊",
+        "B",
+        "🏹Heredero_de_Ban",
+        "🌀Cambio_de_Forma"
+      ],
+      [
+        "Tristan",
+        "✨️",
+        "B",
+        "🔥Hijo_de_Meliodas",
+        "🩸Híbrido_Demonio_Divino"
+      ],
+      [
+        "Gawain",
+        "🦁",
+        "B",
+        "☀️Poder_del_Sol",
+        "💥Fuerza_Colosal"
       ]
     ],
     "Fate Stay Night": [
@@ -14765,6 +15159,13 @@
         "B",
         "🍖Apetito_Insaciable",
         "😈Instinto_Oscuro"
+      ],
+      [
+        "Sylphina",
+        "🔥",
+        "B",
+        "🎶Dulce_Bardo",
+        "🌬️Melodía_Mágica"
       ]
     ],
     "Overlord": [
@@ -15189,6 +15590,13 @@
         "S",
         "☀️Autoridad_Suprema",
         "👑Rey_de_los_Ángeles"
+      ],
+      [
+        "Leon_Cromwell",
+        "🔥",
+        "A",
+        "🏰Rey_Demonio_Santo",
+        "🔥Manipulación_Flamígera"
       ]
     ],
     "Shield Hero": [
@@ -15582,6 +15990,20 @@
         "A",
         "🪓Hacha_de_Guerra",
         "🗣️Liderazgo_Feroz"
+      ],
+      [
+        "Marielle",
+        "🌟",
+        "A",
+        "✨Bendición_Sagrada",
+        "🌺Carisma_Inspirador"
+      ],
+      [
+        "Henrietta",
+        "🎭",
+        "A",
+        "🎶Encantadora_Melódica",
+        "🌀Magia_de_Soporte"
       ]
     ],
     "Slam Dunk": [
@@ -19030,6 +19452,13 @@
         "A",
         "🌸Llama_Sonriente",
         "🎭Ilusión_Ardiente"
+      ],
+      [
+        "Viktor_Licht",
+        "🔥",
+        "A",
+        "🧠Genio_Científico",
+        "🕵️Investigación_Prohibida"
       ]
     ],
     "Dr Stone": [
@@ -19130,6 +19559,13 @@
         "A",
         "🔱Lanza_Fluida",
         "🎭Máscara_Serena"
+      ],
+      [
+        "Francois",
+        "🍽️",
+        "B",
+        "🏆Chef_Exquisito",
+        "🎩Mayordomo_Preciso"
       ]
     ],
     "Kingdom": [
@@ -19841,6 +20277,20 @@
         "S",
         "🗡️Aguja_Suprema",
         "🐉Dragón_de_Shinsu"
+      ],
+      [
+        "Hwa_Ryun",
+        "🏴‍☠️",
+        "B",
+        "🔥Oráculo_Sagrado",
+        "🌀Visión_Profética"
+      ],
+      [
+        "Kallavan",
+        "🔥",
+        "B",
+        "💪Comandante_Élite",
+        "🛡️Invulnerabilidad"
       ]
     ],
     "God of Highschool": [
@@ -19966,6 +20416,13 @@
         "A",
         "🛡️Defensa_Absoluta",
         "💪Escudo_de_Combate"
+      ],
+      [
+        "Kaiju_No_10",
+        "💀",
+        "A",
+        "🔥Poder_Devastador",
+        "🌪️Velocidad_Bestial"
       ]
     ],
     "Sakamoto Days": [
@@ -20140,6 +20597,41 @@
         "A",
         "🐲Tao_Bestial",
         "💪Fuerza_Tensen"
+      ],
+      [
+        "Tensen_Ran",
+        "🏯",
+        "A",
+        "🔥Ilusión_Mística",
+        "🌸Inmortalidad_Divina"
+      ],
+      [
+        "Tensen_Tao_Fa",
+        "💀",
+        "A",
+        "🔥Transformación_Perfecta",
+        "🌑Poder_Divino"
+      ],
+      [
+        "Shion_Yamada_Asaemon",
+        "⚡",
+        "A",
+        "⚔️Espada_Veloz",
+        "⚡Reflejos_Letales"
+      ],
+      [
+        "Nurugai",
+        "🌀",
+        "A",
+        "🌊Evasión_Impecable",
+        "🏴‍☠️Superviviente_Tenaz"
+      ],
+      [
+        "Mu_Dan",
+        "👹",
+        "A",
+        "🌿Técnica_Floral",
+        "💀Veneno_Devastador"
       ]
     ],
     "Record of Ragnarok": [
@@ -21512,6 +22004,433 @@
         "B",
         "✏️Dibujo_Preciso",
         "💗Promesa"
+      ]
+    ],
+    "Arifureta": [
+      [
+        "Hajime_Nagumo",
+        "⚔️",
+        "B",
+        "🔥Alquimista_Demoníaco",
+        "🏹Dominación_Total"
+      ],
+      [
+        "Shea_Haulia",
+        "🐲",
+        "A",
+        "💪Fuerza_Descomunal",
+        "🌀Precognición"
+      ],
+      [
+        "Tio_Klarus",
+        "🦸",
+        "A",
+        "🔥Dragón_Supremo",
+        "🛡️Resistencia_Absoluta"
+      ],
+      [
+        "Kaori_Shurasaka",
+        "⚔️",
+        "A",
+        "💖Sanación_Divina",
+        "🔥Luz_Sagrada"
+      ],
+      [
+        "Shizuku_Yaegashi",
+        "🔥",
+        "A",
+        "🗡️Espadachina_Élite",
+        "⚡Reflejos_Sobrehumanos"
+      ],
+      [
+        "Myu",
+        "🦊",
+        "A",
+        "🌊Control_del_Agua",
+        "🐟Bendición_Marítima"
+      ],
+      [
+        "Freid_Bagwa",
+        "🏹",
+        "A",
+        "🔥General_Demonio",
+        "🏰Estratega_Infernal"
+      ]
+    ],
+    "High School DxD": [
+      [
+        "Issei_Hyoudou",
+        "😈",
+        "A",
+        "🔥Boosted_Gear",
+        "🏴‍☠️Harem_King"
+      ],
+      [
+        "Rias_Gremory",
+        "👑",
+        "A",
+        "🔥Destrucción_Pura",
+        "❤️Reina_Crimson"
+      ],
+      [
+        "Akeno_Himejima",
+        "🏹",
+        "S",
+        "⚡Magia_Sagrada",
+        "🔥Rayo_Negro"
+      ],
+      [
+        "Koneko_Toujou",
+        "❄️",
+        "A",
+        "🐾Nekoshou_Supremo",
+        "💪Fuerza_Sobrehumana"
+      ],
+      [
+        "Xenovia_Quarta",
+        "🏴‍☠️",
+        "B",
+        "⚔️Durandal",
+        "🔥Aura_Sagrada"
+      ],
+      [
+        "Irina_Shidou",
+        "🎭",
+        "B",
+        "🏹Excalibur_Mimic",
+        "💖Ángel_Caído"
+      ],
+      [
+        "Asia_Argento",
+        "🔥",
+        "B",
+        "✨Sanación_Sagrada",
+        "🕊️Bendición_Divina"
+      ],
+      [
+        "Sirzechs_Lucifer",
+        "⚔️",
+        "B",
+        "🔥Poder_de_Destrucción",
+        "🏰Rey_Demonio"
+      ],
+      [
+        "Azazel",
+        "🏹",
+        "B",
+        "😈Lanza_Longinus",
+        "🔥Sabiduría_Angélica"
+      ],
+      [
+        "Vali_Lucifer",
+        "🐉",
+        "B",
+        "🌀Divine_Dividing",
+        "🔥Modo_Juggernaut"
+      ],
+      [
+        "Tannin",
+        "🏔️",
+        "B",
+        "🔥Dragón_de_Fuego",
+        "🏔️Señor_de_los_Dragones"
+      ],
+      [
+        "Cao_Cao",
+        "👹",
+        "B",
+        "⚔️True_Longinus",
+        "🏴‍☠️Estratega_Supremo"
+      ],
+      [
+        "Rossweisse",
+        "🏹",
+        "B",
+        "⚡Magia_Nórdica",
+        "🔥Barrera_Defensiva"
+      ],
+      [
+        "Rizevim_Livian_Lucifer",
+        "💀",
+        "B",
+        "😈Demonio_Ancestral",
+        "🔥Modo_Destructor"
+      ],
+      [
+        "Kiba_Yuuto",
+        "🏴‍☠️",
+        "B",
+        "⚔️Danza_de_Espadas",
+        "🌪️Filo_Invisible"
+      ],
+      [
+        "Sairaorg_Baal",
+        "🔥",
+        "B",
+        "💪Fuerza_Divina",
+        "🏴‍☠️Golpes_Demoniacos"
+      ],
+      [
+        "Katerea_Leviathan",
+        "🏹",
+        "B",
+        "🔥Hechicería_Suprema",
+        "🌀Magia_Infernal"
+      ]
+    ],
+    "Lycoris Recoil": [
+      [
+        "Chisato_Nishikigi",
+        "🎯",
+        "A",
+        "⚡Reflejos_Sobrehumanos",
+        "🔥Puntería_Perfecta"
+      ],
+      [
+        "Takina_Inoue",
+        "🔥",
+        "A",
+        "🔫Estratega_Fría",
+        "💥Tiradora_Élite"
+      ],
+      [
+        "Mizuki_Nakahara",
+        "🏹",
+        "A",
+        "🍷Maestra_del_Engaño",
+        "🎭Espionaje_Sigiloso"
+      ],
+      [
+        "Kurumi",
+        "🏴‍☠️",
+        "A",
+        "🎮Hacker_Genial",
+        "🖥️Manipulación_Cibernética"
+      ],
+      [
+        "Majima",
+        "🎭",
+        "A",
+        "🔥Caos_Encarnado",
+        "💀Estratega_Anárquico"
+      ],
+      [
+        "Mika",
+        "🏴‍☠️",
+        "A",
+        "🧠Mentor_Estratégico",
+        "⚡Maestro_de_Combate"
+      ]
+    ],
+    "Mashle": [
+      [
+        "Mash_Burnedead",
+        "💪",
+        "A",
+        "🏋️Fuerza_Sobrehumana",
+        "🔥Golpe_Divino"
+      ],
+      [
+        "Lance_Crown",
+        "🔥",
+        "A",
+        "⚡Magia_Gravitatoria",
+        "🌀Lanzas_Flotantes"
+      ],
+      [
+        "Dot_Barrett",
+        "🏹",
+        "A",
+        "🔥Explosión_Mágica",
+        "💀Modo_Berserker"
+      ],
+      [
+        "Finn_Ames",
+        "❄️",
+        "A",
+        "⏳Teletransporte",
+        "⚡Evasión_Perfecta"
+      ],
+      [
+        "Rayne_Ames",
+        "🏆",
+        "A",
+        "⚔️Espada_Mágica",
+        "🔥Dominio_Total"
+      ],
+      [
+        "Cell_War",
+        "👑",
+        "A",
+        "🔥Poder_Absoluto",
+        "⚡Control_de_Rayos"
+      ],
+      [
+        "Orter_Madl",
+        "🏴‍☠️",
+        "A",
+        "⚔️Espadas_Elementales",
+        "🔥Maestro_de_Magia"
+      ],
+      [
+        "Innocent_Zero",
+        "🔥",
+        "A",
+        "🌑Manipulación_Temporal",
+        "🔥Hechicería_Prohibida"
+      ],
+      [
+        "Margarette_Macaron",
+        "👹",
+        "A",
+        "🎵Sinfonía_de_la_Destrucción",
+        "⚡Control_de_Sonido"
+      ]
+    ],
+    "Combatants Will Be Dispatched": [
+      [
+        "Agent_Six",
+        "🏴‍☠️",
+        "A",
+        "🔫Mercenario_Infame",
+        "🎭Estratega_Irreverente"
+      ],
+      [
+        "Alice_Kisaragi",
+        "🤖",
+        "B",
+        "🔥Android_Táctico",
+        "🧠Super_Inteligencia"
+      ]
+    ],
+    "Tokyo Revengers": [
+      [
+        "Takemichi_Hanagaki",
+        "🏍️",
+        "A",
+        "⏳Salto_en_el_Tiempo",
+        "💥Voluntad_Inquebrantable"
+      ],
+      [
+        "Mikey_Sano",
+        "🔥",
+        "A",
+        "⚡Patada_Dragon",
+        "🏍️Líder_Invencible"
+      ],
+      [
+        "Draken_Ryuguji",
+        "🔥",
+        "A",
+        "💪Fuerza_Colosal",
+        "🏴‍☠️Lealtad_Eterna"
+      ],
+      [
+        "Baji_Keisuke",
+        "🔥",
+        "A",
+        "⚔️Espíritu_Fiero",
+        "🏍️Guerrero_Indomable"
+      ],
+      [
+        "Chifuyu_Matsuno",
+        "🔥",
+        "A",
+        "🏴‍☠️Estratega_Fiel",
+        "🏍️Corazón_Firme"
+      ],
+      [
+        "Kazutora_Hanemiya",
+        "🔥",
+        "A",
+        "🎭Instinto_Descontrolado",
+        "💀Caos_Total"
+      ],
+      [
+        "Hanma_Shuji",
+        "🔥",
+        "A",
+        "🏴‍☠️Loco_por_la_Pelea",
+        "💥Resistencia_Extrema"
+      ],
+      [
+        "Inui_Seishu",
+        "🔥",
+        "A",
+        "⚔️Guerrero_Silencioso",
+        "💥Golpe_Directo"
+      ],
+      [
+        "Koko_Hajime",
+        "🔥",
+        "A",
+        "💰Maestro_de_las_Finanzas",
+        "🏴‍☠️Lealtad_Peligrosa"
+      ]
+    ],
+    "Wistoria Wand and Sword": [
+      [
+        "Will_Serfort",
+        "⚔️",
+        "A",
+        "🛡️Espadachín_Sin_Magia",
+        "💪Determinación_Inquebrantable"
+      ],
+      [
+        "Elfaria_Alvis_Serfort",
+        "❄️",
+        "A",
+        "❄️Maga_Prodigio",
+        "🌬️Dominio_del_Hielo"
+      ],
+      [
+        "Colette_Loire",
+        "🌍",
+        "A",
+        "🌱Princesa_de_la_Tierra",
+        "🌿Magia_Terrenal"
+      ],
+      [
+        "Sion_Ulster",
+        "🔥",
+        "A",
+        "🔥Mago_del_Fuego",
+        "🔥Rival_Ardiente"
+      ],
+      [
+        "Julius_Reinberg",
+        "❄️",
+        "A",
+        "❄️Noble_del_Hielo",
+        "❄️Hechizos_Congelant"
+      ],
+      [
+        "Wignall_Lindor",
+        "🍃",
+        "A",
+        "🍃Elfo_Ilusionista",
+        "🍃Magia_de_Viento"
+      ],
+      [
+        "Lihanna_Owenzaus",
+        "⚡",
+        "A",
+        "⚡Caballera_Rayo",
+        "⚡Espadachina_Eléctrica"
+      ],
+      [
+        "Rosty_Nowman",
+        "🧠",
+        "A",
+        "🛠️Inventor_Genio",
+        "🧠Creador_de_Artefactos"
+      ],
+      [
+        "Workner_Norgram",
+        "🎓",
+        "A",
+        "📚Profesor_Estricto",
+        "🌑Magia_Oscura"
       ]
     ]
   }
