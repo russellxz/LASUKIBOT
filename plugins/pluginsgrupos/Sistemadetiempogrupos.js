@@ -1,6 +1,7 @@
 // plugins/checkTiempoGrupos.js
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const OPEN_FILE  = path.resolve("tiempo_grupo.json");   // abrir
 const CLOSE_FILE = path.resolve("tiempogrupo2.json");  // cerrar
@@ -26,13 +27,13 @@ async function applyAction(conn, chatId, action) {
     if (action === "close") {
       await conn.groupSettingUpdate(chatId, "announcement");
       await conn.sendMessage(chatId, {
-        video: { url: "https://cdn.russellxz.click/1f9e8232.mp4" },
+        image: mediaBuffer("grupoCerrado"),
         caption: "🔒 El grupo ha sido cerrado automáticamente."
       });
     } else if (action === "open") {
       await conn.groupSettingUpdate(chatId, "not_announcement");
       await conn.sendMessage(chatId, {
-        video: { url: "https://cdn.russellxz.click/b5635057.mp4" },
+        image: mediaBuffer("grupoAbierto"),
         caption: "🔓 El grupo ha sido abierto automáticamente."
       });
     }

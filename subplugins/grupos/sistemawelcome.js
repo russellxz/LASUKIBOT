@@ -5,6 +5,7 @@
 //   subbots/data/<numero>/welcome.json
 // Estructura: { "<grupo@g.us>": { welcome: 1, despedidas: 1, bienvenida: "...", despedida: "..." } }
 import { createCanvas, loadImage } from 'canvas';
+import { mediaBuffer, mediaPath } from '../../libs/media.js';
 
 // Evita duplicados cuando Baileys dispara native + stub al mismo tiempo
 const RECENT_EVENT_TTL_MS = 8000;
@@ -161,46 +162,50 @@ async function getProfileUrl(conn, userJid, chatId, fallback) {
   return fallback;
 }
 
-async function loadImageSafe(url, fallbackUrl) {
+// Tarjeta de bienvenida/despedida: la imagen local (bienvenida.jpg o
+// despedida.jpg) con la foto de perfil en un círculo arriba a la izquierda.
+// Si la persona no tiene foto o falla canvas, se manda la imagen sola.
+async function sendTarjeta(conn, chatId, fondoClave, perfilURL, caption, mentions) {
+  let image;
   try {
-    return await loadImage(url);
-  } catch {
-    return await loadImage(fallbackUrl);
-  }
-}
-
-async function sendCanvasImage(conn, chatId, perfilURL, fondoUrl, fallbackAvatar, caption, mentions) {
-  try {
-    const avatar = await loadImageSafe(perfilURL, fallbackAvatar);
-    const fondo = await loadImage(fondoUrl);
-
-    const canvas = createCanvas(1080, 720);
+    const fondo = await loadImage(mediaPath(fondoClave));
+    const canvas = createCanvas(fondo.width, fondo.height);
     const ctx = canvas.getContext("2d");
+    ctx.drawImage(fondo, 0, 0);
 
-    ctx.drawImage(fondo, 0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(150, 150, 85, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-    ctx.globalAlpha = 0.85;
-    ctx.drawImage(avatar, 65, 65, 170, 170);
-    ctx.restore();
-    ctx.globalAlpha = 1.0;
+    const avatar = perfilURL ? await loadImage(perfilURL).catch(() => null) : null;
+    if (avatar) {
+      const r = Math.round(fondo.height * 0.09);
+      const cx = r + Math.round(fondo.height * 0.035);
+      const cy = cx;
 
-    await conn.sendMessage(chatId, {
-      image: Buffer.from(canvas.toBuffer("image/png")),
-      caption,
-      mentions
-    });
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(avatar, cx - r, cy - r, r * 2, r * 2);
+      ctx.restore();
+
+      // Aro azul neón como el de las imágenes
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "#4fc3ff";
+      ctx.shadowColor = "#00a8ff";
+      ctx.shadowBlur = 18;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    image = canvas.toBuffer("image/jpeg", { quality: 0.9 });
   } catch {
     // Fallback sin canvas
-    await conn.sendMessage(chatId, {
-      image: { url: perfilURL || fallbackAvatar },
-      caption,
-      mentions
-    }).catch(() => {});
+    image = mediaBuffer(fondoClave);
   }
+
+  await conn.sendMessage(chatId, { image, caption, mentions }).catch(() => {});
 }
 
 // ==== FALLBACK PARA EVENTOS NUEVOS DE BAILEYS POR STUB ====
@@ -447,23 +452,22 @@ async function handleGroupParticipantsUpdate(conn, update, recentEvents) {
           conn,
           resolved.realJid || mentionId,
           chatId,
-          "https://cdn.russellxz.click/e72cc417.jpeg"
+          null
         );
 
         if (bienvenidaPersonalizada) {
           await conn.sendMessage(chatId, {
-            image: { url: perfilURL },
+            image: perfilURL ? { url: perfilURL } : mediaBuffer("bienvenida"),
             caption: `👋 ${mention}\n\n${bienvenidaPersonalizada}`,
             mentions: [mentionId]
           });
         } else {
           const mensaje = mensajesBienvenida[Math.floor(Math.random() * mensajesBienvenida.length)];
-          await sendCanvasImage(
+          await sendTarjeta(
             conn,
             chatId,
+            "bienvenida",
             perfilURL,
-            "https://cdn.russellxz.click/7177383b.jpg",
-            "https://cdn.russellxz.click/e72cc417.jpeg",
             `👋 ${mention}\n\n${mensaje}\n\n🤖 Suki Subbots`,
             [mentionId]
           );
@@ -475,23 +479,22 @@ async function handleGroupParticipantsUpdate(conn, update, recentEvents) {
           conn,
           resolved.realJid || mentionId,
           chatId,
-          "https://cdn.russellxz.click/7177383b.jpg"
+          null
         );
 
         if (despedidaPersonalizada) {
           await conn.sendMessage(chatId, {
-            image: { url: perfilURL },
+            image: perfilURL ? { url: perfilURL } : mediaBuffer("despedida"),
             caption: `👋 ${mention}\n\n${despedidaPersonalizada}`,
             mentions: [mentionId]
           });
         } else {
           const mensaje = mensajesDespedida[Math.floor(Math.random() * mensajesDespedida.length)];
-          await sendCanvasImage(
+          await sendTarjeta(
             conn,
             chatId,
+            "despedida",
             perfilURL,
-            "https://cdn.russellxz.click/bc842c44.jpg",
-            "https://cdn.russellxz.click/7177383b.jpg",
             `👋 ${mention}\n\n${mensaje}\n\n🤖 Suki Subbots`,
             [mentionId]
           );

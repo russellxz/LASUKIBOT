@@ -6,6 +6,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 function loadDB(p) {
   return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {};
@@ -36,7 +37,7 @@ const handler = async (msg, { conn }) => {
   if (supremo) ordered.push(supremo);
   ordered.push(...otros);
 
-  // --- 1) Imagen + caption del Clan Supremo (si existe bannerUrl) ---
+  // --- 1) Imagen + caption del Clan Supremo (banner en media/clansupremo.jpg) ---
   if (supremo) {
     const miembrosCount = Array.isArray(supremo.miembros) ? supremo.miembros.length : 0;
     const liderStr = supremo.lider
@@ -60,26 +61,18 @@ const handler = async (msg, { conn }) => {
       supMentions.push(`${supremo.lider.numero}@s.whatsapp.net`);
     }
 
-    if (supremo.bannerUrl) {
-      try {
-        await conn.sendMessage(
-          chatId,
-          {
-            image: { url: supremo.bannerUrl },
-            caption: captionSup,
-            mentions: supMentions
-          },
-          { quoted: msg } // ← cita SIEMPRE
-        );
-      } catch {
-        // Fallback a texto si falla la imagen
-        await conn.sendMessage(
-          chatId,
-          { text: captionSup, mentions: supMentions },
-          { quoted: msg }
-        );
-      }
-    } else {
+    try {
+      await conn.sendMessage(
+        chatId,
+        {
+          image: mediaBuffer("clansupremo"),
+          caption: captionSup,
+          mentions: supMentions
+        },
+        { quoted: msg } // ← cita SIEMPRE
+      );
+    } catch {
+      // Fallback a texto si falla la imagen
       await conn.sendMessage(
         chatId,
         { text: captionSup, mentions: supMentions },
@@ -124,7 +117,7 @@ const handler = async (msg, { conn }) => {
 
   await conn.sendMessage(
     chatId,
-    { text: texto.trim(), mentions: Array.from(mentions) },
+    { image: mediaBuffer("gremio"), caption: texto.trim(), mentions: Array.from(mentions) },
     { quoted: msg } // ← también cita aquí
   );
 };

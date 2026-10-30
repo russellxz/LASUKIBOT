@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
@@ -13,7 +14,7 @@ const handler = async (msg, { conn }) => {
 
   if (db.personajes_venta.length === 0) {
     return conn.sendMessage(chatId, {
-      image: { url: "https://cdn.russellxz.click/7451040a.jpeg" },
+      image: mediaBuffer("mercado"),
       caption: "❌ Actualmente no hay personajes a la venta en el mercado.",
       quoted: msg
     });
@@ -36,7 +37,7 @@ const handler = async (msg, { conn }) => {
   });
 
   await conn.sendMessage(chatId, {
-    image: { url: "https://cdn.russellxz.click/7451040a.jpeg" },
+    image: mediaBuffer("mercado"),
     caption: texto,
     quoted: msg
   });

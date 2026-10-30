@@ -4,6 +4,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 function loadDB(p) {
   return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {};
@@ -101,18 +102,15 @@ const handler = async (msg, { conn }) => {
   }
   mentions.add(`${numero}@s.whatsapp.net`);
 
-  // Enviar con imagen si hay bannerUrl; SIEMPRE citando el mensaje original (quoted en 3er arg)
-  if (clan.bannerUrl) {
-    try {
-      await conn.sendMessage(
-        chatId,
-        { image: { url: clan.bannerUrl }, caption, mentions: Array.from(mentions) },
-        { quoted: msg }
-      );
-    } catch {
-      await replyQ({ text: caption, mentions: Array.from(mentions) });
-    }
-  } else {
+  // Enviar con imagen (supremo: su banner; el resto: la del gremio);
+  // SIEMPRE citando el mensaje original (quoted en 3er arg)
+  try {
+    await conn.sendMessage(
+      chatId,
+      { image: mediaBuffer(clan.esSupremo ? "clansupremo" : "gremio"), caption, mentions: Array.from(mentions) },
+      { quoted: msg }
+    );
+  } catch {
     await replyQ({ text: caption, mentions: Array.from(mentions) });
   }
 

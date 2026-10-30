@@ -1,4 +1,5 @@
 
+import { mediaBuffer } from '../../libs/media.js';
 import '../../config.js'; // 🔁 Cargar config.js (raíz del bot) para acceder a global.reto
 
 function pickRandom(list) {
@@ -19,10 +20,9 @@ const handler = async (msg, { conn }) => {
       react: { text: "🎲", key: msg.key }
     });
 
-    // 📽️ Enviar el video como GIF
+    // 🖼️ Enviar la imagen del reto
     await conn.sendMessage(chatId, {
-      video: { url: 'https://cdn.russellxz.click/59d39370.mp4' },
-      gifPlayback: true,
+      image: mediaBuffer('reto'),
       caption: `𝘏𝘢𝘴 𝘦𝘴𝘤𝘰𝘨𝘪𝘥𝘰 *𝘙𝘌𝘛𝘖*\n\n╱╲❀╱╲╱╲❀╱╲╱╲❀╱╲\n◆ ${reto}\n╲╱❀╲╱╲╱❀╲╱╲╱❀╲╱\n\n© Suki Subbots`
     }, { quoted: msg });
 

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
@@ -43,7 +44,7 @@ const handler = async (msg, { conn }) => {
   });
 
   await conn.sendMessage(chatId, {
-    image: { url: "https://cdn.russellxz.click/2695e1bd.jpeg" },
+    image: mediaBuffer("tiendaper"),
     caption: texto
   }, { quoted: msg });
 

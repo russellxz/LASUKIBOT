@@ -4,8 +4,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
-const MENU_URL = "https://cdn.russellxz.click/27293a78.jpeg";
 
 const PRECIOS = {
   1: 25000,
@@ -152,7 +152,7 @@ const handler = async (msg, { conn }) => {
   }
 
   await conn.sendMessage(chatId, {
-    image: { url: MENU_URL },
+    image: mediaBuffer("tiendaesclavos"),
     caption,
     mentions: Array.from(mentions)
   }, { quoted: msg });

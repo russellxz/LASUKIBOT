@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const handler = async (msg, { conn, args }) => {
   const chatId = msg.key.remoteJid;
@@ -112,7 +113,7 @@ const handler = async (msg, { conn, args }) => {
                 `¡Empieza tu aventura ahora! 🚀`;
 
   await conn.sendMessage(chatId, {
-    image: { url: "https://cdn.russellxz.click/3f6baa71.jpeg" },
+    image: mediaBuffer("mundorpg"),
     caption: texto
   }, { quoted: msg });
 

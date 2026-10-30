@@ -1,6 +1,7 @@
 // plugins/topmillonarios.js
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const LIMIT_TOP = 15; // cambia si quieres más/menos en el ranking
 
@@ -77,7 +78,7 @@ const handler = async (msg, { conn, command }) => {
   await conn.sendMessage(
     chatId,
     {
-      image: { url: "https://cdn.russellxz.click/2a36adc2.jpeg" },
+      image: mediaBuffer("topmillo"),
       caption,
       mentions
     },

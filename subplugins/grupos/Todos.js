@@ -1,6 +1,7 @@
 // plugins/tagall.js
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 // ✅ Patrón seguro para extraer solo números
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
@@ -125,7 +126,7 @@ const handler = async (msg, { conn, args }) => {
         finalMsg += mentionList;
 
     await conn.sendMessage(chatId, {
-      image: { url: "https://cdn.russellxz.click/034af9ef.jpeg" },
+      image: mediaBuffer("invocar"),
       caption: finalMsg,
       mentions: mentionIds
     }, { quoted: msg });

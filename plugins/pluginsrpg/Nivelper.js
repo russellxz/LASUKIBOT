@@ -1,6 +1,7 @@
 // plugins/nivelper.js
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
@@ -69,13 +70,21 @@ const handler = async (msg, { conn }) => {
     `➤ .otrouniverso  • .mododios  • .mododiablo  • .superpoder\n` +
     `➤ .batallaanime`;
 
-  const imagen = personaje.imagen || "https://cdn.russellxz.click/a671ee24.jpeg";
-
-  await conn.sendMessage(
-    chatId,
-    { image: { url: imagen }, caption: texto },
-    { quoted: msg }
-  );
+  // Si el personaje no tiene imagen o su URL ya no carga, va la portada local
+  try {
+    if (!personaje.imagen) throw new Error("sin imagen");
+    await conn.sendMessage(
+      chatId,
+      { image: { url: personaje.imagen }, caption: texto },
+      { quoted: msg }
+    );
+  } catch {
+    await conn.sendMessage(
+      chatId,
+      { image: mediaBuffer("tuspersonajes"), caption: texto },
+      { quoted: msg }
+    );
+  }
 
   await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } });
 };
