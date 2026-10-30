@@ -299,7 +299,7 @@ ${detalle}
 🚫 *Aviso ${avisos}/${AVISOS_MAX}* — se acabaron las oportunidades.
 Vas fuera del grupo.
 
-_SKY NSFW DETECTION_`,
+_ORBITX NSFW DETECTION_`,
         mentions: [autorJid]
       });
 
@@ -326,7 +326,7 @@ ${detalle}
 ⚠️ *Aviso ${avisos}/${AVISOS_MAX}* — aquí no se permite este contenido.
 Si llegas a *${AVISOS_MAX}* serás eliminado del grupo.
 
-_SKY NSFW DETECTION_`,
+_ORBITX NSFW DETECTION_`,
       mentions: [autorJid]
     });
 

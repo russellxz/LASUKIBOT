@@ -1,12 +1,12 @@
-// libs/nsfwsky.js — Cliente de SKY NSFW DETECTION
-// https://nsfwsky.ultraplus.click/api/v1
+// libs/nsfwsky.js — Cliente de ORBITX NSFW DETECTION
+// https://nsfw.orbitxspace.com/api/v1
 //
 // Sin registro ni API key. Se le manda el archivo y devuelve el porcentaje
 // de contenido +18 que detecta el modelo Falconsai/nsfw_image_detection.
 
 "use strict";
 
-export const API_NSFW = "https://nsfwsky.ultraplus.click/api/v1";
+export const API_NSFW = "https://nsfw.orbitxspace.com/api/v1";
 
 const TIMEOUT = 90000;
 export const UMBRAL_GORE = 85;   // subido de 25 a 75: con 25 marcaba de más
