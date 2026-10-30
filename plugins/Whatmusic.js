@@ -6,15 +6,14 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 import ffmpeg from 'fluent-ffmpeg';
-import FormData from 'form-data';
 import { promisify } from 'util';
 import { pipeline } from 'stream';
 import yts from 'yt-search';
+import { subirCdn } from '../libs/cdn.js';
 
 const streamPipeline = promisify(pipeline);
 
 // Config
-const CDN_UPLOAD = 'https://cdn.russellxz.click/upload.php';
 const NEOXR_KEY  = 'russellxz';
 
 // Helpers
@@ -126,12 +125,7 @@ const handler = async (msg, { conn, wa }) => {
     await downloadToFile(DL, qAudio || qVideo, type, inputPath);
 
     // 2) Subir al CDN
-    const form = new FormData();
-    form.append('file', fs.createReadStream(inputPath));
-    form.append('expiry', '3600');
-    const up = await axios.post(CDN_UPLOAD, form, { headers: form.getHeaders(), timeout: 120000 });
-    if (!up.data?.url) throw new Error('No se pudo subir el archivo al CDN.');
-    const fileUrl = up.data.url;
+    const fileUrl = await subirCdn(inputPath, { timeout: 120000 });
 
     // 3) Identificar canción
     const apiURL = `https://api.neoxr.eu/api/whatmusic?url=${encodeURIComponent(fileUrl)}&apikey=${NEOXR_KEY}`;

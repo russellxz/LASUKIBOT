@@ -5,7 +5,7 @@ import path from 'path';
 import fetch from 'node-fetch';
 
 // ==== CONFIG ====
-const API_BASE = "https://api-sky.ultraplus.click"; // <-- CAMBIA ESTO (ej: https://dash.skyultraplus.com)
+const API_BASE = "https://api.orbitxspace.com"; // CDN de ORBITX SPACE
 const API_KEY = "Russellxz";
 
 // Endpoints de tu API (los que hiciste)

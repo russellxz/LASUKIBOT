@@ -4,9 +4,8 @@ const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
 // plugins/tourl.js
 import fs from 'fs';
 import path from 'path';
-import FormData from 'form-data';
-import axios from 'axios';
 import ffmpeg from 'fluent-ffmpeg';
+import { subirCdn } from '../libs/cdn.js';
 
 // ——— Utils ———
 function unwrapMessage(m) {
@@ -145,18 +144,10 @@ const handler = async (msg, { conn, command, wa }) => {
     }
 
     // Subir al CDN
-    const form = new FormData();
-    form.append('file', fs.createReadStream(finalPath));
-    const res = await axios.post('https://cdn.russellxz.click/upload.php', form, {
-      headers: form.getHeaders(),
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-    });
-
-    if (!res.data?.url) throw new Error('❌ No se pudo subir el archivo (sin URL en respuesta).');
+    const enlace = await subirCdn(finalPath);
 
     await conn.sendMessage(chatId, {
-      text: `✅ *Archivo subido exitosamente:*\n${res.data.url}`
+      text: `✅ *Archivo subido exitosamente:*\n${enlace}`
     }, { quoted: msg });
 
     await conn.sendMessage(chatId, { react: { text: '✅', key: msg.key } });

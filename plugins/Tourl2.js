@@ -1,10 +1,7 @@
 // plugins/tourl2.js — Upload con extensión por mimetype + WA inyectado
 import path from 'path';
 import fetch from 'node-fetch';
-import FormData from 'form-data';
-
-const UPLOAD_ENDPOINT = "https://cdn.skyultraplus.com/upload.php"; // .php requerido
-const API_KEY = "russellxzomega";
+import { subirCdn } from '../libs/cdn.js';
 
 // ————— Helpers —————
 function unwrapMessage(m) {
@@ -170,46 +167,18 @@ const handler = async (msg, { conn, args, wa, command }) => {
     return;
   }
 
-  // Subir
-  const form = new FormData();
-  form.append("file", buffer, { filename, contentType }); // filename con extensión garantizada
-  form.append("name", filename.replace(/\.[^.]+$/, "").slice(0, 120));
-  form.append("uploader", (msg.key.participant || msg.key.remoteJid || "").replace(/\D/g, ""));
-
-  let resp, text;
+  // Subir al CDN de ORBITX SPACE
+  let url;
   try {
-    resp = await fetch(UPLOAD_ENDPOINT, {
-      method: "POST",
-      headers: { "x-api-key": API_KEY, ...form.getHeaders() },
-      body: form,
-      timeout: 120000,
+    url = await subirCdn(buffer, {
+      filename,
+      contentType,
+      name: filename.replace(/\.[^.]+$/, ""),
+      timeout: 120000
     });
-    text = await resp.text();
   } catch (e) {
-    await conn.sendMessage(chatId, { text: `❌ Error al subir: ${e.message}`, quoted: msg });
+    await conn.sendMessage(chatId, { text: `❌ Upload falló: ${e.message}`, quoted: msg });
     try { await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } }); } catch {}
-    return;
-  }
-
-  let json = null;
-  try { json = JSON.parse(text); } catch { json = { raw: text }; }
-
-  if (!resp.ok || json?.ok === false) {
-    const err = (json && (json.error || json.hint || json.raw)) || `HTTP ${resp.status}`;
-    await conn.sendMessage(chatId, { text: `❌ Upload falló: ${err}`, quoted: msg });
-    try { await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } }); } catch {}
-    return;
-  }
-
-  const url =
-    json?.file?.url || json?.url || json?.data?.url || json?.result?.url || null;
-
-  if (!url) {
-    await conn.sendMessage(chatId, {
-      text: `✅ Subido, pero sin URL en la respuesta:\n\`\`\`${text}\`\`\``,
-      quoted: msg
-    });
-    try { await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }); } catch {}
     return;
   }
 
