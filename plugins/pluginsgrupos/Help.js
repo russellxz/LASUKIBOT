@@ -1,3 +1,5 @@
+import { mediaBuffer } from '../../libs/media.js';
+
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
   const pref = global.prefixes?.[0] || ".";
@@ -30,7 +32,7 @@ https://youtube.com/@skyultraplus?si=4hnO5biMvrUu9JXY
 `.trim();
 
   await conn.sendMessage(chatId, {
-    video: { url: 'https://cdn.russellxz.click/12fea11a.mp4' },
+    image: mediaBuffer('info'),
     caption
   }, { quoted: msg });
 };

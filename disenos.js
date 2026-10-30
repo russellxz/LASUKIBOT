@@ -16,6 +16,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { mediaBuffer } from "./libs/media.js";
 
 // Rutas ancladas a la carpeta del bot (donde vive este archivo), no al
 // directorio de trabajo: así funciona igual sin importar desde dónde se ejecute.
@@ -46,26 +47,18 @@ export const MENU_NOMBRES = {
   descargas: "Comandos de descarga"
 };
 
-// Media de fábrica por menú (la que traía cada uno antes de personalizar).
-// tipo "video" se envía como GIF animado.
-const MEDIA_FABRICA_MAIN = {
-  menu: { url: "https://cdn.russellxz.click/770fe00e.mp4", tipo: "video" },
-  menugrupo: { url: "https://cdn.russellxz.click/8eef84e4.mp4", tipo: "video" },
-  menuaudio: { url: "https://cdn.russellxz.click/18bf4be2.mp4", tipo: "video" },
-  menurpg: { url: "https://cdn.russellxz.click/d744b5bf.jpeg", tipo: "image" },
-  menufree: { url: "https://cdn.russellxz.click/bdd4fca0.jpeg", tipo: "image" },
-  allmenu: { url: "https://cdn.russellxz.click/40df9bcb.jpeg", tipo: "image" },
-  menuowner: { url: "https://cdn.russellxz.click/a0b60c86.mp4", tipo: "video" },
-  menuventas: { url: "https://cdn.russellxz.click/b67d2480.jpg", tipo: "image" }
+// Media de fábrica por menú: imágenes locales de ./media (ver libs/media.js).
+// Sirven igual para el bot principal y para los subbots.
+const MEDIA_FABRICA = {
+  menu: "menu",
+  menugrupo: "menugrupo",
+  menuaudio: "menuaudio",
+  menufree: "menufree",
+  menuowner: "menuowner"
 };
 
-const MEDIA_FABRICA_SUB = {
-  menurpg: { url: "https://cdn.russellxz.click/d744b5bf.jpeg", tipo: "image" }
-};
-
-// Cualquier menú sin entrada propia usa esta
-const MEDIA_FABRICA_DEFECTO_MAIN = { url: "https://cdn.russellxz.click/40df9bcb.jpeg", tipo: "image" };
-const MEDIA_FABRICA_DEFECTO_SUB = { url: "https://cdn.russellxz.click/c678c800.jpg", tipo: "image" };
+// Cualquier menú sin imagen propia (allmenu, menurpg, menuventas...) usa esta
+const MEDIA_FABRICA_DEFECTO = "menu";
 
 export const MARCA_FABRICA_MAIN = "La Suki Bot";
 export const MARCA_FABRICA_SUB = "Suki Subbots";
@@ -409,15 +402,7 @@ export function getMediaMenu(conn, menuKey) {
   }
 
   // Media de fábrica del menú
-  const sub = esSubbot(conn);
-  const tabla = sub ? MEDIA_FABRICA_SUB : MEDIA_FABRICA_MAIN;
-  const fab =
-    tabla[menuKey] || (sub ? MEDIA_FABRICA_DEFECTO_SUB : MEDIA_FABRICA_DEFECTO_MAIN);
-
-  if (fab.tipo === "video") {
-    return { video: { url: fab.url }, gifPlayback: true };
-  }
-  return { image: { url: fab.url } };
+  return { image: mediaBuffer(MEDIA_FABRICA[menuKey] || MEDIA_FABRICA_DEFECTO) };
 }
 
 // ------------------------------------------------------------

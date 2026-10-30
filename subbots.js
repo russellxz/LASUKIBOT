@@ -17,6 +17,7 @@ import { pathToFileURL } from "url";
 import pino from "pino";
 import chalk from "chalk";
 import { canal, limpiarRespuestaBoton } from "./disenos.js";
+import { mediaBuffer, mediaPath } from "./libs/media.js";
 import { revisarNsfw } from "./libs/antiporno.js";
 import { revisarSpam } from "./libs/antispam.js";
 
@@ -26,7 +27,7 @@ const DATA_DIR = path.join(SUB_ROOT, "data");
 const PLUGINS_DIR = path.resolve("./subplugins");
 
 export const DEFAULT_SUB_PREFIXES = [".", "#", "/"];
-const MENU_IMAGE = "https://cdn.russellxz.click/c678c800.jpg";
+const MENU_IMAGE = mediaPath("menu");
 const CODE_VIDEO = "https://cdn.russellxz.click/76b170f5.mp4";
 
 const DIGITS = (s = "") => String(s || "").replace(/[^0-9]/g, "");
@@ -1544,9 +1545,6 @@ function startAntideleteCleaner() {
 // intervalo global que usa siempre el socket VIVO de cada subbot
 // (así las reconexiones no dejan tareas huérfanas).
 // ------------------------------------------------------------
-const TIMER_OPEN_VIDEO = "https://cdn.russellxz.click/b5635057.mp4";
-const TIMER_CLOSE_VIDEO = "https://cdn.russellxz.click/1f9e8232.mp4";
-
 function emptyTimeGroup(obj, key) {
   return obj[key] && Object.keys(obj[key]).length === 0;
 }
@@ -1595,13 +1593,13 @@ export async function processGroupTimes(sock, num, now = Date.now()) {
         if (action === "close") {
           await sock.groupSettingUpdate(chatId, "announcement");
           await sock.sendMessage(chatId, {
-            video: { url: TIMER_CLOSE_VIDEO },
+            image: mediaBuffer("grupoCerrado"),
             caption: "🔒 El grupo ha sido cerrado automáticamente."
           }).catch(() => {});
         } else {
           await sock.groupSettingUpdate(chatId, "not_announcement");
           await sock.sendMessage(chatId, {
-            video: { url: TIMER_OPEN_VIDEO },
+            image: mediaBuffer("grupoAbierto"),
             caption: "🔓 El grupo ha sido abierto automáticamente."
           }).catch(() => {});
         }

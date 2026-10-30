@@ -1,4 +1,5 @@
 
+import { mediaBuffer } from '../libs/media.js';
 import '../config.js'; // 🔁 Asegura cargar el archivo donde están los arrays
 
 function pickRandom(list) {
@@ -20,8 +21,7 @@ const handler = async (msg, { conn }) => {
     });
 
     await conn.sendMessage(chatId, {
-      video: { url: 'https://cdn.russellxz.click/ee5ab947.mp4' },
-      gifPlayback: true,
+      image: mediaBuffer('verdad'),
       caption: `𝘏𝘢𝘴 𝘦𝘴𝘤𝘰𝘨𝘪𝘥𝘰 *𝘝𝘌𝘙𝘋𝘈𝘋*\n\n╱╲❀╱╲╱╲❀╱╲╱╲❀╱╲\n◆ ${verdad}\n╲╱❀╲╱╲╱❀╲╱╲╱❀╲╱\n\n© La Suki Bot`
     }, { quoted: msg });
 
