@@ -70,11 +70,33 @@ export function cargarCatalogo() {
   return lista;
 }
 
+/** Personajes de la tienda que en el catálogo se llaman de otra forma. */
+function aliasDelCatalogo() {
+  const crudo = leerJson(RUTA_CATALOGO(), null);
+  const alias = new Map();
+
+  for (const [enTienda, enCatalogo] of Object.entries(crudo?._alias || {})) {
+    alias.set(normName(enTienda), normName(enCatalogo));
+  }
+
+  return alias;
+}
+
 /** Los nombres que ya están en el RPG, listos para comparar. */
 export function nombresEnRpg() {
   const rpg = leerJson(RUTA_RPG(), {});
   const personajes = Array.isArray(rpg?.personajes) ? rpg.personajes : [];
-  return new Set(personajes.map((p) => normName(p?.nombre)));
+  const alias = aliasDelCatalogo();
+  const nombres = new Set();
+
+  // Si en la tienda está "Sukuna", en el catálogo "Ryomen_Sukuna" ya cuenta como puesto.
+  for (const p of personajes) {
+    const clave = normName(p?.nombre);
+    nombres.add(clave);
+    if (alias.has(clave)) nombres.add(alias.get(clave));
+  }
+
+  return nombres;
 }
 
 /** Los que todavía se pueden agregar. */
@@ -93,6 +115,7 @@ export function resumen() {
     enCatalogo: catalogo.length,
     disponibles: libres.length,
     enRpg: Array.isArray(rpg?.personajes) ? rpg.personajes.length : 0,
+    porRenovar: porRenovar().length,
     animes: new Set(catalogo.map((p) => p.anime)).size
   };
 }
@@ -131,6 +154,68 @@ export function precioDe(rango = "A") {
 /** Cómo se llama en la tienda: con su emoji delante, como los que ya hay. */
 export function nombreDeTienda(p) {
   return `${p.emoji}${p.nombre}`;
+}
+
+// ------------------------------------------------- imágenes del CDN viejo
+
+// Los CDN viejos ya no funcionan: las fotos que siguen ahí se ven rotas.
+export const CDN_VIEJO = /^https?:\/\/(cdn\.russellxz\.click|cdn\.skyultraplus\.com)\//i;
+
+/** Separa el emoji del principio del nombre: "⚫Sukuna" → ["⚫", "Sukuna"]. */
+export function partirNombre(nombre = "") {
+  const m = String(nombre).match(/^([^A-Za-z0-9]*)(.*)$/);
+  return [m[1], m[2]];
+}
+
+/** De qué anime es un personaje de la tienda, para buscarle bien la foto. */
+export function animeDe(nombre) {
+  const crudo = leerJson(RUTA_CATALOGO(), null);
+  const [, limpio] = partirNombre(nombre);
+
+  const fijo = crudo?._anime_de_la_tienda?.[limpio];
+  if (fijo) return fijo;
+
+  const alias = aliasDelCatalogo();
+  const clave = normName(limpio);
+  const buscada = alias.get(clave) || clave;
+
+  return cargarCatalogo().find((p) => normName(p.nombre) === buscada)?.anime || "";
+}
+
+/** Los personajes de la tienda que todavía tienen la foto en el CDN viejo. */
+export function porRenovar() {
+  const rpg = leerJson(RUTA_RPG(), {});
+  const personajes = Array.isArray(rpg?.personajes) ? rpg.personajes : [];
+  return personajes.filter((p) => CDN_VIEJO.test(String(p?.imagen || "")));
+}
+
+/**
+ * Cambia la foto vieja por la nueva en todo sukirpg.json: en la tienda y en
+ * las copias que ya compraron los usuarios, el banco o la venta. Solo toca lo
+ * que tenga exactamente el enlace viejo. Devuelve cuántos cambió.
+ */
+export function cambiarImagen(urlVieja, urlNueva) {
+  const ruta = RUTA_RPG();
+  const datos = leerJson(ruta, null);
+  if (!datos || !urlVieja) return 0;
+
+  let cambios = 0;
+  const recorrer = (nodo) => {
+    if (Array.isArray(nodo)) return nodo.forEach(recorrer);
+    if (!nodo || typeof nodo !== "object") return;
+
+    if (nodo.imagen === urlVieja) {
+      nodo.imagen = urlNueva;
+      cambios++;
+    }
+
+    Object.values(nodo).forEach(recorrer);
+  };
+
+  recorrer(datos);
+  if (cambios) fs.writeFileSync(ruta, JSON.stringify(datos, null, 2));
+
+  return cambios;
 }
 
 // ------------------------------------------------------------- guardar y quitar
@@ -216,6 +301,7 @@ export function olvidarDelHistorial(nombre) {
 
 export default {
   cargarCatalogo, disponibles, resumen, elegirAlAzar, precioDe, nombreDeTienda,
+  porRenovar, cambiarImagen, animeDe, partirNombre, CDN_VIEJO,
   guardarEnRpg, quitarDelRpg, leerHistorial, apuntarTanda, sacarUltimaTanda,
   olvidarDelHistorial, normName
 };

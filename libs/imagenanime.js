@@ -12,7 +12,7 @@
 import axios from "axios";
 import { subirCdn } from "./cdn.js";
 
-const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
+const API_BASE = (process.env.API_BASE || "https://api.orbitxspace.com").replace(/\/+$/, "");
 const API_KEY = process.env.API_KEY || "Russellxz";
 
 const NAVEGADOR =
