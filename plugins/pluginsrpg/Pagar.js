@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createCanvas, loadImage } from 'canvas';
+import { mediaPath } from '../../libs/media.js';
 
 const handler = async (msg, { conn, args }) => {
   const chatId = msg.key.remoteJid;
@@ -112,13 +113,13 @@ const handler = async (msg, { conn, args }) => {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Logo del banco circular
-    const logo = await loadImage("https://cdn.russellxz.click/f44a9e20.jpeg");
+    const logo = await loadImage(mediaPath("banco"));
     ctx.save();
     ctx.beginPath();
     ctx.arc(80, 80, 60, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
-    ctx.drawImage(logo, 20, 20, 120, 120);
+    ctx.drawImage(logo, 840, 60, 480, 480, 20, 20, 120, 120); // cara de Suki (media/banco.jpg)
     ctx.restore();
 
     // Título

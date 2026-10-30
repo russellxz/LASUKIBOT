@@ -1,6 +1,6 @@
 // libs/media.js — Imágenes propias del bot, guardadas en la carpeta ./media
 //
-// Antes los menús, verdad/reto, bienvenidas y abrir/cerrar grupo usaban
+// Antes los menús, verdad/reto, bienvenidas, abrir/cerrar grupo y el RPG usaban
 // URLs de un CDN externo; si el CDN se caía, el mensaje no salía. Ahora las
 // imágenes vienen dentro del bot y se mandan directamente desde el disco.
 // Lo usan tanto el bot principal como los subbots.
@@ -19,13 +19,35 @@ export const MEDIA = {
   menuowner: "menuowner.jpg",
   menuaudio: "menuaudio.jpg",
   menufree: "menufree.jpg",
+  menurpg: "menurpg.jpg",
+  menuventas: "menuventas.jpg",
+  allmenu: "allmenu.jpg",
   info: "info.jpg",
   verdad: "verdad.jpg",
   reto: "reto.jpg",
   bienvenida: "bienvenida.jpg",
   despedida: "despedida.jpg",
   grupoAbierto: "grupo-abierto.jpg",
-  grupoCerrado: "grupo-cerrado.jpg"
+  grupoCerrado: "grupo-cerrado.jpg",
+  invocar: "invocar.jpg",
+
+  // RPG
+  mundorpg: "mundorpg.jpg",
+  saldo: "saldo.jpg",
+  nivel: "nivel.jpg",
+  tuspersonajes: "tuspersonajes.jpg",
+  tiendaper: "tiendaper.jpg",
+  mercado: "mercado.jpg",
+  banco: "banco.jpg",
+  tiendabank: "tiendabank.jpg",
+  topper: "topper.jpg",
+  topuser: "topuser.jpg",
+  topmascotas: "topmascotas.jpg",
+  topmillo: "topmillo.jpg",
+  gremio: "gremio.jpg",
+  clansupremo: "clansupremo.jpg",
+  topesclavos: "topesclavos.jpg",
+  tiendaesclavos: "tiendaesclavos.jpg"
 };
 
 /** Ruta absoluta de una imagen (sirve para canvas loadImage o { url }) */

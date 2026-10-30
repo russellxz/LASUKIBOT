@@ -2,6 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createCanvas, loadImage } from 'canvas';
+import { mediaPath } from '../../libs/media.js';
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
@@ -37,7 +38,7 @@ const handler = async (msg, { conn }) => {
   fs.writeFileSync(sukirpgPath, JSON.stringify(db, null, 2));
 
   // 📷 Avatar o fallback
-  let avatarURL = "https://cdn.russellxz.click/f20c1249.jpeg";
+  let avatarURL = mediaPath("saldo");
   try {
     const pp = await conn.profilePictureUrl(sender, "image");
     if (pp) avatarURL = pp;

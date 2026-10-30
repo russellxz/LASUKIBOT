@@ -5,8 +5,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
-const SUPREMO_BANNER_URL = "https://cdn.russellxz.click/e1749448.jpeg";
 
 function loadDB(p) { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {}; }
 function saveDB(p, o) { fs.writeFileSync(p, JSON.stringify(o, null, 2)); }
@@ -87,7 +87,7 @@ const handler = async (msg, { conn, args }) => {
     id: `CLAN_${ahora}_${Math.floor(Math.random() * 9999)}`,
     nombre,
     esSupremo: true,
-    bannerUrl: SUPREMO_BANNER_URL,
+    bannerUrl: null, // su banner es media/clansupremo.jpg
     creadoEn: ahora,
     nivelClan: 200, // nivel inicial para el supremo
     minNivelParaUnirse: nivelMin,
@@ -118,16 +118,14 @@ const handler = async (msg, { conn, args }) => {
 
 📌 Este clan guarda su banner especial para *.miclan*.`;
 
-  if (clan.bannerUrl) {
-    try {
-      await conn.sendMessage(chatId, {
-        image: { url: clan.bannerUrl },
-        caption,
-        quoted: msg
-      });
-      return;
-    } catch {}
-  }
+  try {
+    await conn.sendMessage(chatId, {
+      image: mediaBuffer("clansupremo"),
+      caption,
+      quoted: msg
+    });
+    return;
+  } catch {}
   await conn.sendMessage(chatId, { text: caption, quoted: msg });
 };
 

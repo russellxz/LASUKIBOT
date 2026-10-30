@@ -54,10 +54,13 @@ const MEDIA_FABRICA = {
   menugrupo: "menugrupo",
   menuaudio: "menuaudio",
   menufree: "menufree",
-  menuowner: "menuowner"
+  menuowner: "menuowner",
+  menurpg: "menurpg",
+  menuventas: "menuventas",
+  allmenu: "allmenu"
 };
 
-// Cualquier menú sin imagen propia (allmenu, menurpg, menuventas...) usa esta
+// Cualquier menú sin imagen propia (p. ej. descargas) usa esta
 const MEDIA_FABRICA_DEFECTO = "menu";
 
 export const MARCA_FABRICA_MAIN = "La Suki Bot";

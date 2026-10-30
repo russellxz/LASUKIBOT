@@ -1,6 +1,7 @@
 // plugins/banco.js
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 function formatoTiempo(msRestante) {
   if (!Number.isFinite(msRestante) || msRestante <= 0) return "⏳ Tiempo vencido";
@@ -67,7 +68,7 @@ Ej: .pagar 2000
   if (totalPrestamos === 0) {
     caption += `\n📌 No hay usuarios con préstamos activos ahora mismo.`;
     return conn.sendMessage(chatId, {
-      image: { url: "https://cdn.russellxz.click/00877f21.jpeg" },
+      image: mediaBuffer("banco"),
       caption,
       quoted: msg
     });
@@ -120,7 +121,7 @@ Ej: .pagar 2000
     `   • Pendiente: ${sumaPendiente} créditos`;
 
   await conn.sendMessage(chatId, {
-    image: { url: "https://cdn.russellxz.click/00877f21.jpeg" },
+    image: mediaBuffer("banco"),
     caption,
     mentions,
     quoted: msg

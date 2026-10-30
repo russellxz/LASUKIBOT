@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
@@ -31,7 +32,7 @@ const handler = async (msg, { conn }) => {
   }
 
   // Obtener avatar del usuario o usar uno por defecto
-  let avatarURL = "https://cdn.russellxz.click/c1954949.jpeg";
+  let avatarURL = null;
   try {
     const pp = await conn.profilePictureUrl(`${target}@s.whatsapp.net`, "image");
     if (pp) avatarURL = pp;
@@ -62,7 +63,7 @@ const handler = async (msg, { conn }) => {
 
   // Enviar imagen con el texto
   await conn.sendMessage(chatId, {
-    image: { url: avatarURL },
+    image: avatarURL ? { url: avatarURL } : mediaBuffer("nivel"),
     caption: texto,
     quoted: msg
   });

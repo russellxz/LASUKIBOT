@@ -1,6 +1,7 @@
 // plugins/verper.js
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
@@ -66,11 +67,9 @@ const handler = async (msg, { conn }) => {
   texto += `➤ .otrouniverso  • .mododios  • .mododiablo  • .superpoder\n`;
   texto += `➤ .batallaanime\n`;
 
-  const portada = "https://cdn.russellxz.click/a671ee24.jpeg";
-
   await conn.sendMessage(
     chatId,
-    { image: { url: portada }, caption: texto },
+    { image: mediaBuffer("tuspersonajes"), caption: texto },
     { quoted: msg }
   );
 

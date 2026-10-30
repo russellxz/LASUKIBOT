@@ -4,8 +4,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
-const PORTADA_URL = "https://cdn.russellxz.click/42bd53d7.jpeg";
 const MAX_ITEMS = 10; // muestra top 10
 
 function cargarDB(p) {
@@ -86,7 +86,7 @@ const handler = async (msg, { conn }) => {
   // Envío con imagen + caption
   try {
     await conn.sendMessage(chatId, {
-      image: { url: PORTADA_URL },
+      image: mediaBuffer("topesclavos"),
       caption: texto.trim(),
       mentions: Array.from(menciones),
       quoted: msg

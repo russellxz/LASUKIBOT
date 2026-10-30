@@ -1,6 +1,7 @@
 // plugins/tiendabank.js
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
@@ -23,7 +24,7 @@ const handler = async (msg, { conn }) => {
     return conn.sendMessage(
       chatId,
       {
-        image: { url: "https://cdn.russellxz.click/4ec1a962.jpeg" },
+        image: mediaBuffer("tiendabank"),
         caption:
           "🏦 *Tienda del Banco*\n\n" +
           "Por ahora no hay personajes decomisados en venta.\n\n" +
@@ -66,7 +67,7 @@ const handler = async (msg, { conn }) => {
   await conn.sendMessage(
     chatId,
     {
-      image: { url: "https://cdn.russellxz.click/4ec1a962.jpeg" },
+      image: mediaBuffer("tiendabank"),
       caption: texto,
       mentions
     },

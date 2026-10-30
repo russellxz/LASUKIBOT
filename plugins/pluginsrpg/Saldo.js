@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { mediaBuffer } from '../../libs/media.js';
 
 const handler = async (msg, { conn }) => {
   const chatId = msg.key.remoteJid;
@@ -36,7 +37,7 @@ const handler = async (msg, { conn }) => {
                   `✨ ¡Sigue progresando en el mundo RPG de La Suki Bot!`;
 
   await conn.sendMessage(chatId, {
-    image: { url: "https://cdn.russellxz.click/f20c1249.jpeg" },
+    image: mediaBuffer("saldo"),
     caption
   }, { quoted: msg });
 
