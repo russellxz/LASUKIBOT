@@ -1,4 +1,4 @@
-// plugins/Xxxx.js — Analiza +18 y sangre con SKY NSFW DETECTION
+// plugins/Xxxx.js — Analiza +18 y sangre con ORBITX NSFW DETECTION
 "use strict";
 
 import { analizarBuffer } from '../libs/nsfwsky.js';
@@ -197,7 +197,7 @@ const handler = async (msg, { conn, wa }) => {
       peor.fotogramas > 1 ? `🎬 *Fotogramas de la API:* ${peor.fotogramas}` : "",
       desglose,
       ``,
-      `_SKY NSFW DETECTION_`
+      `_ORBITX NSFW DETECTION_`
     ].filter(Boolean).join("\n");
 
     await conn.sendMessage(chatId, { text: detalle }, { quoted: msg });
