@@ -4,7 +4,7 @@
 
 <img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=800&size=26&duration=2800&pause=600&color=00D4FF&center=true&vCenter=true&width=620&lines=%F0%9F%A6%8B+Tu+bot+de+WhatsApp+con+estilo+%F0%9F%A6%8B;%E2%9A%A1+Sistema+de+Subbots+ESTABLE+%E2%9A%A1;%F0%9F%A4%96+%2B500+subbots+conectados+a+la+vez;%F0%9F%93%A5+Descargas%2C+juegos%2C+IA+y+m%C3%A1s" alt="Typing SVG"/>
 
-<img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=700&size=20&duration=3200&pause=800&color=FF2BD6&center=true&vCenter=true&width=620&lines=%F0%9F%9A%80+Alojada+en+el+MEJOR+hosting+del+mundo;%E2%98%81%EF%B8%8F+SKY+ULTRA+PLUS+%E2%98%81%EF%B8%8F;%F0%9F%92%8E+Velocidad%2C+potencia+y+estabilidad+24%2F7" alt="Typing SVG"/>
+<img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=700&size=20&duration=3200&pause=800&color=FF2BD6&center=true&vCenter=true&width=620&lines=%F0%9F%9A%80+Alojada+en+el+MEJOR+hosting+del+mundo;%F0%9F%AA%90+ORBITX+SPACE+%F0%9F%AA%90;%F0%9F%92%8E+Velocidad%2C+potencia+y+estabilidad+24%2F7" alt="Typing SVG"/>
 
 <br/>
 
@@ -12,7 +12,7 @@
 <img src="https://img.shields.io/badge/Node.js-20+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white"/>
 <img src="https://img.shields.io/badge/Baileys-Ultra-00D4FF?style=for-the-badge"/>
 <img src="https://img.shields.io/badge/Subbots-Estables%20⚡-FF2BD6?style=for-the-badge"/>
-<img src="https://img.shields.io/badge/Hosting-Sky%20Ultra%20Plus%20🚀-FFD700?style=for-the-badge"/>
+<img src="https://img.shields.io/badge/Hosting-OrbitX%20Space%20🪐-FFD700?style=for-the-badge"/>
 
 <img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a-139a6edaec5c.gif" width="100%"/>
 
@@ -21,7 +21,7 @@
 ## 🎬 Presentación
 
 <p align="center">
-  <img src="https://cdn.russellxz.click/74087f31.jpeg" alt="Portada de La Suki Bot" width="600"/>
+  <img src="assets/portada.jpg" alt="Portada de La Suki Bot" width="600"/>
 </p>
 
 <p align="center">
@@ -90,16 +90,16 @@
 
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=800&size=24&duration=2600&pause=600&color=FFD700&center=true&vCenter=true&width=620&lines=%E2%98%81%EF%B8%8F+SKY+ULTRA+PLUS+%E2%98%81%EF%B8%8F;%F0%9F%8F%86+El+mejor+hosting+del+mundo+%F0%9F%8F%86;%F0%9F%9A%80+Potencia+%C2%B7+Velocidad+%C2%B7+Estabilidad" alt="Typing SVG"/>
+<img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=800&size=24&duration=2600&pause=600&color=FFD700&center=true&vCenter=true&width=620&lines=%F0%9F%AA%90+ORBITX+SPACE+%F0%9F%AA%90;%F0%9F%8F%86+El+mejor+hosting+del+mundo+%F0%9F%8F%86;%F0%9F%9A%80+Potencia+%C2%B7+Velocidad+%C2%B7+Estabilidad" alt="Typing SVG"/>
 
-<img src="https://cdn.russellxz.click/a80956b1.jpg" alt="Sky Ultra Plus" width="400"/>
+<img src="assets/orbitxspace.png" alt="OrbitX Space" width="400"/>
 
 <br/><br/>
 
 > 🛰️ *La Suki Bot está alojada con orgullo en el mejor hosting del mundo:*
 
-<a href="https://dash.skyultraplus.com">
-  <img src="https://img.shields.io/badge/☁️%20SKY%20ULTRA%20PLUS%20—%20dash.skyultraplus.com-00D4FF?style=for-the-badge" alt="Sky Ultra Plus"/>
+<a href="https://ctrl.orbitxspace.com">
+  <img src="https://img.shields.io/badge/🪐%20ORBITX%20SPACE%20—%20ctrl.orbitxspace.com-9B5CFF?style=for-the-badge" alt="OrbitX Space"/>
 </a>
 
 </div>
