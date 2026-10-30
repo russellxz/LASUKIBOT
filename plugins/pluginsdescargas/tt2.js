@@ -2,7 +2,7 @@
 import { canal } from "../../disenos.js";
 import axios from 'axios';
 
-const API_BASE = process.env.API_BASE || "https://api-sky.ultraplus.click";
+const API_BASE = process.env.API_BASE || "https://api.orbitxspace.com";
 const API_KEY  = process.env.API_KEY  || "Russellxz"; // tu key
 
 const handler = async (msg, { conn, args, command }) => {

@@ -5,7 +5,7 @@ import { canal } from "../../disenos.js";
 import axios from 'axios';
 
 // ==== CONFIG API ====
-const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
+const API_BASE = (process.env.API_BASE || "https://api.orbitxspace.com").replace(/\/+$/, "");
 const API_KEY  = process.env.API_KEY  || "Russellxz";
 
 const LIMIT = 10;

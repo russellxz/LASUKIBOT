@@ -4,7 +4,7 @@
 import { canal } from "../../disenos.js";
 import axios from 'axios';
 
-const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "");
+const API_BASE = (process.env.API_BASE || "https://api.orbitxspace.com").replace(/\/+$/, "");
 const API_KEY  = process.env.API_KEY || "Russellxz";
 const MAX_TIMEOUT = 30000;
 
