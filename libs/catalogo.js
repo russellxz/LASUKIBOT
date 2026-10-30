@@ -121,15 +121,33 @@ export function resumen() {
 }
 
 /**
+ * ¿Este personaje del catálogo estaba en la tienda antes de vaciarla? Se mira
+ * en '_anime_de_la_tienda' (mismo nombre y mismo anime) y en '_alias'.
+ */
+function estabaEnLaTienda() {
+  const crudo = leerJson(RUTA_CATALOGO(), null);
+  const anime = new Map();
+
+  for (const [nombre, a] of Object.entries(crudo?._anime_de_la_tienda || {})) {
+    anime.set(normName(nombre), a);
+  }
+
+  const porAlias = new Set(Object.values(crudo?._alias || {}).map(normName));
+
+  return (p) => {
+    const clave = normName(p.nombre);
+    return porAlias.has(clave) || anime.get(clave) === p.anime;
+  };
+}
+
+/**
  * Saca n personajes al azar de los que quedan, sin repetir.
- * Los más famosos salen antes: primero se barajan los S, luego los A y los B.
+ * Primero los que ya estaban en la tienda antes de vaciarla, y dentro de cada
+ * grupo los más famosos antes: se barajan los S, luego los A y los B.
  */
 export function elegirAlAzar(n = 1, pool = null) {
   const libres = pool || disponibles();
   if (!libres.length) return [];
-
-  const porRango = { S: [], A: [], B: [] };
-  for (const p of libres) porRango[p.rango].push(p);
 
   const barajar = (a) => {
     const c = [...a];
@@ -140,8 +158,17 @@ export function elegirAlAzar(n = 1, pool = null) {
     return c;
   };
 
-  return [...barajar(porRango.S), ...barajar(porRango.A), ...barajar(porRango.B)]
-    .slice(0, Math.max(1, n));
+  const porRango = (lista) => {
+    const r = { S: [], A: [], B: [] };
+    for (const p of lista) r[p.rango].push(p);
+    return [...barajar(r.S), ...barajar(r.A), ...barajar(r.B)];
+  };
+
+  const estaba = estabaEnLaTienda();
+  const antes = libres.filter(estaba);
+  const resto = libres.filter((p) => !estaba(p));
+
+  return [...porRango(antes), ...porRango(resto)].slice(0, Math.max(1, n));
 }
 
 /** Un precio del rango que le toca, redondeado al millar. */
