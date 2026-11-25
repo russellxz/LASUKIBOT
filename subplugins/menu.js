@@ -81,6 +81,7 @@ const handler = async (msg, { conn }) => {
         titulo: "STICKERS",
         items: [
           `${p}s / qc / qc2 / texto`,
+          `${p}ssa / ss (sticker con audio)`,
           `${p}mixemoji / aniemoji`,
           `${p}sks / guarsk`,
           `${p}versk / sendsk`
