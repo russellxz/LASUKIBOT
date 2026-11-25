@@ -4,7 +4,7 @@ const __dirname = __filename.substring(0, __filename.lastIndexOf('/'));
 // plugins/Ssa.js — Sticker con audio (estático o animado)
 // Comandos: .ssa / .ss
 //
-// Crea un sticker que suena al tocarlo (máx. 25 s de audio), con la misma
+// Crea un sticker que suena al tocarlo (máx. 60 s de audio, igual al largo del sticker), con la misma
 // leyenda del comando .s (quién lo mandó hacer, bot creador y fecha).
 //
 //  • Video  → sticker animado con el audio del propio video (todo en 1 paso).
@@ -22,7 +22,7 @@ import webp from 'node-webpmux';
 import { canal } from "../disenos.js";
 
 const execFileAsync = promisify(execFile);
-const MAX_DURATION = 25;      // segundos máximos de audio / video
+const MAX_DURATION = 60;      // segundos máximos de audio / video
 const SESSION_SECONDS = 60;   // tiempo para mandar el audio
 const MAX_STICKER_BYTES = 900 * 1024;
 
@@ -197,19 +197,21 @@ async function imageToWebp(media) {
   }
 }
 
-async function videoToWebp(media) {
+async function videoToWebp(media, seconds = MAX_DURATION) {
   const tmpIn = path.join(tempFolder, randomFileName("mp4"));
   const tmpOut = path.join(tempFolder, randomFileName("webp"));
   try {
     fs.writeFileSync(tmpIn, media);
     // Se baja calidad / fps hasta que el sticker pese lo que acepta WhatsApp
-    const perfiles = [[10, 50], [8, 36], [6, 24], [5, 16]];
+    // (con 60 s hace falta bajar también el tamaño para no pasarse)
+    const perfiles = [[10, 50, 512], [8, 36, 512], [6, 24, 512], [5, 16, 384], [4, 10, 320]];
     let out = null;
-    for (const [fps, q] of perfiles) {
+    for (const [fps, q, size] of perfiles) {
+      const vf = size === 512 ? VF_BASE : VF_BASE.replace(/512/g, String(size));
       await execFileAsync("ffmpeg", [
         "-y", "-i", tmpIn,
-        "-t", String(MAX_DURATION),
-        "-vf", `fps=${fps},${VF_BASE}`,
+        "-t", String(seconds),
+        "-vf", `fps=${fps},${vf}`,
         "-c:v", "libwebp", "-lossless", "0", "-compression_level", "6",
         "-q:v", String(q), "-loop", "0", "-preset", "picture",
         "-an", "-vsync", "0",
@@ -225,9 +227,9 @@ async function videoToWebp(media) {
   }
 }
 
-async function buildSticker(buffer, kind, metadata) {
+async function buildSticker(buffer, kind, metadata, seconds = MAX_DURATION) {
   let raw = buffer;
-  if (kind === "video") raw = await videoToWebp(buffer);
+  if (kind === "video") raw = await videoToWebp(buffer, seconds);
   else if (kind === "image") raw = await imageToWebp(buffer);
   return await addExif(raw, metadata);
 }
@@ -241,16 +243,7 @@ function parseFfmpegDuration(stderr) {
   return Number.isFinite(sec) ? sec : 0;
 }
 
-function generateWaveform(seed, length = 64) {
-  const wf = Buffer.alloc(length);
-  for (let i = 0; i < length; i++) {
-    const b = seed && seed.length ? seed[(i * 19 + 7) % seed.length] : i * 11;
-    wf[i] = 18 + (b % 76);
-  }
-  return wf;
-}
-
-async function toOggOpus(buffer, ext) {
+async function toOggOpus(buffer, ext, maxSeconds = MAX_DURATION) {
   const tmpIn = path.join(tempFolder, randomFileName(ext));
   const tmpOut = path.join(tempFolder, randomFileName("ogg"));
   try {
@@ -260,7 +253,7 @@ async function toOggOpus(buffer, ext) {
       ({ stderr } = await execFileAsync("ffmpeg", [
         "-y", "-i", tmpIn,
         "-vn", "-map", "0:a:0",
-        "-t", String(MAX_DURATION),
+        "-t", String(maxSeconds),
         "-af", "aresample=48000:async=1:first_pts=0",
         "-c:a", "libopus", "-b:a", "48k", "-vbr", "on",
         "-compression_level", "10", "-ac", "1", "-ar", "48000",
@@ -279,62 +272,53 @@ async function toOggOpus(buffer, ext) {
   }
 }
 
-async function buildAudioMessage(conn, buffer, ext, fallbackSeconds = 0) {
+// El audio del sticker NO es nota de voz: va como audio normal (ptt: false),
+// igual que los stickers con sonido que manda WhatsApp.
+// maxSeconds = lo que dura el sticker (video animado), así el audio se ajusta a él.
+async function buildAudioMessage(conn, buffer, ext, fallbackSeconds = 0, maxSeconds = MAX_DURATION) {
   const { prepareWAMessageMedia } = await getBaileys();
-  const { ogg, realSeconds } = await toOggOpus(buffer, ext);
+  const limit = Math.max(1, Math.min(MAX_DURATION, Math.round(maxSeconds) || MAX_DURATION));
+  const { ogg, realSeconds } = await toOggOpus(buffer, ext, limit);
 
   const { audioMessage } = await prepareWAMessageMedia(
-    { audio: ogg, mimetype: "audio/ogg; codecs=opus", ptt: true },
+    { audio: ogg, mimetype: "audio/ogg; codecs=opus", ptt: false },
     { upload: conn.waUploadToServer }
   );
+  if (!audioMessage) throw new Error("WhatsApp no aceptó la subida del audio.");
 
   const sec = realSeconds > 0 ? realSeconds : fallbackSeconds > 0 ? fallbackSeconds : 5;
-  audioMessage.seconds = Math.max(1, Math.min(MAX_DURATION, Math.round(sec)));
-  audioMessage.ptt = true;
+  audioMessage.seconds = Math.max(1, Math.min(limit, Math.round(sec)));
+  audioMessage.ptt = false;
   audioMessage.mimetype = "audio/ogg; codecs=opus";
-  if (!audioMessage.waveform || !audioMessage.waveform.length) {
-    audioMessage.waveform = generateWaveform(ogg);
-  }
   return audioMessage;
 }
 
 // === Parche de proto: stickerMessage.audioMessage (26) y audioStickerMessage (134) ===
+// ultra-baileys no conoce estos dos campos; se añaden al codificador:
+//   StickerMessage.audioMessage -> campo 26  (tag 210  = 26 << 3 | 2)
+//   Message.audioStickerMessage -> campo 134 (tag 1074 = 134 << 3 | 2, FutureProofMessage)
 function patchProto(p) {
   const M = p?.Message;
   if (!M || M.__sukiAudioStickerPatched) return;
+  if (!M.StickerMessage || !M.AudioMessage || !M.FutureProofMessage) return;
 
-  if (M.StickerMessage && M.AudioMessage) {
-    const prevStickerEncode = M.StickerMessage.encode;
-    M.StickerMessage.encode = function (message, writer) {
-      const audio = message?.audioMessage;
-      if (audio && Object.prototype.hasOwnProperty.call(message, "audioMessage")) {
-        delete message.audioMessage;
-      }
-      const w = prevStickerEncode.call(this, message, writer);
-      if (audio) {
-        message.audioMessage = audio;
-        M.AudioMessage.encode(audio, w.uint32(210).fork()).ldelim();
-      }
-      return w;
-    };
-  }
+  const prevStickerEncode = M.StickerMessage.encode;
+  M.StickerMessage.encode = function (message, writer) {
+    const w = prevStickerEncode.call(this, message, writer);
+    if (message?.audioMessage != null) {
+      M.AudioMessage.encode(message.audioMessage, w.uint32(210).fork()).ldelim();
+    }
+    return w;
+  };
 
-  if (M.FutureProofMessage) {
-    const prevMsgEncode = M.encode;
-    M.encode = function (message, writer) {
-      const asm = message?.audioStickerMessage;
-      if (asm) {
-        if (Object.prototype.hasOwnProperty.call(message, "stickerMessage")) delete message.stickerMessage;
-        if (Object.prototype.hasOwnProperty.call(message, "audioStickerMessage")) delete message.audioStickerMessage;
-      }
-      const w = prevMsgEncode.call(this, message, writer);
-      if (asm) {
-        message.audioStickerMessage = asm;
-        M.FutureProofMessage.encode(asm, w.uint32(1074).fork()).ldelim();
-      }
-      return w;
-    };
-  }
+  const prevMsgEncode = M.encode;
+  M.encode = function (message, writer) {
+    const w = prevMsgEncode.call(this, message, writer);
+    if (message?.audioStickerMessage != null) {
+      M.FutureProofMessage.encode(message.audioStickerMessage, w.uint32(1074).fork()).ldelim();
+    }
+    return w;
+  };
 
   M.__sukiAudioStickerPatched = true;
 }
@@ -342,29 +326,76 @@ function patchProto(p) {
 async function ensurePatched() {
   const mod = await getBaileys();
   patchProto(mod?.proto);
-  if (mod?.default?.proto) patchProto(mod.default.proto);
+  if (mod?.default?.proto && mod.default.proto !== mod.proto) patchProto(mod.default.proto);
 }
 
-async function sendAudioSticker(conn, chatId, stickerBuffer, isAnimated, audioMessage) {
+// Donde termina el primer fotograma (chunk ANMF) de un webp animado.
+function firstFrameLength(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 12 || buf.toString("ascii", 0, 4) !== "RIFF") return null;
+  let offset = 12;
+  while (offset + 8 <= buf.length) {
+    const fourcc = buf.toString("ascii", offset, offset + 4);
+    const size = buf.readUInt32LE(offset + 4);
+    offset += 8 + size + (size % 2);
+    if (fourcc === "ANMF") return offset;
+  }
+  return null;
+}
+
+// Duración real de un video (para que el audio dure lo mismo que el sticker).
+async function videoSeconds(buffer, fallback = 0) {
+  const tmpIn = path.join(tempFolder, randomFileName("mp4"));
+  try {
+    fs.writeFileSync(tmpIn, buffer);
+    const r = await execFileAsync("ffmpeg", ["-hide_banner", "-i", tmpIn]).catch((e) => e);
+    const m = String(r?.stderr || "").match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+    const sec = m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
+    return sec > 0 ? sec : fallback;
+  } catch {
+    return fallback;
+  } finally {
+    fs.rmSync(tmpIn, { force: true });
+  }
+}
+
+// Forma en el cable (la de los stickers con sonido de WhatsApp):
+//   { audioStickerMessage: { message: { stickerMessage: { ...sticker, audioMessage } } },
+//     messageContextInfo: { messageSecret } }
+async function sendAudioSticker(conn, chatId, stickerBuffer, isAnimated, audioMessage, quoted = null) {
   await ensurePatched();
-  const { prepareWAMessageMedia } = await getBaileys();
+  const { prepareWAMessageMedia, generateMessageIDV2, generateMessageID } = await getBaileys();
 
   const prepared = await prepareWAMessageMedia(
-    { sticker: stickerBuffer, isAnimated },
+    { sticker: stickerBuffer },
     { upload: conn.waUploadToServer }
   );
-  prepared.stickerMessage.isAnimated = Boolean(isAnimated);
-  prepared.stickerMessage.audioMessage = audioMessage;
+  const sticker = prepared?.stickerMessage;
+  if (!sticker) throw new Error("WhatsApp no aceptó la subida del sticker.");
 
-  // stickerMessage va en el prototipo: Baileys lo ve como media "sticker",
-  // pero se codifica sólo dentro de audioStickerMessage (campo 134).
+  sticker.isAnimated = Boolean(isAnimated);
+  const frame = isAnimated ? firstFrameLength(stickerBuffer) : null;
+  if (frame) sticker.firstFrameLength = frame;
+
+  if (quoted?.key?.id && quoted.message) {
+    sticker.contextInfo = {
+      stanzaId: quoted.key.id,
+      participant: quoted.key.participant || quoted.key.remoteJid || undefined,
+      quotedMessage: quoted.message,
+    };
+  }
+
+  sticker.audioMessage = { ...audioMessage, mimetype: "audio/ogg; codecs=opus", ptt: false };
+
   const payload = {
-    __proto__: prepared,
-    audioStickerMessage: { message: prepared },
+    audioStickerMessage: { message: { stickerMessage: sticker } },
     messageContextInfo: { messageSecret: Crypto.randomBytes(32) }
   };
 
-  await conn.relayMessage(chatId, payload, {});
+  const messageId = typeof generateMessageIDV2 === "function"
+    ? generateMessageIDV2(conn.user?.id)
+    : typeof generateMessageID === "function" ? generateMessageID() : undefined;
+
+  await conn.relayMessage(chatId, payload, messageId ? { messageId } : {});
 }
 
 // === Sesiones ===
@@ -386,7 +417,7 @@ function clearSession(key) {
   sessions.delete(key);
 }
 
-function startSession(conn, msg, stickerBuffer, isAnimated, pref, command) {
+function startSession(conn, msg, stickerBuffer, isAnimated, pref, command, visualSeconds = MAX_DURATION) {
   const key = sessionKey(msg);
   clearSession(key);
   attachListener(conn);
@@ -404,6 +435,7 @@ function startSession(conn, msg, stickerBuffer, isAnimated, pref, command) {
     conn,
     stickerBuffer,
     isAnimated,
+    visualSeconds,
     expiresAt: Date.now() + SESSION_SECONDS * 1000,
     processing: false,
     timer
@@ -427,8 +459,8 @@ async function consumeSession(conn, msg, session, audioInfo) {
   try {
     const buf = await downloadMedia(conn, audioInfo);
     if (!buf.length) throw new Error("No se pudo descargar el audio.");
-    const audioMessage = await buildAudioMessage(conn, buf, audioExt(audioInfo), audioInfo.seconds);
-    await sendAudioSticker(conn, msg.key.remoteJid, session.stickerBuffer, session.isAnimated, audioMessage);
+    const audioMessage = await buildAudioMessage(conn, buf, audioExt(audioInfo), audioInfo.seconds, session.visualSeconds);
+    await sendAudioSticker(conn, msg.key.remoteJid, session.stickerBuffer, session.isAnimated, audioMessage, msg);
     clearSession(key);
     await react(conn, msg, "✅");
   } catch (err) {
@@ -536,14 +568,18 @@ const handler = async (msg, { conn, text, command, usedPrefix }) => {
     if (!visualBuf.length) throw new Error("No se pudo descargar la imagen/video.");
 
     const metadata = stickerMetadata(msg);
-    const stickerBuffer = await buildSticker(visualBuf, visual.kind, metadata);
+    // Con video el sticker dura lo que el video (hasta 60 s) y el audio se ajusta a eso.
+    const visualSeconds = visual.kind === "video"
+      ? Math.max(1, Math.min(MAX_DURATION, Math.round(await videoSeconds(visualBuf, visual.seconds || MAX_DURATION))))
+      : MAX_DURATION;
+    const stickerBuffer = await buildSticker(visualBuf, visual.kind, metadata, visualSeconds);
     const isAnimated = visual.kind === "video" || isWebpAnimated(stickerBuffer);
 
     // Imagen/video propio + respondiendo a un audio → directo
     if (visual === own && quot?.kind === "audio") {
       const audioBuf = await downloadMedia(conn, quot);
-      const audioMessage = await buildAudioMessage(conn, audioBuf, audioExt(quot), quot.seconds);
-      await sendAudioSticker(conn, chatId, stickerBuffer, isAnimated, audioMessage);
+      const audioMessage = await buildAudioMessage(conn, audioBuf, audioExt(quot), quot.seconds, visualSeconds);
+      await sendAudioSticker(conn, chatId, stickerBuffer, isAnimated, audioMessage, msg);
       clearSession(key);
       return react(conn, msg, "✅");
     }
@@ -551,15 +587,15 @@ const handler = async (msg, { conn, text, command, usedPrefix }) => {
     // Video → usa su propio audio
     if (visual.kind === "video") {
       try {
-        const audioMessage = await buildAudioMessage(conn, visualBuf, "mp4", visual.seconds);
-        await sendAudioSticker(conn, chatId, stickerBuffer, true, audioMessage);
+        const audioMessage = await buildAudioMessage(conn, visualBuf, "mp4", visual.seconds, visualSeconds);
+        await sendAudioSticker(conn, chatId, stickerBuffer, true, audioMessage, msg);
         clearSession(key);
         return react(conn, msg, "✅");
       } catch (e) {
         if (e?.message !== "NO_AUDIO") throw e;
         // El video no tiene sonido → pedir un audio
         await react(conn, msg, "🎧");
-        return startSession(conn, msg, stickerBuffer, true, pref, command);
+        return startSession(conn, msg, stickerBuffer, true, pref, command, visualSeconds);
       }
     }
 
